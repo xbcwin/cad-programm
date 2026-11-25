@@ -224,7 +224,9 @@ const Comp = (() => {
     let doc = null;
     try {
       const txt = await file.text();
-      doc = JSON.parse(txt);
+      const parsed = Store.safeParseJSON(txt, { limit: Store.LIMITS.project, name: file.name });
+      if (!parsed.ok) throw new Error(parsed.error);
+      doc = parsed.data;
     } catch (e) {
       console.warn(e);
       UI.toast(T('asm.fileReadErr'), { kind: 'bad' });
@@ -263,8 +265,9 @@ const Comp = (() => {
   }
   async function buildItemFromBlob(file) {
     if (!file || !file.name) return null;
-    if (file.size > 100e6) {
-      UI.toast(T('asm.fileTooBig'), { kind: 'bad' });
+    const sz = Store.checkFileSize(file, /\.json$/i.test(file.name) ? 'project' : 'cad');
+    if (!sz.ok) {
+      UI.toast(sz.message, { kind: 'bad', ms: 7000 });
       return null;
     }
     if (/\.json$/i.test(file.name)) return buildRefItemFromProjectFile(file);

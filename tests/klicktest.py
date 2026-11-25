@@ -27893,6 +27893,148 @@ def t_f11250803(p):
     return [ok1, ok2]
 
 
+def t_paket_und_sicherheit(p):
+    import base64, tempfile, zipfile
+    p.empty()
+
+    # 1. Zwei Körper anlegen und prüfen: „Alles als Paket“ in Einfach und Profi sichtbar + Hilfe + Befehlssuche
+    p.ev("""App.change('Paket-Test', d => {
+      const a = Model.newItem('box', {w: 30, d: 20, h: 10}, {name: 'Deckel'});
+      const b = Model.newItem('cylinder', {d: 16, h: 12}, {name: 'Boden'});
+      b.t.x = 40;
+      d.items.push(a, b);
+    })""")
+    warte_rechnen(p)
+
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(300)
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(400)
+    vis_simple = p.pg.locator('#ex-bundle-btn').is_visible()
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(300)
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(400)
+    vis_pro = p.pg.locator('#ex-bundle-btn').is_visible()
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    eb_help = hilfen.get('exportBundle') or {}
+    meta = p.ev("""return {
+      cmd: Commands.search('alles als paket').some(c => c.id === 'export-bundle'),
+    };""")
+    ok1 = vis_simple and vis_pro and bool(eb_help.get('tip') and eb_help.get('hilfe') and eb_help.get('tipp')) and meta['cmd']
+
+    # 2. Paket-ZIP mit 2 Körpern: Projekt, Zeichnung (PDF), STEP und 2 STL-Dateien
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.locator('#ex-bundle-btn').click()
+    zpath = os.path.join(tempfile.gettempdir(), 'tracery-a143-paket.zip')
+    dl.value.save_as(zpath)
+    with zipfile.ZipFile(zpath) as zf:
+        names = zf.namelist()
+        json_files = [n for n in names if n.endswith('.tracery.json')]
+        pdf_files = [n for n in names if n.startswith('Zeichnungen/') and n.endswith('.pdf')]
+        step_files = [n for n in names if n.endswith('.step')]
+        stl_files = sorted(n for n in names if n.startswith('STL/') and n.endswith('.stl'))
+        proj_ok = False
+        if len(json_files) == 1:
+            proj = json.loads(zf.read(json_files[0]).decode('utf-8'))
+            proj_ok = proj.get('format') == 'masswerk' and len(proj.get('items', [])) == 2
+        pdf_ok = len(pdf_files) == 1 and zf.read(pdf_files[0]).startswith(b'%PDF-') and len(zf.read(pdf_files[0])) > 200
+        step_ok = len(step_files) == 1 and b'ISO-10303-21' in zf.read(step_files[0])
+        stl_ok = stl_files == ['STL/Boden.stl', 'STL/Deckel.stl'] and all(len(zf.read(s)) > 84 for s in stl_files)
+        ok2 = proj_ok and pdf_ok and step_ok and stl_ok and ('LIESMICH.txt' in names)
+
+    # 3. SVG mit <script>, Event-Handlern und externen Links einlesen
+    p.ev("Start.newProject(true); window.__a143_xss = 0;"); p.wait(400)
+    evil_svg = """<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="20mm" viewBox="0 0 40 20">
+  <script>window.__a143_xss = 1;</script>
+  <style>@import url(https://evil.example/style.css);</style>
+  <a href="https://evil.example/click">
+    <rect x="0" y="0" width="40" height="20" onclick="window.__a143_xss = 2"/>
+  </a>
+  <image href="https://evil.example/img.png" width="5" height="5"/>
+</svg>"""
+    p.ev("Start.openBlob(new File([arg], 'sicher.svg', {type: 'image/svg+xml'}))", evil_svg)
+    p.wait(800); warte_rechnen(p, 40)
+    svg_res = p.ev("""const it = App.doc.items[0];
+      const R = it && App.results.get(it.id);
+      const san = Store.sanitizeSVG(arg);
+      return {
+        xss: window.__a143_xss,
+        stats: Start.lastSvgSanitize,
+        clean: san && san.svg,
+        n: App.doc.items.length,
+        errs: App.errors.length,
+        bb: R && R.data && R.data.bbox,
+      };""", evil_svg)
+    toast_txt = p.pg.locator('.toast').last.inner_text()
+    bb = svg_res['bb']
+    clean_low = (svg_res['clean'] or '').lower()
+    st = svg_res['stats'] or {}
+    ok3 = (
+        svg_res['xss'] == 0
+        and st.get('scripts') == 1
+        and st.get('handlers', 0) >= 1
+        and st.get('externalLinks', 0) >= 2
+        and '<script' not in clean_low
+        and 'onclick' not in clean_low
+        and 'evil.example' not in clean_low
+        and svg_res['n'] == 1
+        and svg_res['errs'] == 0
+        and bb is not None and abs(bb[3] - bb[0] - 40) < 0.05 and abs(bb[4] - bb[1] - 20) < 0.05
+        and ('Skripte' in toast_txt or 'Sicherheitsgründen' in toast_txt)
+    )
+
+    # 4. SVG-Aufkleber und normalizeDecal bereinigen unsichere SVG-Daten
+    decal_out = p.ev("""return Actions.parseDecalFile(new File([arg], 'aufkleber.svg', {type: 'image/svg+xml'})).then(d => ({
+      src: d && d.src,
+      badUrlRejected: Model.normalizeDecal({src: 'javascript:alert(1)', face: {n: [0,0,1], c: [0,0,0]}}) === null,
+    }));""", evil_svg)
+    dec_src = decal_out.get('src') or ''
+    dec_svg = ''
+    if dec_src.startswith('data:image/svg+xml;base64,'):
+        dec_svg = base64.b64decode(dec_src.split(',', 1)[1]).decode('utf-8', 'replace').lower()
+    ok4 = (
+        bool(dec_svg)
+        and '<script' not in dec_svg
+        and 'onclick' not in dec_svg
+        and 'evil.example' not in dec_svg
+        and decal_out.get('badUrlRejected') is True
+    )
+
+    # 5. Größenlimit, unbekanntes Format, Prototype-Pollution & ZIP-Pfad-Schutz
+    sec = p.ev("""const big = Store.checkFileSize({name: 'riesig.svg', size: 12 * 1024 * 1024}, 'svg');
+      const pj = Store.safeParseJSON('{"format":"masswerk","__proto__":{"a143Polluted":1},"items":[]}');
+      const polluted = ({}).a143Polluted !== undefined;
+      let travErr = '';
+      return Start.openBlob(new File(['MZ'], 'virus.exe')).then(async () => {
+        const zBad = await Print.build3MF([], 'x').catch(() => null);
+        // Manuelles ZIP mit '../evil.txt' prüfen
+        const enc = new TextEncoder();
+        const nm = enc.encode('../evil.txt'), data = enc.encode('hi');
+        const lh = new DataView(new ArrayBuffer(30));
+        lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, nm.length, true);
+        const ch = new DataView(new ArrayBuffer(46));
+        ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, nm.length, true);
+        const off = 30 + nm.length + data.length;
+        const end = new DataView(new ArrayBuffer(22));
+        end.setUint32(0, 0x06054b50, true); end.setUint16(8, 1, true); end.setUint16(10, 1, true); end.setUint32(12, 46 + nm.length, true); end.setUint32(16, off, true);
+        const zipBytes = new Uint8Array(off + 46 + nm.length + 22);
+        zipBytes.set(new Uint8Array(lh.buffer), 0); zipBytes.set(nm, 30); zipBytes.set(data, 30 + nm.length);
+        zipBytes.set(new Uint8Array(ch.buffer), off); zipBytes.set(nm, off + 46); zipBytes.set(new Uint8Array(end.buffer), off + 46 + nm.length);
+        try { await Start.parse3MF(zipBytes); } catch (e) { travErr = e && e.message || String(e); }
+        return { big, pjOk: pj.ok, polluted, travErr };
+      });""")
+    bad_toast = p.pg.locator('.toast').last.inner_text()
+    ok5 = (
+        sec['big']['ok'] is False
+        and 'zu groß' in sec['big']['message']
+        and sec['pjOk'] is True
+        and sec['polluted'] is False
+        and 'Ungültiger Dateipfad' in sec['travErr']
+        and 'nicht unterstützt' in bad_toast
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -28145,6 +28287,7 @@ TESTS = [
     ('[A-138] Kreis-Menü (Q / Rechts-Halten / einstellbar) und Malen-Auswahl (Flächen / Kanten)', t_kreis_malen),
     ('[A-141] Tastaturbedienung, hoher Kontrast und Vorlese-Texte', t_a141_barrierefreiheit),
     ('[F-11250803] Volltest-Reparatur: Schraubenlöcher bei kaltem Kern / Befehlssuche „Fläche auf Fläche“', t_f11250803),
+    ('[A-143] Alles als Paket (ZIP) und Sicherheit beim Einlesen', t_paket_und_sicherheit),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

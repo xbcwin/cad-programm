@@ -922,13 +922,16 @@ const Actions = (() => {
     const isPng = type === 'image/png' || /\.png$/i.test(name);
     const isJpg = type === 'image/jpeg' || type === 'image/jpg' || /\.(jpe?g)$/i.test(name);
     if (!isSvg && !isPng && !isJpg) throw new Error(T('decal.badFile'));
+    const sz = Store.checkFileSize(file, isSvg ? 'svg' : 'image');
+    if (!sz.ok) throw new Error(sz.message);
     if (isSvg) {
       const raw = await file.text();
-      const doc = new DOMParser().parseFromString(raw, 'image/svg+xml');
-      const root = doc && doc.documentElement;
-      if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) {
+      const san = Store.sanitizeSVG(raw, { name });
+      if (!san.ok || !san.root) {
         throw new Error(T('decal.badFile'));
       }
+      if (san.stats && san.stats.stripped > 0) UI.toast(T('import.svgSanitized'), { icon: 'warn', ms: 6000 });
+      const root = san.root;
       let vw = NaN, vh = NaN;
       const vb = (root.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
       if (vb.length === 4 && vb[2] > 0 && vb[3] > 0) { vw = vb[2]; vh = vb[3]; }
@@ -945,7 +948,7 @@ const Actions = (() => {
       root.setAttribute('height', String(outH));
       if (!root.getAttribute('xmlns')) root.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
       const ser = new XMLSerializer().serializeToString(root);
-      const b64 = btoa(unescape(encodeURIComponent(ser)));
+      const b64 = Store.bytesToBase64(new TextEncoder().encode(ser));
       return { src: 'data:image/svg+xml;base64,' + b64, aspect, name };
     }
     const dataUrl = await new Promise((resolve, reject) => {

@@ -1243,7 +1243,7 @@ const Panels = (() => {
     const csvOut = h('button', { type: 'button', class: 'btn ghost', id: 'par-csv-out', 'data-help': 'paramsCsv' }); csvOut.innerHTML = icon('export') + esc(T('left.par.csvSave'));
     csvOut.disabled = !(App.doc.params || []).length; csvOut.onclick = () => Print.save(Print.safeName(App.doc.name) + ' – Maße.csv', new Blob(['\ufeff' + paramsCSV()], { type: 'text/csv' }));
     const csvIn = h('button', { type: 'button', class: 'btn ghost', id: 'par-csv-in', 'data-help': 'paramsCsv' }); csvIn.innerHTML = icon('folder') + esc(T('left.par.csvLoad'));
-    csvIn.onclick = () => { const inp = h('input', { type: 'file', accept: '.csv,text/csv,text/plain', style: { display: 'none' } }); inp.onchange = async () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) importParamsCSV(await f.text()); }; document.body.append(inp); inp.click(); setTimeout(() => { if (inp.isConnected) inp.remove(); }, 60000); };
+    csvIn.onclick = () => { const inp = h('input', { type: 'file', accept: '.csv,text/csv,text/plain', style: { display: 'none' } }); inp.onchange = async () => { const f = inp.files && inp.files[0]; inp.remove(); if (!f) return; const sz = Store.checkFileSize(f, 'csv'); if (!sz.ok) { UI.toast(sz.message, { kind: 'bad' }); return; } importParamsCSV(await f.text()); }; document.body.append(inp); inp.click(); setTimeout(() => { if (inp.isConnected) inp.remove(); }, 60000); };
     wrap.append(h('div', { class: 'btn-row' }, csvOut, csvIn));
     // Kleine Nachschlagetabellen (KP-22): zwei Spalten Schlüssel & Wert für tabelle(Name; Schlüssel)
     const tblSec = h('div', { class: 'section param-tables', id: 'param-tables-sec' }, h('div', { class: 'section-h' }, T('left.par.tablesTitle')));

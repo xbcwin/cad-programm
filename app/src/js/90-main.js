@@ -45,6 +45,7 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
   const projectItems = () => [
     { label: T('menu.proj.rename'), icon: 'edit', run: async () => { const n = await UI.prompt(T('menu.proj.rename'), T('common.name'), App.doc.name, T('common.rename')); if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); }); } },
     { label: T('menu.proj.saveFile'), icon: 'save', kbd: 'Strg S', run: () => Start.saveFile() },
+    { id: 'pm-export-bundle', label: T('menu.proj.exportBundle'), icon: 'export', help: 'exportBundle', run: () => Print.exportBundle() },
     ...(Start.folderSupported() ? (Start.folderInfo() ? [
       { label: T('menu.proj.saveInFolderNow', { name: Start.folderInfo().name }), icon: 'save', id: 'pm-folder-now', help: 'saveFolder', run: () => Start.saveToFolderNow() },
       { label: T('menu.proj.changeFolder'), icon: 'folder', id: 'pm-folder-change', help: 'saveFolder', run: () => Start.saveToFolder() },
@@ -109,6 +110,7 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
     { label: T('menu.main.settings'), icon: 'gear', run: () => ViewPrefs.dialog() },
     { label: T('menu.main.shortcuts'), icon: 'help', run: () => Commands.showKeys() },
     { label: T('menu.main.export'), icon: 'export', run: () => Print.exportDialog() },
+    { id: 'mm-export-bundle', label: T('menu.proj.exportBundle'), icon: 'export', help: 'exportBundle', run: () => Print.exportBundle() },
     { label: T('menu.main.saveImage'), icon: 'image', run: () => Print.imageDialog() },
     '-',
     { label: T('menu.main.about'), icon: 'info', run: () => openAboutDialog() },

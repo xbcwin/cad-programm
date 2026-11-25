@@ -2581,6 +2581,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Befehlssuche „Fläche auf Fläche“ (`[A-086]`)**: `Commands.search('fläche auf fläche')` liefert `mate-planar` auf Platz 1 und `Commands.search('zylindrisch')` findet `mate-cyl` (bereits durch `[F-11250536]` repariert, im Volltest-Nachlauf bestätigt: `t_a086_verbindungen_zyl_eben`, `t_f11250803`).
 - [ ] **Von Hand**: Im Browser über „Leeres Projekt“ (ohne vorher geladenen Kern) ein Schraubenloch M3 anlegen, Passung von Mittel auf Eng und Kernloch umschalten und in der Eingabezeile „fläche auf fläche“ suchen.
 
+## Alles als Paket (ZIP) und Sicherheit beim Einlesen (Auto [A-143], IO-18, PL-16)
+
+- [x] **Einfach & Profi, Hilfe und Befehlssuche**: Knopf `#ex-bundle-btn` („Alles als Paket speichern“) ist sowohl in „Einfach“ als auch in „Profi“ im Export-Dialog sichtbar; Hilfetext `exportBundle` und Befehl `export-bundle` sind vorhanden (`t_paket_und_sicherheit`).
+- [x] **Alles als Paket (ZIP) mit 2 Körpern (`IO-18`)**: Exportiert über `#ex-bundle-btn` ein `<Name>-Paket.zip` mit der Projektdatei (`.tracery.json`, 2 Körper), den technischen Zeichnungen (`Zeichnungen/<Name>.pdf` als gültiges `%PDF-`), exakt einer `.step`-Datei, genau zwei STL-Dateien (`STL/Deckel.stl`, `STL/Boden.stl`) sowie `LIESMICH.txt` (`t_paket_und_sicherheit`).
+- [x] **SVG-Schutz ohne Ausführung (`PL-16`)**: SVG mit `<script>`, `onclick`-Handler, `<style>@import …</style>` und externen `href`-Links wird ohne Skriptausführung eingelesen (`window.__a143_xss === 0`), die Skripte/Handler/Links werden entfernt (`Start.lastSvgSanitize`), das Rechteck (40 × 20 mm) sauber importiert und ein Hinweis-Toast angezeigt; SVG-Aufkleber (`Actions.parseDecalFile`) und `Model.normalizeDecal` bereinigen unsichere Inhalte ebenso (`t_paket_und_sicherheit`).
+- [x] **Größenlimits, Dateiformat, Prototype-Pollution & ZIP-Schutz**: Übergroße Dateien (`Store.checkFileSize`), nicht unterstützte Endungen (`virus.exe`), `__proto__`-Schlüssel in JSON (`Store.safeParseJSON`) und `..`-Pfade in ZIPs (`Zip.read`) werden mit klaren deutschen Meldungen abgewiesen (`t_paket_und_sicherheit`).
+- [ ] **Von Hand**: Im Browser ein Projekt mit mehreren Körpern und einer bemaßten Zeichnung sowohl in „Einfach“ als auch in „Profi“ über Projekt-Menü und Export-Dialog als Paket herunterladen, entpacken und die erzeugte PDF-Zeichnung, STEP und STLs in einem externen Viewer öffnen sowie eine große (> 8 MB) oder fremde Datei per Drag-and-Drop ins Fenster ziehen.
+
 ## Fehler melden
 
 ```
