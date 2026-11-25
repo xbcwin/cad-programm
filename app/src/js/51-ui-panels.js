@@ -1512,7 +1512,7 @@ const Panels = (() => {
     if (!items.length && Datums.selectedCsys && Datums.findCsys(Datums.selectedCsys)) { $('#right-title').textContent = T('panel.title.datumCsys'); Datums.renderCsysPanel(body); return; }
     if (!items.length && typeof PointClouds !== 'undefined' && PointClouds.selected && PointClouds.find(PointClouds.selected)) { $('#right-title').textContent = T('panel.title.pointCloud'); PointClouds.renderPanel(body); return; }
     if (!items.length && Measure.selected && Measure.find(Measure.selected)) { $('#right-title').textContent = T('panel.title.measure'); Measure.renderPanel(body); return; }
-    if (!items.length && typeof Joints !== 'undefined' && Joints.selected && Joints.list.some((x) => x.id === Joints.selected)) { $('#right-title').textContent = T('panel.title.joint'); Joints.renderPanel(body); return; }
+    if (!items.length && typeof Joints !== 'undefined' && Joints.selected && (Joints.list.some((x) => x.id === Joints.selected) || (Joints.couplings && Joints.couplings.some((x) => x.id === Joints.selected)))) { $('#right-title').textContent = Joints.isCouplingSelected ? T('panel.title.coupling') : T('panel.title.joint'); Joints.renderPanel(body); return; }
     if (!items.length && typeof Notes !== 'undefined' && Notes.selectedPin && Notes.findPin(Notes.selectedPin)) { $('#right-title').textContent = T('panel.title.commentPin'); Notes.renderPanel(body); return; }
     if (!items.length) { $('#right-title').textContent = T('panel.title.project'); renderProject(body); return; }
     if (items.length > 1) { $('#right-title').textContent = T('panel.title.selection'); renderMulti(body, items); return; }
@@ -3471,6 +3471,10 @@ const Panels = (() => {
           '-',
           { label: T('ctx.mateRot'), icon: 'hinge', run: () => Joints.start('rot') },
           { label: T('ctx.mateSlide'), icon: 'moveStep', run: () => Joints.start('slide') },
+          '-',
+          { label: T('ctx.coupleScrew'), icon: 'helix', help: 'coupleScrew', run: () => Joints.startScrew() },
+          { label: T('ctx.coupleBelt'), icon: 'link', help: 'coupleBelt', run: () => Joints.startBelt() },
+          { label: T('ctx.coupleLinear'), icon: 'moveStep', help: 'coupleLinear', run: () => Joints.startLinear() },
         ]), '', T('ctx.mateTip'), true).dataset.help = 'mateCyl';
       }
       if (!hasRef && items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) {

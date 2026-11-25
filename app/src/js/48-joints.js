@@ -2757,7 +2757,7 @@ const Joints = (() => {
       const q = new THREE.Vector3(...j.bo);
       const ptB = Viewer.makeFat([q.x, q.y, q.z, q.x, q.y, q.z + 0.001], '#f08c00', 11, { depthTest: false });
       const dl = Viewer.makeFat([p.x, p.y, p.z, q.x, q.y, q.z], '#f08c00', 3, { depthTest: false, dashed: true, dashSize: 2, gapSize: 1.2 });
-      Viewer.groups.overlay.add(ptB, dl); visObjs.push(ptB, dl);
+      Viewer.groups.overlay.add(ptB, dl); targetArr.push(ptB, dl);
     } else if (Array.isArray(j.ad)) {
       const d = new THREE.Vector3(...j.ad).normalize();
       const b = p.clone().addScaledVector(d, 10);
@@ -2765,13 +2765,37 @@ const Joints = (() => {
       Viewer.groups.overlay.add(ln); targetArr.push(ln);
     }
   }
+  function drawCouplingVis(c, targetArr) {
+    if (!c) return;
+    const j1 = list().find((x) => x.id === c.j1);
+    const j2 = list().find((x) => x.id === c.j2);
+    if (j1) drawJointVis(j1, targetArr);
+    if (j2 && j2.id !== (j1 && j1.id)) {
+      drawJointVis(j2, targetArr);
+      if (j1 && Array.isArray(j1.ao) && Array.isArray(j2.ao)) {
+        const p1 = new THREE.Vector3(...j1.ao), p2 = new THREE.Vector3(...j2.ao);
+        if (p1.distanceTo(p2) > 1e-4) {
+          const dl = Viewer.makeFat([p1.x, p1.y, p1.z, p2.x, p2.y, p2.z], '#0c7a70', 3, { depthTest: false, dashed: true, dashSize: 2, gapSize: 1.2 });
+          Viewer.groups.overlay.add(dl); targetArr.push(dl);
+        }
+      }
+    }
+  }
   function drawSelectedJoint() {
     clearSelVis();
     if (!selJoint || App.mode !== 'model' || (typeof Sketch !== 'undefined' && Sketch.active)) return;
     const j = list().find((x) => x.id === selJoint);
-    if (!j || !Array.isArray(j.ao)) return;
-    drawJointVis(j, visObjs);
-    Viewer.requestRender();
+    if (j) {
+      if (!Array.isArray(j.ao)) return;
+      drawJointVis(j, visObjs);
+      Viewer.requestRender();
+      return;
+    }
+    const c = couplingList().find((x) => x.id === selJoint);
+    if (c) {
+      drawCouplingVis(c, visObjs);
+      Viewer.requestRender();
+    }
   }
   function showDragVis(jid) {
     clearDragVis();
@@ -3730,6 +3754,672 @@ const Joints = (() => {
   }
 
   // ---------- Freiheitsgrade setzen, Umkehren, Lage einhalten ----------
+  // ---------- Kopplungen: Schraube, Riemen, Linear (BG-14) ----------
+  const couplingList = (doc = App.doc) => (doc && Array.isArray(doc.couplings) ? doc.couplings : []);
+  const couplingsOf = (jid, doc = App.doc) => couplingList(doc).filter((c) => c.j1 === jid || c.j2 === jid);
+  const isCouplingKind = (k) => k === 'screw' || k === 'belt' || k === 'linear';
+  const rotDofOf = (j) => {
+    const k = kindOf(j);
+    return (k === 'rot' || k === 'cyl' || k === 'planar' || k === 'slot' || k === 'ball') ? 'ang' : null;
+  };
+  const linDofOf = (j, pref = 'u') => {
+    const k = kindOf(j);
+    if (k === 'slide') return 'ang';
+    if (k === 'cyl' || k === 'slot') return 'pos';
+    if (k === 'planar') return pref === 'v' ? 'v' : 'u';
+    return null;
+  };
+  const hasDof = (j, dof) => {
+    const k = kindOf(j);
+    if (k === 'rot' || k === 'slide') return dof === 'ang';
+    if (k === 'cyl' || k === 'slot') return dof === 'ang' || dof === 'pos';
+    if (k === 'planar') return dof === 'ang' || dof === 'u' || dof === 'v';
+    if (k === 'ball') return dof === 'ang' || dof === 'rx' || dof === 'ry';
+    return false;
+  };
+  const isLenDof = (j, dof) => (slide(j) && dof === 'ang') || dof === 'pos' || dof === 'u' || dof === 'v';
+  const dofLabel = (j, dof) => (dof === 'pos' ? 'Weg' : dof === 'u' ? 'Quer (U)' : dof === 'v' ? 'Längs (V)' : dof === 'rx' ? 'Drehen X' : dof === 'ry' ? 'Drehen Y' : (slide(j) ? 'Weg' : 'Winkel'));
+  function rangeKeysFor(j, dof) {
+    if (dof === 'pos') return ['minPos', 'maxPos', -20, 20];
+    if (dof === 'u') return ['minU', 'maxU', -20, 20];
+    if (dof === 'v') return ['minV', 'maxV', -20, 20];
+    if (dof === 'rx') return ['minRx', 'maxRx', -180, 180];
+    if (dof === 'ry') return ['minRy', 'maxRy', -180, 180];
+    return slide(j) ? ['min', 'max', -20, 20] : ['min', 'max', -180, 180];
+  }
+  function clampDofVal(j, dof, val) {
+    const [loK, hiK, dLo, dHi] = rangeKeysFor(j, dof);
+    const lo = Number.isFinite(j[loK]) ? j[loK] : dLo;
+    const hi = Number.isFinite(j[hiK]) ? j[hiK] : dHi;
+    return j.stopsLocked ? clamp(val, lo, hi) : val;
+  }
+  function ensureRangeFor(j, dof, val) {
+    if (!j || j.stopsLocked || !Number.isFinite(val)) return;
+    const [loK, hiK, dLo, dHi] = rangeKeysFor(j, dof);
+    if (!Number.isFinite(j[loK])) j[loK] = dLo;
+    if (!Number.isFinite(j[hiK])) j[hiK] = dHi;
+    if (val < j[loK]) j[loK] = round(Math.floor(val), 2);
+    if (val > j[hiK]) j[hiK] = round(Math.ceil(val), 2);
+  }
+  function couplingGain(c) {
+    if (!c) return 1;
+    const dir = c.reverse ? -1 : 1;
+    if (c.kind === 'screw') {
+      const p = Number(c.pitch);
+      return dir * ((p > 0 ? p : 1) / 360);
+    }
+    if (c.kind === 'belt') {
+      const a = c.mode === 'diameter' ? Number(c.d1) : Number(c.z1);
+      const b = c.mode === 'diameter' ? Number(c.d2) : Number(c.z2);
+      return dir * (a > 0 && b > 0 ? a / b : 1);
+    }
+    if (c.kind === 'linear') {
+      const r = Number(c.ratio);
+      return dir * (r > 0 ? r : 1);
+    }
+    return 1;
+  }
+  function couplingsConnected(doc, j1, dof1, j2, dof2) {
+    const k1 = j1 + ':' + dof1, k2 = j2 + ':' + dof2;
+    if (k1 === k2) return true;
+    const seen = new Set([k1]), q = [k1];
+    const cs = couplingList(doc);
+    while (q.length) {
+      const cur = q.shift();
+      if (cur === k2) return true;
+      for (const c of cs) {
+        const a = c.j1 + ':' + c.dof1, b = c.j2 + ':' + c.dof2;
+        if (a === cur && !seen.has(b)) { seen.add(b); q.push(b); }
+        if (b === cur && !seen.has(a)) { seen.add(a); q.push(a); }
+      }
+    }
+    return false;
+  }
+  function computeCoupledTargets(doc, startEntries) {
+    const cs = couplingList(doc);
+    const out = new Map();
+    if (!cs.length || !startEntries || !startEntries.length) return out;
+    const key = (jid, dof) => jid + ':' + dof;
+    const visited = new Set();
+    const q = [];
+    for (const e of startEntries) {
+      if (!e || !e.jid || !e.dof) continue;
+      visited.add(key(e.jid, e.dof));
+      q.push({ jid: e.jid, dof: e.dof, val: Number(e.val) || 0 });
+    }
+    while (q.length) {
+      const cur = q.shift();
+      for (const c of cs) {
+        const g = couplingGain(c);
+        if (!Number.isFinite(g) || Math.abs(g) < 1e-12) continue;
+        let nj = null, nd = null, nv = 0;
+        if (c.j1 === cur.jid && c.dof1 === cur.dof) {
+          nj = c.j2; nd = c.dof2;
+          nv = (Number(c.ref2) || 0) + (cur.val - (Number(c.ref1) || 0)) * g;
+        } else if (c.j2 === cur.jid && c.dof2 === cur.dof) {
+          nj = c.j1; nd = c.dof1;
+          nv = (Number(c.ref1) || 0) + (cur.val - (Number(c.ref2) || 0)) / g;
+        }
+        if (!nj) continue;
+        const nk = key(nj, nd);
+        if (visited.has(nk)) continue;
+        visited.add(nk);
+        const val = round(nv, 5);
+        if (!out.has(nj)) out.set(nj, new Map());
+        out.get(nj).set(nd, val);
+        q.push({ jid: nj, dof: nd, val });
+      }
+    }
+    return out;
+  }
+  function pickPrimaryDofs(doc, j, patch, prev) {
+    const keys = Object.keys(patch || {}).filter((d) => hasDof(j, d));
+    const selfCs = couplingList(doc).filter((c) => c.j1 === j.id && c.j2 === j.id);
+    if (!selfCs.length) return keys;
+    if (keys.includes('ang') && !keys.includes('pos')) return ['ang'];
+    if (keys.includes('pos') && !keys.includes('ang')) return ['pos'];
+    if (keys.includes('ang') && keys.includes('pos')) {
+      return Math.abs((Number(patch.ang) || 0) - prev.ang) > 1e-4 ? ['ang'] : ['pos'];
+    }
+    return keys;
+  }
+  function applyTargetsMap(doc, targets, skipJid = null, opts = {}) {
+    if (!targets || !targets.size) return;
+    const V = Model.vars(doc).v;
+    for (const [kjId, dofMap] of targets) {
+      if (skipJid && kjId === skipJid) continue;
+      const kj = list(doc).find((x) => x.id === kjId);
+      if (!kj || isConstraint(kj) || isLoose(kj)) continue;
+      const kb = top(kj.b, doc);
+      if (!kb || kb.locked) continue;
+      syncHome(kb, kj, doc);
+      const prevK = stateOf(kj);
+      const nextK = { ...prevK };
+      for (const [dof, rawVal] of dofMap) {
+        if (!hasDof(kj, dof)) continue;
+        if (kj.stopsLocked) {
+          nextK[dof] = round(clampDofVal(kj, dof, rawVal), 4);
+        } else {
+          ensureRangeFor(kj, dof, rawVal);
+          nextK[dof] = round(rawVal, 4);
+        }
+      }
+      writeState(kj, nextK);
+      Model.setFromMatrix(kb, pose(kj, nextK, null, doc));
+      if (looseOf(kj.b, doc).length) {
+        solvePartConstraints(doc, kj.b, V);
+        Object.assign(nextK, stateOf(kj));
+      }
+      if (opts.live && isTop(kb.id, doc)) Viewer.updateNode(kb.id, { matrix: Model.localMatrix(kb) });
+      if (stateChanged(prevK, nextK, kindOf(kj))) moveChain(doc, kj.b, deltaMatrix(kj, prevK, nextK), opts);
+    }
+  }
+  function propagateCouplings(doc, sourceJid, changedDofs, opts = {}) {
+    const cs = couplingList(doc);
+    if (!cs.length || !changedDofs || !changedDofs.length) return;
+    const src = list(doc).find((x) => x.id === sourceJid);
+    if (!src) return;
+    const st = stateOf(src);
+    const seeds = changedDofs.filter((d) => hasDof(src, d)).map((d) => ({ jid: sourceJid, dof: d, val: st[d] }));
+    if (!seeds.length) return;
+    const targets = computeCoupledTargets(doc, seeds);
+    if (opts.includeSelf && targets.has(sourceJid)) {
+      const sb = top(src.b, doc);
+      if (sb && !sb.locked && !isConstraint(src) && !isLoose(src)) {
+        syncHome(sb, src, doc);
+        const prevS = stateOf(src);
+        const nextS = { ...prevS };
+        for (const [dof, rawVal] of targets.get(sourceJid)) {
+          if (!hasDof(src, dof)) continue;
+          if (src.stopsLocked) nextS[dof] = round(clampDofVal(src, dof, rawVal), 4);
+          else { ensureRangeFor(src, dof, rawVal); nextS[dof] = round(rawVal, 4); }
+        }
+        writeState(src, nextS);
+        Model.setFromMatrix(sb, pose(src, nextS, null, doc));
+        if (looseOf(src.b, doc).length) {
+          solvePartConstraints(doc, src.b, Model.vars(doc).v);
+          Object.assign(nextS, stateOf(src));
+        }
+        if (opts.live && isTop(sb.id, doc)) Viewer.updateNode(sb.id, { matrix: Model.localMatrix(sb) });
+        if (stateChanged(prevS, nextS, kindOf(src))) moveChain(doc, src.b, deltaMatrix(src, prevS, nextS), opts);
+      }
+    }
+    applyTargetsMap(doc, targets, sourceJid, opts);
+  }
+  function pruneInvalidCouplings(doc) {
+    if (!doc || !Array.isArray(doc.couplings) || !doc.couplings.length) return false;
+    const jMap = new Map(list(doc).map((x) => [x.id, x]));
+    const before = doc.couplings.length;
+    doc.couplings = doc.couplings.filter((c) => {
+      if (!c || !isCouplingKind(c.kind)) return false;
+      const j1 = jMap.get(c.j1), j2 = jMap.get(c.j2);
+      if (!j1 || !j2 || isConstraint(j1) || isLoose(j1) || isConstraint(j2) || isLoose(j2)) return false;
+      return hasDof(j1, c.dof1) && hasDof(j2, c.dof2);
+    });
+    return doc.couplings.length !== before;
+  }
+
+  function autoBeltSpec(j, doc = App.doc) {
+    const inspect = (it) => {
+      if (!it) return null;
+      if (it.kind === 'part' && it.p && it.p.lib === 'gear' && Number(it.p.teeth) > 0) {
+        return { mode: 'teeth', val: Number(it.p.teeth) };
+      }
+      if ((it.kind === 'cylinder' || it.kind === 'tube') && it.p && Number(it.p.d) > 0) {
+        return { mode: 'diameter', val: Number(it.p.d) };
+      }
+      if (it.kind === 'group' && Array.isArray(it.children)) {
+        for (const ch of it.children) {
+          const r = inspect(ch);
+          if (r) return r;
+        }
+      }
+      return null;
+    };
+    const b = j && top(j.b, doc);
+    return inspect(b);
+  }
+  function couplingSummary(c) {
+    if (!c) return '';
+    const rev = c.reverse ? ' · ↺' : '';
+    if (c.kind === 'screw') return `${T('joint.screwKind')} · ${fmt(c.pitch)} mm/U${rev}`;
+    if (c.kind === 'belt') {
+      return c.mode === 'diameter'
+        ? `${T('joint.beltKind')} · Ø ${fmt(c.d1)}:${fmt(c.d2)}${rev}`
+        : `${T('joint.beltKind')} · ${fmt(c.z1)}:${fmt(c.z2)}${rev}`;
+    }
+    return `${T('joint.linearKind')} · ${fmt(c.ratio)}×${rev}`;
+  }
+  function couplingLabel(c) {
+    if (c && c.name) return c.name;
+    const j1 = list().find((x) => x.id === c.j1);
+    const j2 = list().find((x) => x.id === c.j2);
+    const l1 = j1 ? jointLabel(j1) : 'Gelenk 1';
+    const l2 = j2 ? jointLabel(j2) : 'Gelenk 2';
+    return j1 && j2 && j1.id === j2.id ? `${l1} (Schraube)` : `${l1} → ${l2}`;
+  }
+
+  function addCoupling(kind, j1Id, j2IdOrOpts, maybeOpts) {
+    if (!isCouplingKind(kind)) return { ok: false, msg: 'Unbekannte Kopplungsart.' };
+    let j2Id = j2IdOrOpts, opts = maybeOpts || {};
+    if (j2IdOrOpts && typeof j2IdOrOpts === 'object') {
+      opts = j2IdOrOpts;
+      j2Id = opts.j2 || j1Id;
+    }
+    const j1Orig = list().find((x) => x.id === j1Id);
+    let j2Orig = list().find((x) => x.id === (j2Id || j1Id));
+    if (kind === 'screw' && !j2Id && j1Orig && isCyl(j1Orig)) j2Orig = j1Orig;
+    if (!j1Orig || !j2Orig) return { ok: false, msg: 'Bitte gültige Gelenke für die Kopplung wählen.' };
+    if (isConstraint(j1Orig) || isLoose(j1Orig) || isConstraint(j2Orig) || isLoose(j2Orig)) {
+      return { ok: false, msg: 'Kopplungen funktionieren mit beweglichen Gelenken (Drehen, Schieben, Zylindrisch, Eben, Langloch).' };
+    }
+
+    let j1 = j1Orig, j2 = j2Orig, dof1 = null, dof2 = null;
+    const payload = { kind, reverse: !!(opts.reverse ?? opts.flip) };
+
+    if (kind === 'screw') {
+      const pitch = parseNum(opts.pitch ?? 2);
+      if (!Number.isFinite(pitch) || pitch <= 0) return { ok: false, msg: 'Bitte eine Steigung größer als 0 mm eingeben.' };
+      if (j1Orig.id === j2Orig.id) {
+        if (!rotDofOf(j1Orig) || !linDofOf(j1Orig)) return { ok: false, msg: 'Ein einzelnes Gelenk braucht Drehen und Schieben zugleich (z. B. Zylindrisch) – sonst zwei Gelenke wählen.' };
+        dof1 = rotDofOf(j1Orig);
+        dof2 = linDofOf(j1Orig, opts.dof2);
+      } else {
+        if (rotDofOf(j1Orig) && linDofOf(j2Orig)) {
+          dof1 = opts.dof1 && hasDof(j1Orig, opts.dof1) ? opts.dof1 : rotDofOf(j1Orig);
+          dof2 = opts.dof2 && hasDof(j2Orig, opts.dof2) ? opts.dof2 : linDofOf(j2Orig);
+        } else if (rotDofOf(j2Orig) && linDofOf(j1Orig)) {
+          j1 = j2Orig; j2 = j1Orig;
+          dof1 = rotDofOf(j1);
+          dof2 = linDofOf(j2);
+        } else {
+          return { ok: false, msg: 'Für eine Schrauben-Kopplung braucht ein Gelenk Drehung und das andere Schieben (oder ein zylindrisches Gelenk).' };
+        }
+      }
+      payload.pitch = round(pitch, 6);
+    } else if (kind === 'belt') {
+      if (j1Orig.id === j2Orig.id) return { ok: false, msg: 'Für eine Riemen-Kopplung zwei verschiedene Drehgelenke wählen.' };
+      dof1 = opts.dof1 && hasDof(j1Orig, opts.dof1) ? opts.dof1 : rotDofOf(j1Orig);
+      dof2 = opts.dof2 && hasDof(j2Orig, opts.dof2) ? opts.dof2 : rotDofOf(j2Orig);
+      if (!dof1 || !dof2) return { ok: false, msg: 'Für eine Riemen-Kopplung brauchen beide Gelenke eine Drehbewegung.' };
+      const hasDia = opts.d1 != null || opts.d2 != null;
+      const hasTeeth = opts.z1 != null || opts.z2 != null || opts.teeth1 != null || opts.teeth2 != null;
+      const mode = opts.mode === 'diameter' || (hasDia && !hasTeeth && opts.mode !== 'teeth') ? 'diameter' : 'teeth';
+      payload.mode = mode;
+      if (mode === 'diameter') {
+        const d1 = parseNum(opts.d1 ?? 20), d2 = parseNum(opts.d2 ?? 40);
+        if (!Number.isFinite(d1) || d1 <= 0 || !Number.isFinite(d2) || d2 <= 0) {
+          return { ok: false, msg: 'Bitte Durchmesser größer als 0 mm für beide Räder eingeben.' };
+        }
+        payload.d1 = round(d1, 6);
+        payload.d2 = round(d2, 6);
+      } else {
+        const z1 = parseNum(opts.z1 ?? opts.teeth1 ?? 20), z2 = parseNum(opts.z2 ?? opts.teeth2 ?? 40);
+        if (!Number.isFinite(z1) || z1 <= 0 || !Number.isFinite(z2) || z2 <= 0) {
+          return { ok: false, msg: 'Bitte eine Zähnezahl größer als 0 für beide Räder eingeben.' };
+        }
+        payload.z1 = round(z1, 4);
+        payload.z2 = round(z2, 4);
+      }
+    } else if (kind === 'linear') {
+      if (j1Orig.id === j2Orig.id) return { ok: false, msg: 'Für eine lineare Kopplung zwei verschiedene Schiebegelenke wählen.' };
+      dof1 = opts.dof1 && hasDof(j1Orig, opts.dof1) ? opts.dof1 : linDofOf(j1Orig);
+      dof2 = opts.dof2 && hasDof(j2Orig, opts.dof2) ? opts.dof2 : linDofOf(j2Orig);
+      if (!dof1 || !dof2) return { ok: false, msg: 'Für eine lineare Kopplung brauchen beide Gelenke eine Schiebebewegung.' };
+      const ratio = parseNum(opts.ratio ?? 1);
+      if (!Number.isFinite(ratio) || ratio <= 0) return { ok: false, msg: 'Bitte ein Übersetzungsverhältnis größer als 0 eingeben.' };
+      payload.ratio = round(ratio, 6);
+    }
+
+    if (couplingsConnected(App.doc, j1.id, dof1, j2.id, dof2)) {
+      return { ok: false, msg: 'Diese beiden Bewegungen sind bereits über Kopplungen miteinander verbunden.' };
+    }
+
+    let cid = null;
+    const undoLbl = kind === 'screw' ? 'Schrauben-Kopplung angelegt' : kind === 'belt' ? 'Riemen-Kopplung angelegt' : 'Lineare Kopplung angelegt';
+    App.change(undoLbl, (doc) => {
+      const dj1 = list(doc).find((x) => x.id === j1.id);
+      const dj2 = list(doc).find((x) => x.id === j2.id);
+      if (!dj1 || !dj2) return false;
+      doc.couplings = doc.couplings || [];
+      cid = uid('c');
+      const idx = doc.couplings.length + 1;
+      const baseName = kind === 'screw' ? `Schraube ${idx}` : kind === 'belt' ? `Riemen ${idx}` : `Linear ${idx}`;
+      const ref1 = round(stateOf(dj1)[dof1] || 0, 5);
+      const ref2 = round(stateOf(dj2)[dof2] || 0, 5);
+      if ((kind === 'screw' || kind === 'belt') && !dj1.stopsLocked && dof1 === 'ang' && !slide(dj1)) {
+        dj1.min = Math.min(dj1.min ?? -180, -360);
+        dj1.max = Math.max(dj1.max ?? 180, 360);
+      }
+      if (kind === 'belt' && !dj2.stopsLocked && dof2 === 'ang' && !slide(dj2)) {
+        dj2.min = Math.min(dj2.min ?? -180, -360);
+        dj2.max = Math.max(dj2.max ?? 180, 360);
+      }
+      doc.couplings.push({
+        id: cid,
+        name: opts.name || baseName,
+        j1: dj1.id,
+        j2: dj2.id,
+        dof1,
+        dof2,
+        ref1,
+        ref2,
+        ...payload,
+      });
+    });
+    if (cid) drawSelectedJoint();
+    return cid ? { ok: true, id: cid } : { ok: false, msg: 'Die Kopplung ließ sich nicht anlegen.' };
+  }
+  function addScrew(j1Id, j2IdOrOpts, maybeOpts) { return addCoupling('screw', j1Id, j2IdOrOpts, maybeOpts); }
+  function addBelt(j1Id, j2Id, opts = {}) { return addCoupling('belt', j1Id, j2Id, opts); }
+  function addLinear(j1Id, j2Id, opts = {}) { return addCoupling('linear', j1Id, j2Id, opts); }
+
+  function updateCoupling(cid, patch, opts = {}) {
+    const cur = couplingList().find((x) => x.id === cid);
+    if (!cur) return false;
+    const checkPos = (v, msg) => {
+      const n = parseNum(v);
+      if (!Number.isFinite(n) || n <= 0) { UI.toast(msg, { kind: 'bad' }); return null; }
+      return n;
+    };
+    const nextPatch = {};
+    if ('name' in patch) nextPatch.name = String(patch.name || '').trim() || cur.name;
+    if ('reverse' in patch) nextPatch.reverse = !!patch.reverse;
+    if ('pitch' in patch) {
+      const p = checkPos(patch.pitch, 'Bitte eine Steigung größer als 0 mm eingeben.');
+      if (p == null) return false;
+      nextPatch.pitch = round(p, 6);
+    }
+    if ('mode' in patch) nextPatch.mode = patch.mode === 'diameter' ? 'diameter' : 'teeth';
+    if ('z1' in patch) {
+      const z = checkPos(patch.z1, 'Bitte eine Zähnezahl größer als 0 eingeben.');
+      if (z == null) return false;
+      nextPatch.z1 = round(z, 4);
+    }
+    if ('z2' in patch) {
+      const z = checkPos(patch.z2, 'Bitte eine Zähnezahl größer als 0 eingeben.');
+      if (z == null) return false;
+      nextPatch.z2 = round(z, 4);
+    }
+    if ('d1' in patch) {
+      const d = checkPos(patch.d1, 'Bitte einen Durchmesser größer als 0 mm eingeben.');
+      if (d == null) return false;
+      nextPatch.d1 = round(d, 6);
+    }
+    if ('d2' in patch) {
+      const d = checkPos(patch.d2, 'Bitte einen Durchmesser größer als 0 mm eingeben.');
+      if (d == null) return false;
+      nextPatch.d2 = round(d, 6);
+    }
+    if ('ratio' in patch) {
+      const r = checkPos(patch.ratio, 'Bitte ein Übersetzungsverhältnis größer als 0 eingeben.');
+      if (r == null) return false;
+      nextPatch.ratio = round(r, 6);
+    }
+    const label = opts.label || ('reverse' in nextPatch ? 'Kopplungs-Richtung geändert' : 'name' in nextPatch ? 'Kopplung umbenannt' : 'Kopplung geändert');
+    const changeOpts = opts.merge ? { merge: opts.merge } : {};
+    const ok = App.change(label, (doc) => {
+      const c = couplingList(doc).find((x) => x.id === cid);
+      if (!c) return false;
+      Object.assign(c, nextPatch);
+      if (c.kind === 'belt' && c.mode === 'diameter') {
+        if (!(c.d1 > 0)) c.d1 = c.z1 > 0 ? c.z1 : 20;
+        if (!(c.d2 > 0)) c.d2 = c.z2 > 0 ? c.z2 : 40;
+      } else if (c.kind === 'belt') {
+        if (!(c.z1 > 0)) c.z1 = c.d1 > 0 ? c.d1 : 20;
+        if (!(c.z2 > 0)) c.z2 = c.d2 > 0 ? c.d2 : 40;
+      }
+      propagateCouplings(doc, c.j1, [c.dof1], { includeSelf: true });
+    }, changeOpts);
+    drawSelectedJoint();
+    return ok;
+  }
+
+  function removeCoupling(cid) {
+    const wasSel = selJoint === cid;
+    const ok = App.change('Kopplung gelöst', (doc) => {
+      const before = couplingList(doc).length;
+      doc.couplings = couplingList(doc).filter((x) => x.id !== cid);
+      if (doc.couplings.length === before) return false;
+    });
+    if (wasSel) { selJoint = null; clearSelVis(); }
+    Panels.renderRight();
+    Panels.renderLeft();
+    if (ok) UI.toast('Kopplung gelöst – beide Gelenke bewegen sich wieder unabhängig.', { icon: 'check' });
+    return ok;
+  }
+
+  function startCoupling(defaultKind = 'screw', opts = {}) {
+    stopPick();
+    stopPlay();
+    const kinJoints = list().filter((j) => !isConstraint(j) && !isLoose(j) && top(j.a) && top(j.b));
+    let kind = isCouplingKind(defaultKind) ? defaultKind : 'screw';
+    const selItemId = App.sel.length === 1 ? App.sel[0] : null;
+    const selItemJoint = selItemId ? drivingOf(selItemId) : null;
+    const preJ1 = opts.j1 || (selJoint && list().some((x) => x.id === selJoint) ? selJoint : null) || (selItemJoint && !isConstraint(selItemJoint) ? selItemJoint.id : null);
+
+    const wrap = h('div', { id: 'coupling-dialog', 'data-help': kind === 'belt' ? 'coupleBelt' : kind === 'linear' ? 'coupleLinear' : 'coupleScrew', style: { display: 'grid', gap: '10px' } });
+    if (!kinJoints.length) {
+      wrap.append(h('div', { class: 'hint-box' }, 'Lege zuerst mindestens ein bewegliches Gelenk an (z. B. Drehen, Schieben oder Zylindrisch), bevor du Bewegungen koppelst.'));
+      UI.modal({
+        title: T('joint.coupleDlgTitle'),
+        body: wrap,
+        actions: [{ label: T('common.cancel'), id: 'cp-cancel' }],
+      });
+      return false;
+    }
+
+    const kindSelWrap = UI.selectField({
+      id: 'cp-kind',
+      label: 'Kopplungsart',
+      value: kind,
+      options: [
+        ['screw', 'Schraube (Drehen → Vorschub je Umdrehung)'],
+        ['belt', 'Riemen (gleiche Umfangsgeschwindigkeit)'],
+        ['linear', 'Linear (Schieben → Schieben im Verhältnis)'],
+      ],
+      onChange: (v) => { kind = v; wrap.dataset.help = kind === 'belt' ? 'coupleBelt' : kind === 'linear' ? 'coupleLinear' : 'coupleScrew'; refreshForm(); },
+    });
+    const j1SelWrap = UI.selectField({ id: 'cp-j1', label: 'Antrieb (Gelenk 1)', value: preJ1 || '', options: [], onChange: () => { populateJ2(); autoDefaults(); updatePreview(); } });
+    const j2SelWrap = UI.selectField({ id: 'cp-j2', label: 'Mitlauf (Gelenk 2)', value: opts.j2 || '', options: [], onChange: () => { autoDefaults(); updatePreview(); } });
+    const j1Sel = j1SelWrap.querySelector('select');
+    const j2Sel = j2SelWrap.querySelector('select');
+
+    const paramsBox = h('div', { style: { display: 'grid', gap: '8px' } });
+    const pitchInp = h('input', { id: 'cp-pitch', type: 'text', inputmode: 'decimal', value: String(opts.pitch ?? 2) });
+    const pitchWrap = h('div', { class: 'field' }, h('label', { for: 'cp-pitch' }, T('joint.pitchLabel') + ` (${Units.label()}/U)`), h('div', { class: 'inp' }, pitchInp, h('span', { class: 'unit' }, 'mm/U')));
+
+    const beltModeWrap = UI.selectField({
+      id: 'cp-belt-mode',
+      label: T('joint.beltModeLabel'),
+      value: opts.mode || 'teeth',
+      options: [
+        ['teeth', T('joint.beltModeTeeth')],
+        ['diameter', T('joint.beltModeDia')],
+      ],
+      onChange: () => { syncBeltUnit(); updatePreview(); },
+    });
+    const beltModeSel = beltModeWrap.querySelector('select');
+    const v1Inp = h('input', { id: 'cp-v1', type: 'text', inputmode: 'decimal', value: String(opts.z1 ?? opts.d1 ?? 20) });
+    const v2Inp = h('input', { id: 'cp-v2', type: 'text', inputmode: 'decimal', value: String(opts.z2 ?? opts.d2 ?? 40) });
+    const v1Lbl = h('label', { for: 'cp-v1' }, 'Rad 1 (Zähne)');
+    const v2Lbl = h('label', { for: 'cp-v2' }, 'Rad 2 (Zähne)');
+    const v1Unit = h('span', { class: 'unit' }, 'Z');
+    const v2Unit = h('span', { class: 'unit' }, 'Z');
+    const beltFields = h('div', { class: 'fields' },
+      h('div', { class: 'field' }, v1Lbl, h('div', { class: 'inp' }, v1Inp, v1Unit)),
+      h('div', { class: 'field' }, v2Lbl, h('div', { class: 'inp' }, v2Inp, v2Unit))
+    );
+
+    const ratioInp = h('input', { id: 'cp-ratio', type: 'text', inputmode: 'decimal', value: String(opts.ratio ?? 1) });
+    const ratioWrap = h('div', { class: 'field' }, h('label', { for: 'cp-ratio' }, T('joint.linearRatioLabel') + ' (Weg 2 / Weg 1)'), h('div', { class: 'inp' }, ratioInp, h('span', { class: 'unit' }, '×')));
+
+    const revChk = h('input', { id: 'cp-reverse', type: 'checkbox', checked: !!opts.reverse });
+    const revTxt = h('span', null, '');
+    const revWrap = h('label', { class: 'check' }, revChk, revTxt);
+    const previewEl = h('div', { class: 'hint-box', id: 'cp-preview' });
+
+    for (const inp of [pitchInp, v1Inp, v2Inp, ratioInp]) {
+      inp.addEventListener('keydown', (e) => e.stopPropagation());
+      inp.addEventListener('input', () => updatePreview());
+    }
+    revChk.addEventListener('change', () => updatePreview());
+
+    const syncBeltUnit = () => {
+      const dia = beltModeSel.value === 'diameter';
+      v1Lbl.textContent = dia ? 'Rad 1 Ø (mm)' : 'Rad 1 (Zähne)';
+      v2Lbl.textContent = dia ? 'Rad 2 Ø (mm)' : 'Rad 2 (Zähne)';
+      v1Unit.textContent = dia ? 'mm' : 'Z';
+      v2Unit.textContent = dia ? 'mm' : 'Z';
+    };
+
+    const setSelectOpts = (sel, items, preferred) => {
+      const prev = preferred || sel.value;
+      sel.innerHTML = '';
+      for (const [val, lbl] of items) {
+        const o = h('option', { value: val }, lbl);
+        if (val === prev) o.selected = true;
+        sel.append(o);
+      }
+      if (!sel.value && items.length) sel.value = items[0][0];
+    };
+
+    const populateJ1 = () => {
+      const cand1 = kind === 'belt' ? kinJoints.filter((j) => !!rotDofOf(j))
+        : kind === 'linear' ? kinJoints.filter((j) => !!linDofOf(j))
+          : kinJoints.filter((j) => !!rotDofOf(j));
+      setSelectOpts(j1Sel, cand1.map((j) => [j.id, `${jointLabel(j)} (${isCyl(j) ? 'Zylindrisch' : slide(j) ? 'Schieben' : isPlanar(j) ? 'Eben' : isSlot(j) ? 'Langloch' : 'Drehen'})`]), preJ1);
+      populateJ2();
+    };
+
+    const populateJ2 = () => {
+      const j1 = kinJoints.find((j) => j.id === j1Sel.value);
+      const cand2 = [];
+      if (kind === 'screw') {
+        if (j1 && linDofOf(j1)) cand2.push([j1.id, `Selbes Gelenk (${jointLabel(j1)} · Drehen ↔ Schieben)`]);
+        for (const j of kinJoints) {
+          if (j1 && j.id === j1.id) continue;
+          if (linDofOf(j)) cand2.push([j.id, `${jointLabel(j)} (${slide(j) ? 'Schieben' : isCyl(j) ? 'Zylindrisch' : isSlot(j) ? 'Langloch' : 'Eben'})`]);
+        }
+      } else if (kind === 'belt') {
+        for (const j of kinJoints) {
+          if (j1 && j.id === j1.id) continue;
+          if (rotDofOf(j)) cand2.push([j.id, `${jointLabel(j)} (Drehen)`]);
+        }
+      } else {
+        for (const j of kinJoints) {
+          if (j1 && j.id === j1.id) continue;
+          if (linDofOf(j)) cand2.push([j.id, `${jointLabel(j)} (Schieben)`]);
+        }
+      }
+      setSelectOpts(j2Sel, cand2, opts.j2);
+    };
+
+    const autoDefaults = () => {
+      if (kind !== 'belt' || opts.z1 != null || opts.d1 != null) return;
+      const j1 = kinJoints.find((j) => j.id === j1Sel.value);
+      const j2 = kinJoints.find((j) => j.id === j2Sel.value);
+      const s1 = autoBeltSpec(j1), s2 = autoBeltSpec(j2);
+      if (s1 && s2 && s1.mode === s2.mode) {
+        beltModeSel.value = s1.mode;
+        v1Inp.value = String(s1.val);
+        v2Inp.value = String(s2.val);
+        syncBeltUnit();
+      }
+    };
+
+    const updatePreview = () => {
+      const j1 = kinJoints.find((j) => j.id === j1Sel.value);
+      const j2 = kinJoints.find((j) => j.id === j2Sel.value);
+      const btn = document.getElementById('cp-submit');
+      if (!j1 || !j2) {
+        previewEl.textContent = kind === 'screw'
+          ? 'Es fehlt noch ein passendes Gelenk mit Dreh- oder Schiebebewegung.'
+          : kind === 'belt'
+            ? 'Für eine Riemen-Kopplung werden zwei verschiedene Drehgelenke benötigt.'
+            : 'Für eine lineare Kopplung werden zwei verschiedene Schiebegelenke benötigt.';
+        if (btn) btn.disabled = true;
+        return;
+      }
+      if (btn) btn.disabled = false;
+      const rev = revChk.checked;
+      if (kind === 'screw') {
+        const p = parseNum(pitchInp.value);
+        previewEl.textContent = Number.isFinite(p) && p > 0
+          ? `1 Umdrehung (360°) → ${rev ? '−' : '+'}${fmt(p)} mm Vorschub (${rev ? 'Linksgewinde' : 'Rechtsgewinde'}).`
+          : 'Bitte eine gültige Steigung > 0 eingeben.';
+      } else if (kind === 'belt') {
+        const a = parseNum(v1Inp.value), b = parseNum(v2Inp.value);
+        if (Number.isFinite(a) && a > 0 && Number.isFinite(b) && b > 0) {
+          const pct = round((a / b) * 100, 1);
+          previewEl.textContent = `Rad 2 dreht mit ${fmt(pct)} % (${fmt(a)} / ${fmt(b)}) von Rad 1${rev ? ' in Gegenrichtung (gekreuzt)' : ' in gleicher Richtung'}.`;
+        } else {
+          previewEl.textContent = 'Bitte Werte > 0 für beide Räder eingeben.';
+        }
+      } else {
+        const r = parseNum(ratioInp.value);
+        previewEl.textContent = Number.isFinite(r) && r > 0
+          ? `Schieben um 10 mm → Teil 2 schiebt um ${rev ? '−' : '+'}${fmt(10 * r)} mm (${rev ? 'gegenläufig' : 'gleichlaufend'}).`
+          : 'Bitte ein Verhältnis > 0 eingeben.';
+      }
+    };
+
+    const refreshForm = () => {
+      paramsBox.innerHTML = '';
+      if (kind === 'screw') {
+        revTxt.textContent = T('joint.screwRevLabel');
+        paramsBox.append(pitchWrap);
+      } else if (kind === 'belt') {
+        revTxt.textContent = T('joint.beltRevLabel');
+        syncBeltUnit();
+        paramsBox.append(beltModeWrap, beltFields);
+      } else {
+        revTxt.textContent = T('joint.linearRevLabel');
+        paramsBox.append(ratioWrap);
+      }
+      populateJ1();
+      autoDefaults();
+      updatePreview();
+    };
+
+    wrap.append(kindSelWrap, j1SelWrap, j2SelWrap, paramsBox, revWrap, previewEl);
+    refreshForm();
+
+    UI.modal({
+      title: T('joint.coupleDlgTitle'),
+      body: wrap,
+      actions: [
+        { label: T('common.cancel'), id: 'cp-cancel' },
+        {
+          label: T('joint.coupleAddBtn'),
+          id: 'cp-submit',
+          primary: true,
+          run: () => {
+            const j1 = j1Sel.value, j2 = j2Sel.value;
+            const copts = { reverse: revChk.checked };
+            if (kind === 'screw') copts.pitch = pitchInp.value;
+            else if (kind === 'belt') {
+              copts.mode = beltModeSel.value;
+              if (copts.mode === 'diameter') { copts.d1 = v1Inp.value; copts.d2 = v2Inp.value; }
+              else { copts.z1 = v1Inp.value; copts.z2 = v2Inp.value; }
+            } else {
+              copts.ratio = ratioInp.value;
+            }
+            const res = addCoupling(kind, j1, j2, copts);
+            if (!res.ok) { UI.toast(res.msg, { kind: 'bad' }); return false; }
+            select(res.id);
+            UI.toast(`Kopplung angelegt: ${couplingSummary(couplingList().find((x) => x.id === res.id))}.`, { icon: 'check', ms: 3400 });
+          },
+        },
+      ],
+    });
+    updatePreview();
+    return true;
+  }
+  function startScrew(opts = {}) { return startCoupling('screw', opts); }
+  function startBelt(opts = {}) { return startCoupling('belt', opts); }
+  function startLinear(opts = {}) { return startCoupling('linear', opts); }
+
   function clampState(j, st) {
     const k = kindOf(j);
     const next = { ...stateOf(j), ...st };
@@ -3773,7 +4463,26 @@ const Joints = (() => {
       const b = top(j.b, doc); if (!b || b.locked) return false;
       syncHome(b, j, doc);
       const prev = stateOf(j);
-      let next = clampState(j, normPatch);
+      const seedDofs = pickPrimaryDofs(doc, j, normPatch, prev);
+      const effPatch = {};
+      for (const d of (seedDofs.length ? seedDofs : Object.keys(normPatch || {}))) {
+        if (d in (normPatch || {})) effPatch[d] = normPatch[d];
+      }
+      if (couplingsOf(j.id, doc).length && !j.stopsLocked) {
+        for (const d of seedDofs) {
+          const val = Number(effPatch[d]);
+          if (Number.isFinite(val)) ensureRangeFor(j, d, val);
+        }
+      }
+      let next = clampState(j, effPatch);
+      const targets = seedDofs.length ? computeCoupledTargets(doc, seedDofs.map((d) => ({ jid: j.id, dof: d, val: next[d] }))) : null;
+      if (targets && targets.has(j.id)) {
+        for (const [d, rawVal] of targets.get(j.id)) {
+          if (!hasDof(j, d)) continue;
+          if (j.stopsLocked) next[d] = round(clampDofVal(j, d, rawVal), 4);
+          else { ensureRangeFor(j, d, rawVal); next[d] = round(rawVal, 4); }
+        }
+      }
       writeState(j, next);
       Model.setFromMatrix(b, pose(j, next, null, doc));
       if (looseOf(j.b, doc).length) {
@@ -3781,6 +4490,7 @@ const Joints = (() => {
         next = stateOf(j);
       }
       if (stateChanged(prev, next, kindOf(j))) moveChain(doc, j.b, deltaMatrix(j, prev, next));
+      if (targets && targets.size) applyTargetsMap(doc, targets, j.id);
     }, { merge: 'joint:' + jid });
     drawSelectedJoint();
   }
@@ -3837,13 +4547,14 @@ const Joints = (() => {
         j.min = -90; j.max = 90;
       }
       Model.setFromMatrix(b, pose(j, zero, null, doc));
+      pruneInvalidCouplings(doc);
     });
     drawSelectedJoint();
   }
 
   function setRange(jid, k, v) {
     const pair = {
-      min: ['min', 'max', 360], max: ['min', 'max', 360],
+      min: ['min', 'max', 36000], max: ['min', 'max', 36000],
       minRx: ['minRx', 'maxRx', 360], maxRx: ['minRx', 'maxRx', 360],
       minRy: ['minRy', 'maxRy', 360], maxRy: ['minRy', 'maxRy', 360],
       minPos: ['minPos', 'maxPos', 10000], maxPos: ['minPos', 'maxPos', 10000],
@@ -3965,10 +4676,14 @@ const Joints = (() => {
 
     if (k === 'rot') {
       const d = new THREE.Vector3(...j.ad).normalize();
-      j.ang = clamp(round(twistDegAround(D_want, d), 4), j.min ?? -180, j.max ?? 180);
+      const angNew = round(twistDegAround(D_want, d), 4);
+      if (couplingsOf(j.id, doc).length && !j.stopsLocked) ensureRangeFor(j, 'ang', angNew);
+      j.ang = clamp(angNew, j.min ?? -180, j.max ?? 180);
     } else if (k === 'slide') {
       const d = new THREE.Vector3(...j.ad).normalize();
-      j.ang = clamp(round(dp.dot(d), 4), j.min ?? -20, j.max ?? 20);
+      const posNew = round(dp.dot(d), 4);
+      if (couplingsOf(j.id, doc).length && !j.stopsLocked) ensureRangeFor(j, 'ang', posNew);
+      j.ang = clamp(posNew, j.min ?? -20, j.max ?? 20);
     } else if (k === 'cyl') {
       const d = new THREE.Vector3(...j.ad).normalize();
       let posNew = round(dp.dot(d), 4);
@@ -4032,18 +4747,38 @@ const Joints = (() => {
       j.pos = posNew;
       j.ang = angNew;
     }
+    const selfCs = couplingList(doc).filter((c) => c.j1 === j.id && c.j2 === j.id);
+    if (selfCs.length) {
+      const ch = Object.keys(prev).filter((d) => hasDof(j, d) && Math.abs((j[d] ?? 0) - prev[d]) > 1e-4);
+      const seed = ch.includes('ang') ? ['ang'] : ch.includes('pos') ? ['pos'] : ch;
+      if (seed.length) {
+        const sMap = computeCoupledTargets(doc, seed.map((d) => ({ jid: j.id, dof: d, val: j[d] })));
+        if (sMap.has(j.id)) {
+          for (const [d, rawVal] of sMap.get(j.id)) {
+            if (!hasDof(j, d)) continue;
+            if (j.stopsLocked) j[d] = round(clampDofVal(j, d, rawVal), 4);
+            else { ensureRangeFor(j, d, rawVal); j[d] = round(rawVal, 4); }
+          }
+        }
+      }
+    }
     let next = stateOf(j);
     Model.setFromMatrix(b, pose(j, next, null, doc));
     if (hasLoose) {
       solvePartConstraints(doc, j.b, Model.vars(doc).v);
       next = stateOf(j);
     }
-    if (stateChanged(prev, next, kindOf(j))) moveChain(doc, j.b, deltaMatrix(j, prev, next));
+    if (stateChanged(prev, next, kindOf(j))) {
+      moveChain(doc, j.b, deltaMatrix(j, prev, next));
+      const changedDofs = Object.keys(prev).filter((d) => hasDof(j, d) && Math.abs(next[d] - prev[d]) > 1e-6);
+      if (changedDofs.length) propagateCouplings(doc, j.id, changedDofs);
+    }
     return true;
   }
 
   function computeDragState(j, patch) {
     const k = kindOf(j);
+    const hasCoup = couplingsOf(j.id, App.doc).length > 0;
     if (k === 'cyl' && patch.pos != null) {
       let p = round(Number(patch.pos) || 0, 4);
       if (j.stopsLocked) p = clamp(p, j.minPos ?? -20, j.maxPos ?? 20);
@@ -4087,9 +4822,11 @@ const Joints = (() => {
       if (patch.ry != null) j.ry = clamp(wrapDeg(patch.ry), j.minRy ?? -180, j.maxRy ?? 180);
     }
     if (patch.ang != null) {
+      const angV = round(Number(patch.ang) || 0, 4);
+      if (hasCoup && !j.stopsLocked) ensureRangeFor(j, 'ang', angV);
       const lo = j.min ?? (k === 'slide' ? -20 : -180);
       const hi = j.max ?? (k === 'slide' ? 20 : 180);
-      j.ang = round(clamp(Number(patch.ang) || 0, lo, hi), 4);
+      j.ang = round(clamp(angV, lo, hi), 4);
     }
     return stateOf(j);
   }
@@ -4121,7 +4858,21 @@ const Joints = (() => {
     const b = top(j.b, App.doc); if (!b || b.locked) return null;
     const prev = stateOf(j);
     const k = kindOf(j);
-    let next = computeDragState(j, patch || {});
+    const seedDofs = pickPrimaryDofs(App.doc, j, patch || {}, prev);
+    const effPatch = {};
+    for (const d of (seedDofs.length ? seedDofs : Object.keys(patch || {}))) {
+      if (d in (patch || {})) effPatch[d] = patch[d];
+    }
+    let next = computeDragState(j, effPatch);
+    const targets = seedDofs.length ? computeCoupledTargets(App.doc, seedDofs.map((d) => ({ jid: j.id, dof: d, val: next[d] }))) : null;
+    if (targets && targets.has(j.id)) {
+      for (const [d, rawVal] of targets.get(j.id)) {
+        if (!hasDof(j, d)) continue;
+        if (j.stopsLocked) next[d] = round(clampDofVal(j, d, rawVal), 4);
+        else { ensureRangeFor(j, d, rawVal); next[d] = round(rawVal, 4); }
+      }
+      writeState(j, next);
+    }
     Model.setFromMatrix(b, pose(j, next, null, App.doc));
     if (looseOf(j.b, App.doc).length) {
       solvePartConstraints(App.doc, j.b, Model.vars(App.doc).v);
@@ -4133,6 +4884,7 @@ const Joints = (() => {
       const db = top(d.b, App.doc);
       if (db && isTop(db.id, App.doc)) Viewer.updateNode(db.id, { matrix: Model.localMatrix(db) });
     }
+    if (targets && targets.size) applyTargetsMap(App.doc, targets, j.id, { live: true });
     drawSelectedJoint();
     if (dragVisJid === j.id) showDragVis(j.id);
     return next;
@@ -4149,10 +4901,14 @@ const Joints = (() => {
   }
 
   function remove(jid) {
+    if (couplingList().some((c) => c.id === jid)) return removeCoupling(jid);
     const cur = list().find((x) => x.id === jid);
     const wasConn = isConstraint(cur) || isLoose(cur);
     const wasSel = selJoint === jid;
-    App.change(wasConn ? 'Verbindung gelöst' : 'Gelenk gelöst', (doc) => { doc.joints = list(doc).filter((x) => x.id !== jid); });
+    App.change(wasConn ? 'Verbindung gelöst' : 'Gelenk gelöst', (doc) => {
+      doc.joints = list(doc).filter((x) => x.id !== jid);
+      if (Array.isArray(doc.couplings)) doc.couplings = doc.couplings.filter((c) => c.j1 !== jid && c.j2 !== jid);
+    });
     if (wasSel) { selJoint = null; clearSelVis(); }
     Panels.renderRight();
     Panels.renderLeft();
@@ -4259,12 +5015,13 @@ const Joints = (() => {
     clearTimeout(anim.timer);
     for (const id of anim.ids) { const it = top(id); if (it) Viewer.updateNode(id, { matrix: Model.localMatrix(it) }); }
     const b = anim.btn, jid = anim.jid; anim = null; Viewer.requestRender();
-    const el = (b && b.isConnected) ? b : document.querySelector(`.joint-item[data-jid="${jid}"] [id^="jt-play"]`);
+    const el = (b && b.isConnected) ? b : document.querySelector(`.joint-item[data-jid="${jid}"] [id^="jt-play"], #cp-play`);
     if (el) el.innerHTML = icon('play') + 'Bewegung abspielen';
   }
   function buildPlayLegs(j) {
     const k = kindOf(j), s0 = stateOf(j);
-    if (k === 'cyl') {
+    const selfCoupled = couplingList().some((c) => c.j1 === j.id && c.j2 === j.id);
+    if (k === 'cyl' && !selfCoupled) {
       const p0 = s0.pos, a0 = s0.ang;
       const pHi = j.maxPos ?? 20, pLo = j.minPos ?? -20;
       const aHi = j.max ?? 180, aLo = j.min ?? -180;
@@ -4350,7 +5107,17 @@ const Joints = (() => {
   }
   function play(jid, btn) {
     if (anim) { const same = anim.jid === jid; stopPlay(); if (same) return; }
-    const j = list().find((x) => x.id === jid); if (!j || isConstraint(j) || isLoose(j)) return;
+    let j = list().find((x) => x.id === jid);
+    if (!j) {
+      const cp = couplingList().find((c) => c.id === jid);
+      if (cp) {
+        const j1 = list().find((x) => x.id === cp.j1);
+        const j2 = list().find((x) => x.id === cp.j2);
+        const b1 = j1 && top(j1.b);
+        j = (j1 && b1 && !b1.locked) ? j1 : j2;
+      }
+    }
+    if (!j || isConstraint(j) || isLoose(j)) return;
     const B = top(j.b); if (!B) return;
     if (B.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(B) }), { icon: 'lock' }); return; }
     if (!isTop(B.id) || downstream(App.doc, j.b, { stopAtLocked: true }).some((k) => !isTop(k.b))) { UI.toast('Abspielen geht nur, wenn die bewegten Teile ganz oben im Verlauf liegen – in einer Gruppe zeigt das Bild sie als einen Körper. Mit dem Regler kannst du trotzdem jede Stellung ansehen.', { icon: 'info', ms: 5000 }); return; }
@@ -4360,14 +5127,54 @@ const Joints = (() => {
       : j.home;
     const down = downstream(App.doc, j.b, { stopAtLocked: true }).map((k) => top(k.b)).filter(Boolean).map((it) => ({ it, m: Model.localMatrix(it) }));
     const { legs, T: dur } = buildPlayLegs(j);
-    if (dur < 1) return;
+    if (dur < 1 || !legs.length) return;
+    const animDofs = Object.keys(legs[0].s0);
+    const hasSelfCoup = couplingList().some((c) => c.j1 === j.id && c.j2 === j.id);
+    const cTargets0 = computeCoupledTargets(App.doc, animDofs.map((d) => ({ jid: j.id, dof: d, val: st0[d] })));
+    const allIds = new Set([B.id, ...down.map((d) => d.it.id)]);
+    const coupledAnim = [];
+    for (const kjId of cTargets0.keys()) {
+      if (kjId === j.id) continue;
+      const kj = list().find((x) => x.id === kjId);
+      const kb = kj && top(kj.b);
+      if (!kj || !kb || kb.locked || !isTop(kb.id) || kb.id === B.id) continue;
+      const kCur = Model.localMatrix(kb), kSt0 = stateOf(kj), kExp = pose(kj, kSt0);
+      const kHome = kCur.elements.some((v, i) => Math.abs(v - kExp.elements[i]) > 1e-4)
+        ? conj(App.doc, kj.b, stateMatrix(kj, kSt0)).invert().multiply(kCur).toArray()
+        : kj.home;
+      const kDown = downstream(App.doc, kj.b, { stopAtLocked: true }).map((k) => top(k.b)).filter((it) => it && isTop(it.id) && it.id !== B.id).map((it) => ({ it, m: Model.localMatrix(it) }));
+      allIds.add(kb.id);
+      for (const kd of kDown) allIds.add(kd.it.id);
+      coupledAnim.push({ j: kj, b: kb, home: kHome, st0: kSt0, down: kDown });
+    }
     const t0 = performance.now();
     const applyPose = (st) => {
-      Viewer.updateNode(B.id, { matrix: pose(j, st, home) });
-      const D = deltaMatrix(j, st0, st);
+      const tMap = (coupledAnim.length || hasSelfCoup)
+        ? computeCoupledTargets(App.doc, animDofs.map((d) => ({ jid: j.id, dof: d, val: st[d] })))
+        : null;
+      const stEff = { ...st };
+      if (tMap && tMap.has(j.id)) {
+        for (const [d, val] of tMap.get(j.id)) {
+          if (hasDof(j, d)) stEff[d] = clampDofVal(j, d, val);
+        }
+      }
+      Viewer.updateNode(B.id, { matrix: pose(j, stEff, home) });
+      const D = deltaMatrix(j, st0, stEff);
       for (const d of down) Viewer.updateNode(d.it.id, { matrix: D.clone().multiply(d.m) });
+      for (const ca of coupledAnim) {
+        const kSt = { ...ca.st0 };
+        const dMap = tMap && tMap.get(ca.j.id);
+        if (dMap) {
+          for (const [d, val] of dMap) {
+            if (hasDof(ca.j, d)) kSt[d] = clampDofVal(ca.j, d, val);
+          }
+        }
+        Viewer.updateNode(ca.b.id, { matrix: pose(ca.j, kSt, ca.home) });
+        const kD = deltaMatrix(ca.j, ca.st0, kSt);
+        for (const kd of ca.down) Viewer.updateNode(kd.it.id, { matrix: kD.clone().multiply(kd.m) });
+      }
     };
-    anim = { jid, ids: [B.id, ...down.map((d) => d.it.id)], btn, raf: 0, timer: 0, st: st0, get a() { return this.st.ang; }, applyPose };
+    anim = { jid, ids: [...allIds], btn, raf: 0, timer: 0, st: st0, get a() { return this.st.ang; }, applyPose };
     if (btn) btn.innerHTML = icon('close') + 'Stopp';
     const step = () => {
       if (!anim) return;
@@ -4677,9 +5484,25 @@ const Joints = (() => {
 
   function treeSection() {
     const js = list().filter((j) => top(j.a) && top(j.b));
-    if (!js.length) return null;
+    const jIds = new Set(js.map((j) => j.id));
+    const cs = couplingList().filter((c) => jIds.has(c.j1) && jIds.has(c.j2));
+    if (!js.length && !cs.length) return null;
     const V = js.some(isDistance) ? Model.vars(App.doc).v : null;
-    const sec = h('div', { class: 'datum-tree joint-tree', id: 'joint-tree', 'data-help': 'fixedJoint' }, h('div', { class: 'section-h' }, T('joint.treeHeading')));
+    const head = h('div', { class: 'section-h', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' } }, h('span', null, T('joint.treeHeading')));
+    const kinCount = js.filter((j) => !isConstraint(j) && !isLoose(j)).length;
+    if (kinCount > 0) {
+      const addCBtn = h('button', { type: 'button', class: 'btn small pro', id: 'btn-add-coupling', 'data-help': 'coupleScrew' }, T('joint.addCouplingBtn'));
+      addCBtn.onclick = (e) => {
+        e.stopPropagation();
+        UI.menu(addCBtn, [
+          { icon: 'helix', label: T('ctx.coupleScrew'), help: 'coupleScrew', run: () => startScrew() },
+          { icon: 'link', label: T('ctx.coupleBelt'), help: 'coupleBelt', run: () => startBelt() },
+          { icon: 'moveStep', label: T('ctx.coupleLinear'), help: 'coupleLinear', run: () => startLinear() },
+        ]);
+      };
+      head.append(addCBtn);
+    }
+    const sec = h('div', { class: 'datum-tree joint-tree', id: 'joint-tree', 'data-help': 'fixedJoint' }, head);
     for (const j of js) {
       const row = h('div', { class: 'tree-row joint-row' + (j.id === selJoint ? ' sel' : ''), 'data-joint': j.id });
       const icName = fixed(j) ? 'lock' : isAngle(j) ? 'rotate' : isCenter(j) ? 'cSymmetric' : isParallel(j) ? 'cParallel' : isTangent(j) ? 'cTangent' : isDistance(j) ? 'clearance' : 'hinge';
@@ -4710,12 +5533,115 @@ const Joints = (() => {
       });
       sec.append(row);
     }
+    for (const c of cs) {
+      const row = h('div', { class: 'tree-row coupling-row pro' + (c.id === selJoint ? ' sel' : ''), 'data-coupling': c.id });
+      const icName = c.kind === 'screw' ? 'helix' : c.kind === 'belt' ? 'link' : 'moveStep';
+      const ic = h('span', { class: 'swatch joint' }); ic.innerHTML = icon(icName);
+      const del = h('button', { type: 'button', class: 'j-del', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') });
+      del.innerHTML = icon('trash');
+      del.onclick = (e) => { e.stopPropagation(); removeCoupling(c.id); };
+      row.append(ic, h('span', { class: 'nm', title: couplingLabel(c) }, couplingLabel(c)), h('span', { class: 'sub mono' }, couplingSummary(c)), h('span', { class: 'm-acts' }, del));
+      row.onclick = () => select(c.id === selJoint ? null : c.id);
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        UI.menu(row, [
+          { icon: 'edit', label: 'Bearbeiten', run: () => select(c.id) },
+          { icon: 'mirror', label: 'Richtung umkehren', run: () => updateCoupling(c.id, { reverse: !c.reverse }) },
+          { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), couplingLabel(c), T('common.rename')); if (n && n.trim()) updateCoupling(c.id, { name: n.trim() }); } },
+          '-',
+          { icon: 'trash', label: T('common.delete'), run: () => removeCoupling(c.id) },
+        ]);
+      });
+      sec.append(row);
+    }
     return sec;
+  }
+
+  function renderCouplingPanel(body, c) {
+    const j1 = list().find((x) => x.id === c.j1);
+    const j2 = list().find((x) => x.id === c.j2);
+    if (!j1 || !j2) return false;
+    const helpKey = c.kind === 'belt' ? 'coupleBelt' : c.kind === 'linear' ? 'coupleLinear' : 'coupleScrew';
+    const w = h('div', { class: 'props', id: 'coupling-edit-panel', 'data-help': helpKey });
+    const nm = h('input', { id: 'cp-edit-name', value: couplingLabel(c), 'aria-label': T('common.name') });
+    nm.addEventListener('change', () => {
+      const v = nm.value.trim();
+      if (v) updateCoupling(c.id, { name: v });
+    });
+    nm.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') nm.blur(); });
+    w.append(h('div', { class: 'prop-title' }, nm));
+
+    const links = h('div', { class: 'mini-list' });
+    const mkJRow = (lbl, j, dof) => {
+      const stVal = stateOf(j)[dof] ?? 0;
+      const u = isLenDof(j, dof) ? Units.fmtLenU(stVal, 2) : fmtAngleU(stVal);
+      const r = h('div', { class: 'mini-row dep-row', style: { cursor: 'pointer' } }, h('span', { class: 'grow' }, `${lbl}: ${jointLabel(j)} (${dofLabel(j, dof)})`), h('b', { class: 'mono' }, u));
+      r.onclick = () => select(j.id);
+      return r;
+    };
+    links.append(mkJRow('Antrieb', j1, c.dof1), mkJRow('Mitlauf', j2, c.dof2));
+    w.append(links);
+
+    const hintTxt = c.kind === 'screw'
+      ? `Drehen um 360° an <b>${esc(jointLabel(j1))}</b> verschiebt um <b class="mono">${c.reverse ? '−' : '+'}${esc(Units.fmtLenU(c.pitch, 2))}</b>.`
+      : c.kind === 'belt'
+        ? `<b>${esc(jointLabel(j2))}</b> dreht mit <b class="mono">${esc(fmt(Math.abs(couplingGain(c)) * 100))} %</b> der Drehzahl von <b>${esc(jointLabel(j1))}</b>${c.reverse ? ' (gegenläufig)' : ''}.`
+        : `<b>${esc(jointLabel(j2))}</b> bewegt sich mit Faktor <b class="mono">${c.reverse ? '−' : '+'}${esc(fmt(c.ratio))}×</b> zu <b>${esc(jointLabel(j1))}</b>.`;
+    w.append(h('div', { class: 'hint-box', id: 'cp-edit-readout', html: hintTxt }));
+
+    const fl = h('div', { class: 'fields' });
+    if (c.kind === 'screw') {
+      fl.append(UI.numField({
+        id: 'cp-edit-pitch', label: T('joint.pitchLabel') + ' (mm/U)', value: c.pitch ?? 2, unit: 'mm/U', len: false, expr: false, min: 0.001,
+        onCommit: (v) => updateCoupling(c.id, { pitch: v }, { merge: 'cp:' + c.id }),
+      }));
+    } else if (c.kind === 'belt') {
+      w.append(UI.selectField({
+        id: 'cp-edit-mode', label: T('joint.beltModeLabel'), value: c.mode === 'diameter' ? 'diameter' : 'teeth',
+        options: [['teeth', T('joint.beltModeTeeth')], ['diameter', T('joint.beltModeDia')]],
+        onChange: (v) => updateCoupling(c.id, { mode: v }),
+      }));
+      const isDia = c.mode === 'diameter';
+      fl.append(
+        UI.numField({
+          id: 'cp-edit-v1', label: isDia ? 'Rad 1 Ø' : 'Rad 1 (Zähne)', value: isDia ? (c.d1 ?? 20) : (c.z1 ?? 20), unit: isDia ? 'mm' : 'Z', len: false, expr: false, min: 0.001,
+          onCommit: (v) => updateCoupling(c.id, isDia ? { d1: v } : { z1: v }, { merge: 'cp:' + c.id }),
+        }),
+        UI.numField({
+          id: 'cp-edit-v2', label: isDia ? 'Rad 2 Ø' : 'Rad 2 (Zähne)', value: isDia ? (c.d2 ?? 40) : (c.z2 ?? 40), unit: isDia ? 'mm' : 'Z', len: false, expr: false, min: 0.001,
+          onCommit: (v) => updateCoupling(c.id, isDia ? { d2: v } : { z2: v }, { merge: 'cp:' + c.id }),
+        })
+      );
+    } else {
+      fl.append(UI.numField({
+        id: 'cp-edit-ratio', label: T('joint.linearRatioLabel'), value: c.ratio ?? 1, unit: '×', len: false, expr: false, min: 0.001,
+        onCommit: (v) => updateCoupling(c.id, { ratio: v }, { merge: 'cp:' + c.id }),
+      }));
+    }
+    w.append(fl);
+
+    const revLbl = c.kind === 'screw' ? T('joint.screwRevLabel') : c.kind === 'belt' ? T('joint.beltRevLabel') : T('joint.linearRevLabel');
+    const revChk = h('input', { type: 'checkbox', id: 'cp-edit-reverse', checked: !!c.reverse });
+    revChk.onchange = () => updateCoupling(c.id, { reverse: revChk.checked });
+    w.append(h('label', { class: 'check' }, revChk, revLbl));
+
+    const pb = h('button', { type: 'button', class: 'btn', id: 'cp-play' });
+    pb.innerHTML = icon(anim && anim.jid === j1.id ? 'close' : 'play') + (anim && anim.jid === j1.id ? 'Stopp' : 'Bewegung abspielen');
+    pb.onclick = () => play(c.id, pb);
+    const del = h('button', { type: 'button', class: 'btn danger', id: 'cp-del' });
+    del.innerHTML = icon('ungroup') + esc(T('joint.coupleRemoveBtn'));
+    del.onclick = () => removeCoupling(c.id);
+    w.append(h('div', { class: 'btn-row' }, pb, del));
+    body.append(w);
+    return true;
   }
 
   function renderPanel(body) {
     const j = list().find((x) => x.id === selJoint);
-    if (!j) return false;
+    if (!j) {
+      const c = couplingList().find((x) => x.id === selJoint);
+      return c ? renderCouplingPanel(body, c) : false;
+    }
     const A = top(j.a), B = top(j.b);
     if (!A || !B) return false;
     const helpKey = fixed(j) ? 'fixedJoint' : isAngle(j) ? 'mateAngle' : isCenter(j) ? 'mateCenter' : isParallel(j) ? 'mateParallel' : isTangent(j) ? 'mateTangent' : isDistance(j) ? 'mateDistance' : isCyl(j) ? 'mateCyl' : isPlanar(j) ? 'matePlanar' : isBall(j) ? 'mateBall' : isSlot(j) ? 'mateSlot' : null;
@@ -4750,6 +5676,23 @@ const Joints = (() => {
       if (idx > 0) sec.append(h('hr', { style: { border: 0, borderTop: '1px solid var(--line)', margin: '6px 0', width: '100%' } }));
       sec.append(renderJointControls(j, idx ? '-' + idx : ''));
     });
+    const jIds = new Set(js.map((j) => j.id));
+    const cs = couplingList().filter((c) => jIds.has(c.j1) || jIds.has(c.j2));
+    if (cs.length) {
+      const cList = h('div', { class: 'mini-list coupling-mini pro', style: { marginTop: '6px' } });
+      for (const c of cs) {
+        const eb = h('button', { type: 'button', class: 'btn small' }, 'Bearbeiten');
+        eb.onclick = () => select(c.id);
+        cList.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, `${couplingLabel(c)} (${couplingSummary(c)})`), eb));
+      }
+      sec.append(cList);
+    }
+    const kinJ = js.find((j) => !isConstraint(j) && !isLoose(j));
+    if (kinJ) {
+      const addBtn = h('button', { type: 'button', class: 'btn small pro', id: 'jt-add-coupling', 'data-help': 'coupleScrew' }, T('joint.addCouplingBtn'));
+      addBtn.onclick = () => startCoupling(isCyl(kinJ) ? 'screw' : slide(kinJ) ? 'linear' : 'belt', { j1: kinJ.id });
+      sec.append(h('div', { class: 'btn-row pro', style: { marginTop: '6px' } }, addBtn));
+    }
     return sec;
   }
 
@@ -4762,7 +5705,8 @@ const Joints = (() => {
         const ids = new Set(); Model.walk(App.doc.items, (x) => { ids.add(x.id); });
         if (js.some((j) => !ids.has(j.a) || !ids.has(j.b))) App.doc.joints = js.filter((j) => ids.has(j.a) && ids.has(j.b));
       }
-      if (selJoint && !list().some((j) => j.id === selJoint)) selJoint = null;
+      pruneInvalidCouplings(App.doc);
+      if (selJoint && !list().some((j) => j.id === selJoint) && !couplingList().some((c) => c.id === selJoint)) selJoint = null;
       drawSelectedJoint();
     });
     App.on('selection', () => {
@@ -4793,6 +5737,10 @@ const Joints = (() => {
     startSlot,
     startAngle,
     startCenter,
+    startCoupling,
+    startScrew,
+    startBelt,
+    startLinear,
     stopPick,
     add,
     addFixed,
@@ -4817,6 +5765,14 @@ const Joints = (() => {
     addParallel,
     addTangent,
     addDistance,
+    addCoupling,
+    addScrew,
+    addBelt,
+    addLinear,
+    updateCoupling,
+    removeCoupling,
+    couplingsOf,
+    couplingGain,
     updateLoose,
     setDistance,
     flipLoose,
@@ -4871,7 +5827,9 @@ const Joints = (() => {
     get picking() { return !!pickState; },
     get dockPromptOpen() { return !!dockPop; },
     get selected() { return selJoint; },
+    get isCouplingSelected() { return !!selJoint && couplingList().some((c) => c.id === selJoint); },
     get list() { return list(); },
+    get couplings() { return couplingList(); },
     get playing() { return anim ? { jid: anim.jid, a: anim.a, st: anim.st } : null; },
   };
 })();

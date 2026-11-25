@@ -29328,6 +29328,274 @@ def t_a150_dateiformat(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-152] Kopplungen: Schraube, Riemen, linear (BG-14) ----------
+def t_a152_kopplungen_schraube_riemen_linear(p):
+    # 1. Schraube mit Steigung 2 mm: 1 Umdrehung (360°) -> 2 mm Vorschub (zylindrisch & Zwei-Gelenk-Spindel)
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(150)
+    s_info = p.ev("""
+      App.change('Schraube-Test', (d) => {
+        const base = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Platte' });
+        base.locked = true;
+        const bolt = Model.newItem('cylinder', { d: 10, h: 25 }, { name: 'Bolzen' });
+        bolt.t.x = 25;
+        d.items.push(base, bolt);
+      });
+      const baseId = App.doc.items[0].id, boltId = App.doc.items[1].id;
+      const jr = Joints.add(baseId, boltId, [0, 0, 5], [0, 0, 1], { kind: 'cyl' });
+      const cr = Joints.addScrew(jr.id, { pitch: 2 });
+      const z0 = Actions.worldBox(boltId).min.z;
+      return { baseId, boltId, jid: jr.id, cid: cr.id, okAdd: !!(jr.ok && cr.ok), z0 };
+    """)
+    warte_rechnen(p, 20)
+
+    # 360° Drehung über UI-Feld -> pos = 2,0 mm & Welt-Z um +2,0 mm verschoben
+    p.ev("App.select([arg])", s_info['boltId'])
+    p.wait(300)
+    field(p, '#jt-ang', 360)
+    warte_rechnen(p, 15)
+    z1 = p.ev("const j = App.doc.joints.find(x => x.id === arg.jid); return { pos: j.pos, ang: j.ang, z: Actions.worldBox(arg.bid).min.z };", {'jid': s_info['jid'], 'bid': s_info['boltId']})
+
+    # 720° -> 4,0 mm; Linksgewinde -> -4,0 mm; Rückwärts über pos = 3 -> -540°
+    field(p, '#jt-ang', 720)
+    warte_rechnen(p, 15)
+    pos720 = p.ev("return App.doc.joints.find(x => x.id === arg).pos", s_info['jid'])
+    p.ev("Joints.updateCoupling(arg, { reverse: true })", s_info['cid'])
+    warte_rechnen(p, 15)
+    pos_rev = p.ev("return App.doc.joints.find(x => x.id === arg).pos", s_info['jid'])
+    field(p, '#jt-pos', 3)
+    warte_rechnen(p, 15)
+    ang_back = p.ev("return App.doc.joints.find(x => x.id === arg).ang", s_info['jid'])
+
+    # Zwei-Gelenk-Schraube (Drehgelenk -> Schiebegelenk mit Steigung 2 mm)
+    two_s = p.ev("""
+      Start.openNewTab(Model.newDoc('Spindel-Test'));
+      App.change('Spindel', (d) => {
+        const frame = Model.newItem('box', { w: 40, d: 20, h: 10 }, { name: 'Gestell' });
+        frame.locked = true;
+        const screw = Model.newItem('cylinder', { d: 8, h: 30 }, { name: 'Spindel' });
+        screw.t.x = 0; screw.t.y = 0;
+        const nut = Model.newItem('box', { w: 14, d: 14, h: 10 }, { name: 'Schlitten' });
+        nut.t.x = 20;
+        d.items.push(frame, screw, nut);
+      });
+      const [fId, sId, nId] = App.doc.items.map(x => x.id);
+      const jRot = Joints.add(fId, sId, [0, 0, 0], [0, 0, 1], { kind: 'rot' });
+      const jSld = Joints.add(fId, nId, [20, 0, 0], [1, 0, 0], { kind: 'slide', min: -50, max: 50 });
+      const c2 = Joints.addScrew(jRot.id, jSld.id, { pitch: 2 });
+      const x0 = Actions.worldBox(nId).min.x;
+      Joints.setState(jRot.id, { ang: 360 });
+      const x1 = Actions.worldBox(nId).min.x;
+      const sAng = App.doc.joints.find(x => x.id === jSld.id).ang;
+      return { ok: !!(jRot.ok && jSld.ok && c2.ok), dx: x1 - x0, sAng };
+    """)
+    warte_rechnen(p, 20)
+
+    ok1 = (
+        s_info['okAdd']
+        and abs(z1['ang'] - 360.0) < 1e-4
+        and abs(z1['pos'] - 2.0) < 1e-4
+        and abs((z1['z'] - s_info['z0']) - 2.0) < 0.02
+        and abs(pos720 - 4.0) < 1e-4
+        and abs(pos_rev + 4.0) < 1e-4
+        and abs(ang_back + 540.0) < 1e-3
+        and two_s['ok'] and abs(two_s['sAng'] - 2.0) < 1e-4 and abs(two_s['dx'] - 2.0) < 0.02
+    )
+
+    # 2. Riemen 20/40 Zähne: über UI-Dialog koppeln -> Rad 2 dreht halb so schnell
+    p.ev("Start.openNewTab(Model.newDoc('Riemen-Test'))")
+    b_info = p.ev("""
+      App.change('Riemen', (d) => {
+        const base = Model.newItem('box', { w: 80, d: 30, h: 6 }, { name: 'Platte' });
+        base.locked = true;
+        const g1 = Model.newItem('part', { lib: 'gear', teeth: 20, module: 1.0, h: 6, bore: 4 }, { name: 'Rad 1' });
+        g1.t.x = -20; g1.t.z = 8;
+        const g2 = Model.newItem('part', { lib: 'gear', teeth: 40, module: 1.0, h: 6, bore: 4 }, { name: 'Rad 2' });
+        g2.t.x = 20; g2.t.z = 8;
+        d.items.push(base, g1, g2);
+      });
+      const [bId, w1Id, w2Id] = App.doc.items.map(x => x.id);
+      const j1 = Joints.add(bId, w1Id, [-20, 0, 8], [0, 0, 1], { kind: 'rot' });
+      const j2 = Joints.add(bId, w2Id, [20, 0, 8], [0, 0, 1], { kind: 'rot' });
+      return { bId, w1Id, w2Id, j1: j1.id, j2: j2.id, ok: !!(j1.ok && j2.ok) };
+    """)
+    warte_rechnen(p, 30)
+
+    # Dialog öffnen: automatische Zähne 20 und 40 prüfen und anlegen
+    p.ev("Joints.startBelt({ j1: arg.j1, j2: arg.j2 })", b_info)
+    p.wait(250)
+    dlg_vals = p.ev("""
+      return {
+        open: !!document.querySelector('#coupling-dialog'),
+        mode: document.querySelector('#cp-belt-mode')?.value,
+        v1: document.querySelector('#cp-v1')?.value,
+        v2: document.querySelector('#cp-v2')?.value,
+      };
+    """)
+    p.pg.click('#cp-submit')
+    p.wait(250)
+    belt_cid = p.ev("return (App.doc.couplings || [])[0]?.id || null")
+
+    def wheel_world_deg(bid, origin_x):
+        return p.ev("""
+          const V3 = window.__masswerk.THREE.Vector3;
+          const W = Model.worldMatrix(App.doc, arg.bid);
+          const p0 = new V3(10, 0, 0).applyMatrix4(W);
+          return Math.atan2(p0.y, p0.x - arg.ox) * 180 / Math.PI;
+        """, {'bid': bid, 'ox': origin_x})
+
+    # Rad 1 um 360° drehen -> Rad 2 dreht +180° (halb so schnell, gleiche Richtung)
+    p.ev("Joints.setState(arg, { ang: 360 })", b_info['j1'])
+    warte_rechnen(p, 15)
+    w2_at_360 = p.ev("return App.doc.joints.find(x => x.id === arg).ang", b_info['j2'])
+    w2_deg_360 = wheel_world_deg(b_info['w2Id'], 20)
+
+    # Rad 1 auf 120° -> Rad 2 auf +60°; Gekreuzt (#cp-edit-reverse) -> -60°
+    p.ev("Joints.setState(arg, { ang: 120 })", b_info['j1'])
+    warte_rechnen(p, 15)
+    w2_at_120 = p.ev("return App.doc.joints.find(x => x.id === arg).ang", b_info['j2'])
+    p.ev("Joints.select(arg)", belt_cid)
+    p.wait(250)
+    p.pg.click('#cp-edit-reverse')
+    p.wait(200)
+    w2_crossed = p.ev("return App.doc.joints.find(x => x.id === arg).ang", b_info['j2'])
+
+    # Durchmesser-Modus (30 / 15 mm, ungekreuzt) -> Rad 1 90° -> Rad 2 180°, rückwärts Rad 2 60° -> Rad 1 30°
+    p.pg.click('#cp-edit-reverse')
+    p.wait(150)
+    p.ev("document.querySelector('#cp-edit-mode').value = 'diameter'; document.querySelector('#cp-edit-mode').dispatchEvent(new Event('change'));")
+    p.wait(150)
+    field(p, '#cp-edit-v1', 30)
+    field(p, '#cp-edit-v2', 15)
+    p.ev("Joints.setState(arg, { ang: 90 })", b_info['j1'])
+    w2_dia = p.ev("return App.doc.joints.find(x => x.id === arg).ang", b_info['j2'])
+    p.ev("Joints.setState(arg, { ang: 60 })", b_info['j2'])
+    w1_back = p.ev("return App.doc.joints.find(x => x.id === arg).ang", b_info['j1'])
+
+    ok2 = (
+        b_info['ok'] and dlg_vals['open']
+        and dlg_vals['mode'] == 'teeth' and dlg_vals['v1'] == '20' and dlg_vals['v2'] == '40'
+        and belt_cid is not None
+        and abs(w2_at_360 - 180.0) < 1e-4
+        and abs(abs(w2_deg_360) - 180.0) < 0.1
+        and abs(w2_at_120 - 60.0) < 1e-4
+        and abs(w2_crossed + 60.0) < 1e-4
+        and abs(w2_dia - 180.0) < 1e-4
+        and abs(w1_back - 30.0) < 1e-4
+    )
+
+    # 3. Linear: Schieben -> Schieben im Verhältnis (2×, sowie 0,5× gegenläufig & rückwärts)
+    l_info = p.ev("""
+      Start.openNewTab(Model.newDoc('Linear-Test'));
+      App.change('Linear', (d) => {
+        const base = Model.newItem('box', { w: 40, d: 40, h: 6 }, { name: 'Basis' });
+        base.locked = true;
+        const s1 = Model.newItem('box', { w: 12, d: 12, h: 12 }, { name: 'Schieber 1' });
+        s1.t.x = -12; s1.t.z = 9;
+        const s2 = Model.newItem('box', { w: 12, d: 12, h: 12 }, { name: 'Schieber 2' });
+        s2.t.x = 12; s2.t.z = 9;
+        d.items.push(base, s1, s2);
+      });
+      const [bId, s1Id, s2Id] = App.doc.items.map(x => x.id);
+      const j1 = Joints.add(bId, s1Id, [-12, 0, 9], [0, 1, 0], { kind: 'slide', min: -50, max: 50 });
+      const j2 = Joints.add(bId, s2Id, [12, 0, 9], [0, 1, 0], { kind: 'slide', min: -50, max: 50 });
+      const c = Joints.addLinear(j1.id, j2.id, { ratio: 2 });
+      const y2_0 = Actions.worldBox(s2Id).min.y;
+      Joints.setState(j1.id, { ang: 10 });
+      const y2_1 = Actions.worldBox(s2Id).min.y;
+      const a2_1 = App.doc.joints.find(x => x.id === j2.id).ang;
+      Joints.updateCoupling(c.id, { ratio: 0.5, reverse: true });
+      const a2_rev = App.doc.joints.find(x => x.id === j2.id).ang;
+      Joints.setState(j2.id, { ang: -10 });
+      const a1_back = App.doc.joints.find(x => x.id === j1.id).ang;
+      return { ok: !!(j1.ok && j2.ok && c.ok), cid: c.id, j1: j1.id, j2: j2.id, dy2: y2_1 - y2_0, a2_1, a2_rev, a1_back };
+    """)
+    warte_rechnen(p, 20)
+    ok3 = (
+        l_info['ok']
+        and abs(l_info['a2_1'] - 20.0) < 1e-4
+        and abs(l_info['dy2'] - 20.0) < 0.02
+        and abs(l_info['a2_rev'] + 5.0) < 1e-4
+        and abs(l_info['a1_back'] - 20.0) < 1e-4
+    )
+
+    # 4. Abspielen bewegt beide Räder ohne Revision zu ändern, Validierung, Rückgängig, Lösen & Profi-Sichtbarkeit
+    p.ev("Joints.select(arg)", l_info['cid'])
+    p.wait(250)
+    val_ok = p.ev("return Store.validateProject(App.doc).ok")
+    rev_before_play = p.ev("return App.revision")
+    p.pg.click('#cp-play')
+    p.wait(350)
+    mid_play = p.ev("""
+      const s1 = App.doc.items[1], s2 = App.doc.items[2];
+      const n1 = Viewer.nodes.get(s1.id), n2 = Viewer.nodes.get(s2.id);
+      const m1 = Model.localMatrix(s1), m2 = Model.localMatrix(s2);
+      return [
+        !!Joints.playing,
+        n1.base.elements.some((v, i) => Math.abs(v - m1.elements[i]) > 1e-3),
+        n2.base.elements.some((v, i) => Math.abs(v - m2.elements[i]) > 1e-3),
+      ];
+    """)
+    p.ev("Joints.stopPlay()")
+    p.wait(150)
+    rev_after_play = p.ev("return App.revision")
+
+    # Lösen und Rückgängig
+    p.pg.click('#cp-del')
+    p.wait(250)
+    cnt_after_del = p.ev("return (App.doc.couplings || []).length")
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(250)
+    cnt_after_undo = p.ev("return (App.doc.couplings || []).length")
+
+    # Einfach vs. Profi Sichtbarkeit
+    simple_vis = p.ev("""
+      ViewPrefs.setLevel('simple');
+      Panels.renderLeft();
+      const btn = document.querySelector('#btn-add-coupling');
+      const row = document.querySelector('.coupling-row');
+      const hiddenInSimple = (!btn || getComputedStyle(btn).display === 'none') && (!row || getComputedStyle(row).display === 'none');
+      ViewPrefs.setLevel('pro');
+      Panels.renderLeft();
+      const visInPro = !!(document.querySelector('#btn-add-coupling') && getComputedStyle(document.querySelector('#btn-add-coupling')).display !== 'none');
+      return [hiddenInSimple, visInPro];
+    """)
+
+    ok4 = (
+        val_ok is True
+        and mid_play == [True, True, True]
+        and rev_before_play == rev_after_play
+        and cnt_after_del == 0 and cnt_after_undo == 1
+        and simple_vis == [True, True]
+    )
+
+    # 5. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche & keine JS-Fehler
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const keys = ['coupleScrew', 'coupleBelt', 'coupleLinear'];
+      const hOk = keys.every(k => {
+        const b = document.createElement('button');
+        b.dataset.help = k;
+        const desc = Explain.describeElement(b);
+        return wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp && desc && desc.text === wh[k].hilfe && desc.tip === wh[k].tipp;
+      });
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const c1 = Commands.search('schraube').some(c => c.id === 'couple-screw');
+      const c2 = Commands.search('riemen').some(c => c.id === 'couple-belt');
+      const c3 = Commands.search('linear').some(c => c.id === 'couple-linear');
+      return { hOk, i18nOk, cmds: c1 && c2 && c3 };
+    })()""")
+    ok5 = bool(meta['hOk'] and meta['i18nOk'] and meta['cmds'] and len(p.errs) == 0)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -29588,6 +29856,7 @@ TESTS = [
     ('[A-147] Verlauf abschalten: freies Bearbeiten, Schritt 1', t_verlauf_abschalten),
     ('[A-149] Beispiel-Galerie: 8 lokale Beispiele mit Vorschaubild / Kopie öffnen / Original unverändert', t_a149_beispiel_galerie),
     ('[A-150] Dateiformat offen beschreiben: DATEIFORMAT.md, Beispiel-Projekt gültig & kaputte Datei deutsch gemeldet (PL-12)', t_a150_dateiformat),
+    ('[A-152] Kopplungen: Schraube (2 mm/U), Riemen (20/40 Zähne) & linear (BG-14)', t_a152_kopplungen_schraube_riemen_linear),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
