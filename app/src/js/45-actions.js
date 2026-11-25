@@ -402,6 +402,7 @@ const Actions = (() => {
       if (!any) return false;
     });
     if (changed > 0) {
+      if (typeof Panels !== 'undefined') { Panels.renderLeft(); Panels.renderRight(); }
       const f0 = Model.find(App.doc, ids[0]);
       const name = f0 ? Model.label(f0.item) : T('asm.partDefault');
       UI.toast(changed === 1

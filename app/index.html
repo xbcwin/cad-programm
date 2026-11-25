@@ -536,7 +536,7 @@ body.sketching .timeline{display:none}
 .stepbox p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.45}
 .stepbox .btn-row{flex-wrap:nowrap}
 
-.toasts{position:fixed;left:50%;bottom:calc(86px + var(--ai-h, 0px));transform:translateX(-50%);display:grid;gap:8px;z-index:90;pointer-events:none;width:min(520px,calc(100vw - 32px))}
+.toasts{position:fixed;left:50%;bottom:calc(78px + 46px * var(--ui-scale,1) + var(--ai-h, 0px));transform:translateX(-50%);display:grid;gap:8px;z-index:90;pointer-events:none;width:min(520px,calc(100vw - 32px))}
 .toast{pointer-events:auto;display:flex;align-items:center;gap:10px;background:var(--ink);color:var(--surface);border-radius:10px;padding:10px 12px 10px 14px;box-shadow:var(--shadow-2);font-size:14px;line-height:1.35;animation:toastIn .18s ease-out}
 .toast svg{width:18px;height:18px;flex:none}
 .toast .grow{flex:1}
@@ -738,7 +738,7 @@ body.sketching .timeline{display:none}
   .seg button{padding:6px 8px;font-size:13.5px}
   .brand{padding-right:0}
   .viewcube{transform:scale(.8);transform-origin:top right}
-  .toasts{bottom:calc(120px + var(--ai-h, 0px))}
+  .toasts{bottom:calc(134px + var(--ai-h, 0px))}
 }
 @media (max-width: 640px){
   /* Skizzenleiste auf dem Handy: oben die Werkzeuge, darunter Rückgängig, Abbrechen und Fertig */
@@ -1307,6 +1307,7 @@ body.tablet .tl-chip,body.tablet .tl-btns button{width:40px;height:40px}
 body.tablet .tl-marker{width:22px;height:44px}
 body.tablet .center.has-tl .view-btns{bottom:74px}
 body.tablet .center.has-tl .axis-gizmo{bottom:70px}
+body.tablet .toasts{bottom:calc(80px + 54px * var(--ui-scale,1) + var(--ai-h, 0px))}
 body.tablet .coords{display:none}
 body.tablet .bottombar{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"cmd cmd" "hint amp";row-gap:6px}
 body.tablet .cmd{grid-area:cmd}
@@ -22697,6 +22698,7 @@ const Actions = (() => {
       if (!any) return false;
     });
     if (changed > 0) {
+      if (typeof Panels !== 'undefined') { Panels.renderLeft(); Panels.renderRight(); }
       const f0 = Model.find(App.doc, ids[0]);
       const name = f0 ? Model.label(f0.item) : T('asm.partDefault');
       UI.toast(changed === 1
@@ -34717,16 +34719,31 @@ const Mass = (() => {
     return r;
   }
   // Messung eines beliebigen Projektstands (z. B. einer älteren Version)
-  function measureDoc(doc) {
-    if (!Kernel.ready || !doc.items.length) return Promise.resolve(null);
+  async function measureDoc(doc, opts = {}) {
+    if (!doc || !doc.items || !doc.items.length) return null;
+    if (!Kernel.ready) {
+      if (Kernel.state === 'loading' || (opts && opts.ensure)) {
+        try { await Kernel.ensure(); } catch (_) { return null; }
+      } else {
+        return null;
+      }
+    }
     return Kernel.call('measure', { scene: Model.kernelScene(doc) }).then((r) => enrich(r, doc)).catch(() => null);
   }
   // Messung des aktuellen Stands – pro Stand nur einmal
-  function measure() {
-    if (!Kernel.ready || !App.doc.items.length) return Promise.resolve(null);
+  function measure(opts = {}) {
+    if (!App.doc || !App.doc.items || !App.doc.items.length) return Promise.resolve(null);
+    if (!Kernel.ready && Kernel.state !== 'loading' && !(opts && opts.ensure)) return Promise.resolve(null);
     if (cache.rev === App.revision && cache.p) return cache.p;
     const rev = App.revision;
-    cache = { rev, p: measureDoc(App.doc).then((r) => { if (cache.rev === rev) ev.emit('measured', r); return r; }) };
+    cache = {
+      rev,
+      p: measureDoc(App.doc, opts).then((r) => {
+        if (!r) { if (cache.rev === rev) cache = { rev: -1, p: null }; return null; }
+        if (cache.rev === rev) ev.emit('measured', r);
+        return r;
+      }),
+    };
     return cache.p;
   }
   // festes Gewicht – auch wenn es noch fehlt (leer): dann zählt es mit 0 g und wird angemahnt
@@ -44474,7 +44491,7 @@ const Refine = (() => {
 // Jeder oberste Eintrag im Verlauf ist ein Schritt. Der Marker legt fest, bis wohin gerechnet wird;
 // neue Schritte landen am Marker. Unterdrückte Schritte bleiben erhalten, zählen aber nicht mit.
 const Timeline = (() => {
-  let el, track, info, btnL, btnR, bStart, bPrev, bNext, bEnd, drag = null, peekT = null, peekK = null, switching = false;
+  let el, track, info, btnL, btnR, bStart, bPrev, bNext, bEnd, drag = null, pendingRender = false, peekT = null, peekK = null, switching = false;
   const isNoHistory = () => !!(App.doc && App.doc.noHistory);
   async function setNoHistory(on, opts = {}) {
     const target = !!on;
@@ -44541,8 +44558,58 @@ const Timeline = (() => {
     const msg = errs.length ? ' · ' + errs[0].message : refs.length ? ' · ' + refs[0].message : '';
     return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${cacheTxt}${ai}${msg}${it.note ? T('tl.notePrefix') + it.note : ''}`;
   }
+  function applyChipState(c, it, i, mk, own, V, selTop) {
+    const hardErrs = RefFix.hardErrorsFor(it.id);
+    const hasWarn = !hardErrs.length && RefFix.hasBrokenRef(it.id);
+    const cls = hardErrs.length && i < mk && !it.suppressed ? ' err' : hasWarn && i < mk && !it.suppressed ? ' warn' : '';
+    const cs = (!it.suppressed && i < mk && own === App.doc && App.stepCacheStatus) ? App.stepCacheStatus(it.id) : null;
+    const tip = chipTip(it, i, V);
+    c._it = it;
+    c.dataset.idx = i;
+    c.dataset.id = it.id;
+    c.dataset.kind = it.kind;
+    c.dataset.lib = (it.p && it.p.lib) || '';
+    c.dataset.ai = it.ai ? '1' : '';
+    if (cs && cs.fp) c.dataset.fp = cs.fp; else delete c.dataset.fp;
+    if (cs && (cs.cached || cs.rebuilt)) c.dataset.cache = cs.cached ? 'hit' : 'rebuilt'; else delete c.dataset.cache;
+    c.className = 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + cls + (it.ai ? ' ai' : '') + (it.note ? ' note' : '');
+    c.setAttribute('data-tip', tip);
+    c.setAttribute('aria-label', tip);
+    if (it.ai) c.setAttribute('data-help', 'aiSteps'); else c.removeAttribute('data-help');
+    const bar = c.querySelector('.bar');
+    if (bar) bar.style.background = it.role === 'hole' ? 'transparent' : it.color;
+  }
+  function canUpdateInPlace(items, mk, ownKey) {
+    const n = items.length;
+    if (n <= 0 || track.dataset.tlOwn !== ownKey || track.children.length !== n + 1) return false;
+    const mkEl = track.children[mk];
+    if (!mkEl || !mkEl.classList.contains('tl-marker')) return false;
+    for (let i = 0; i < n; i++) {
+      const ch = track.children[i < mk ? i : i + 1];
+      const it = items[i];
+      if (!ch || !ch.classList.contains('tl-chip')) return false;
+      if (ch.dataset.id !== it.id || ch.dataset.kind !== it.kind) return false;
+      if ((ch.dataset.lib || '') !== ((it.p && it.p.lib) || '')) return false;
+      if ((ch.dataset.ai || '') !== (it.ai ? '1' : '')) return false;
+    }
+    return true;
+  }
+  function finishRender(own, n, mk) {
+    const pk = own === App.doc ? App.peeking : null;
+    info.classList.toggle('peek', pk != null);
+    info.textContent = pk != null ? T('tl.peekInfo', { n: pk }) : n ? (mk >= n ? (n === 1 ? T('tl.oneStep') : T('tl.manySteps', { n })) : `${mk} / ${n}`) : '';
+    const le = own === App.doc && App.evalStats && App.evalStats.lastEval;
+    if (le) info.dataset.tip = `Letztes Rechnen: ${le.rebuilt.length} neu gerechnet, ${le.cached.length} aus Speicher`;
+    else delete info.dataset.tip;
+    track.querySelectorAll('.tl-chip').forEach((c, j) => c.classList.toggle('peekoff', pk != null && j >= pk));
+    bStart.disabled = !n || mk === 0; bPrev.disabled = !n || mk === 0; bNext.disabled = mk >= n; bEnd.disabled = mk >= n;
+    // aktiven Bereich sichtbar halten
+    const m = track.querySelector('.tl-marker'); if (m && !drag) { const r = m.offsetLeft - track.clientWidth + 60; if (r > track.scrollLeft) track.scrollLeft = r; }
+  }
   function render() {
     if (!el) return;
+    if (drag) { pendingRender = true; return; }
+    pendingRender = false;
     const own = owner(), items = listOf(own), n = items.length, mk = markerPos();
     const noHist = isNoHistory() && own === App.doc;
     el.classList.toggle('no-history', noHist);
@@ -44550,6 +44617,7 @@ const Timeline = (() => {
       el.classList.remove('ctx');
       if (btnL) btnL.hidden = true;
       if (btnR) btnR.hidden = true;
+      delete track.dataset.tlOwn;
       track.innerHTML = '';
       const msg = h('span', { class: 'tl-nohist-msg' }, T('tl.noHistoryBar'));
       const btn = h('button', { type: 'button', class: 'btn small pro', id: 'tl-resume-history', 'data-help': 'noHistory' }, T('tl.resumeBtn'));
@@ -44565,45 +44633,45 @@ const Timeline = (() => {
     const V = Model.vars(App.doc).v;
     const selTop = own === App.doc ? new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id)) : new Set(App.sel);
     el.classList.toggle('ctx', own !== App.doc);
+    const ownKey = own === App.doc ? 'doc' : own.id;
+    if (canUpdateInPlace(items, mk, ownKey)) {
+      const marker = track.children[mk];
+      marker.setAttribute('aria-valuemax', n);
+      marker.setAttribute('aria-valuenow', mk);
+      items.forEach((it, i) => {
+        const c = track.children[i < mk ? i : i + 1];
+        applyChipState(c, it, i, mk, own, V, selTop);
+      });
+      finishRender(own, n, mk);
+      return;
+    }
+    track.dataset.tlOwn = ownKey;
     track.innerHTML = '';
     if (!n) track.append(h('span', { class: 'tl-empty' }, own !== App.doc ? T('tl.emptyComp', { name: Model.label(own) }) : T('tl.emptyDoc')));
     const marker = h('div', { class: 'tl-marker', role: 'slider', 'aria-label': T('tl.markerAria'), 'aria-valuemin': 0, 'aria-valuemax': n, 'aria-valuenow': mk, tabindex: 0, 'data-tip': T('tl.markerTip'), 'data-help': 'rollback' }, h('i'));
     marker.addEventListener('pointerdown', startDrag);
-    marker.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') { e.preventDefault(); setMarker(mk - 1); } if (e.key === 'ArrowRight') { e.preventDefault(); setMarker(mk + 1); } });
+    marker.addEventListener('keydown', (e) => { const curMk = markerPos(); if (e.key === 'ArrowLeft') { e.preventDefault(); setMarker(curMk - 1); } if (e.key === 'ArrowRight') { e.preventDefault(); setMarker(curMk + 1); } });
     items.forEach((it, i) => {
       if (i === mk) track.append(marker);
-      const hardErrs = RefFix.hardErrorsFor(it.id);
-      const hasWarn = !hardErrs.length && RefFix.hasBrokenRef(it.id);
-      const cls = hardErrs.length && i < mk && !it.suppressed ? ' err' : hasWarn && i < mk && !it.suppressed ? ' warn' : '';
-      const cs = (!it.suppressed && i < mk && own === App.doc && App.stepCacheStatus) ? App.stepCacheStatus(it.id) : null;
-      const ds = { idx: i };
-      if (cs && cs.fp) ds.fp = cs.fp;
-      if (cs && (cs.cached || cs.rebuilt)) ds.cache = cs.cached ? 'hit' : 'rebuilt';
-      const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + cls + (it.ai ? ' ai' : '') + (it.note ? ' note' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), 'data-help': it.ai ? 'aiSteps' : null, dataset: ds });
-      c.innerHTML = icon(iconFor(it)); c.append(h('span', { class: 'bar', style: { background: it.role === 'hole' ? 'transparent' : it.color } }));
+      const c = h('button', { type: 'button', class: 'tl-chip' });
+      c.innerHTML = icon(iconFor(it)); c.append(h('span', { class: 'bar' }));
       if (it.ai) { const b = h('span', { class: 'ai-badge', 'aria-hidden': 'true' }); b.innerHTML = icon('spark'); c.append(b); }
-      c.onclick = (e) => { clearTimeout(peekT); peekK = null; App.peek(null); App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); };
+      applyChipState(c, it, i, mk, own, V, selTop);
+      c.onclick = (e) => { const cur = c._it || it; clearTimeout(peekT); peekK = null; App.peek(null); App.select([cur.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); };
       // Maus kurz über einem Schritt halten: Stand nach diesem Schritt ansehen (nur im Projekt, nur vor dem Marker)
-      if (own === App.doc && i < mk - 1) c.addEventListener('pointermove', (e) => {
-        if (e.pointerType === 'touch' || drag) return;
-        if (peekK === i + 1) return;
-        peekK = i + 1; clearTimeout(peekT); peekT = setTimeout(() => App.peek(i + 1), 450);
+      c.addEventListener('pointermove', (e) => {
+        if (e.pointerType === 'touch' || drag || owner() !== App.doc) return;
+        const idx = Number(c.dataset.idx);
+        if (idx >= markerPos() - 1) return;
+        if (peekK === idx + 1) return;
+        peekK = idx + 1; clearTimeout(peekT); peekT = setTimeout(() => App.peek(idx + 1), 450);
       });
-      c.ondblclick = (e) => { e.preventDefault(); setMarker(i + 1, `Zeitleiste: bis „${Model.label(it)}“`); };
-      c.oncontextmenu = (e) => { e.preventDefault(); menu(c, it, i); };
+      c.ondblclick = (e) => { e.preventDefault(); const cur = c._it || it; const idx = Number(c.dataset.idx); setMarker(idx + 1, `Zeitleiste: bis „${Model.label(cur)}“`); };
+      c.oncontextmenu = (e) => { e.preventDefault(); const cur = c._it || it; const idx = Number(c.dataset.idx); menu(c, cur, idx); };
       track.append(c);
     });
     if (mk >= n && n) track.append(marker);
-    const pk = own === App.doc ? App.peeking : null;
-    info.classList.toggle('peek', pk != null);
-    info.textContent = pk != null ? T('tl.peekInfo', { n: pk }) : n ? (mk >= n ? (n === 1 ? T('tl.oneStep') : T('tl.manySteps', { n })) : `${mk} / ${n}`) : '';
-    const le = own === App.doc && App.evalStats && App.evalStats.lastEval;
-    if (le) info.dataset.tip = `Letztes Rechnen: ${le.rebuilt.length} neu gerechnet, ${le.cached.length} aus Speicher`;
-    else delete info.dataset.tip;
-    if (pk != null) track.querySelectorAll('.tl-chip').forEach((c, j) => c.classList.toggle('peekoff', j >= pk));
-    bStart.disabled = !n || mk === 0; bPrev.disabled = !n || mk === 0; bNext.disabled = mk >= n; bEnd.disabled = mk >= n;
-    // aktiven Bereich sichtbar halten
-    const m = track.querySelector('.tl-marker'); if (m && !drag) { const r = m.offsetLeft - track.clientWidth + 60; if (r > track.scrollLeft) track.scrollLeft = r; }
+    finishRender(own, n, mk);
   }
   function menu(anchor, it, i) {
     const box = h('div', { class: 'menu-list', style: { display: 'grid', gap: '2px', minWidth: '200px' } });
@@ -44632,7 +44700,9 @@ const Timeline = (() => {
     return chips.length;
   }
   function startDrag(e) {
-    e.preventDefault(); const m = e.currentTarget; try { m.setPointerCapture(e.pointerId); } catch (_) {} m.classList.add('drag');
+    e.preventDefault();
+    clearTimeout(peekT); peekK = null;
+    const m = e.currentTarget; try { m.setPointerCapture(e.pointerId); } catch (_) {} m.classList.add('drag');
     drag = { k: markerPos(), ind: null };
     const move = (ev) => {
       const k = gapAt(ev.clientX); if (k === drag.k && drag.ind) return; drag.k = k;
@@ -44641,8 +44711,12 @@ const Timeline = (() => {
       const chips = track.querySelectorAll('.tl-chip');
       if (k < chips.length) chips[k].before(drag.ind); else track.append(drag.ind);
     };
-    const up = () => { m.removeEventListener('pointermove', move); m.removeEventListener('pointerup', up); m.removeEventListener('pointercancel', up); const k = drag.k; if (drag.ind) drag.ind.remove(); drag = null; m.classList.remove('drag'); setMarker(k); render(); };
-    m.addEventListener('pointermove', move); m.addEventListener('pointerup', up); m.addEventListener('pointercancel', up);
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      const k = drag.k; if (drag.ind) drag.ind.remove(); drag = null; pendingRender = false; m.classList.remove('drag');
+      setMarker(k); render();
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
   }
   function refreshLabels() {
     if (!el) return;
@@ -44664,8 +44738,8 @@ const Timeline = (() => {
     $('#center').append(el); $('#center').classList.add('has-tl');
     const r = debounce(render, 30);
     const now = () => { r.cancel(); render(); };
-    App.on('doc', r); App.on('selection', r); App.on('results', r); App.on('ctx', now); App.on('peek', now);
-    App.on('doc', () => { clearTimeout(peekT); peekK = null; });
+    App.on('doc', () => { clearTimeout(peekT); peekK = null; now(); });
+    App.on('selection', r); App.on('results', r); App.on('ctx', now); App.on('peek', now);
     track.addEventListener('pointerleave', () => { clearTimeout(peekT); peekK = null; App.peek(null); });
     App.on('mode', () => { el.hidden = App.mode !== 'model'; $('#center').classList.toggle('has-tl', App.mode === 'model'); });
     render();
@@ -53035,27 +53109,53 @@ const UI = (() => {
   // ---------- Tooltips ----------
   let tipEl = null, tipTarget = null, tipTimer = 0, helpTimer = 0;
   // Hilfe-Schlüssel eines Elements: data-help, sonst nach id oder Beschriftung
+  const TIP_SEL = '[data-tip],[data-help],#t-measure,#t-sketch,#lt-params,#t-drone,#drone-assist';
   const HELP_IDS = { 't-measure': 'measure', 't-sketch': 'sketchFace', 'lt-params': 'params', 'timeline': 'timeline', 't-drone': 'droneLib', 'drone-assist': 'frameAssist', 'var-new': 'variants', 'var-table': 'variantTable', 'var-cmp': 'variants' };
   const HELP_LABELS = { 'Spiegeln': 'mirror', 'Hochziehen': 'extrude', 'Skizze hierauf': 'sketchFace' };
   function helpKey(t) { const k = t.dataset.help || HELP_IDS[t.id] || HELP_LABELS[(t.textContent || '').trim()]; return k && HELP[k] ? k : null; }
+  function reacquireTipTarget(prev) {
+    if (prev && document.body.contains(prev)) return prev;
+    if (prev && Number.isFinite(lastPtr.x) && Number.isFinite(lastPtr.y)) {
+      const under = typeof document.elementFromPoint === 'function' ? document.elementFromPoint(lastPtr.x, lastPtr.y) : null;
+      const cand = under && under.closest && under.closest(TIP_SEL);
+      if (cand) {
+        const sameId = prev.id && cand.id === prev.id;
+        const sameHelp = prev.dataset && cand.dataset && prev.dataset.help && cand.dataset.help === prev.dataset.help;
+        const sameTip = prev.dataset && cand.dataset && prev.dataset.tip && cand.dataset.tip === prev.dataset.tip;
+        if (sameId || sameHelp || sameTip) return cand;
+      }
+    }
+    return prev;
+  }
+  function onScrollTip() {
+    if (tipEl) { hideTip(); return; }
+    if (!tipTimer || !tipTarget) return;
+    if (Number.isFinite(lastPtr.x) && Number.isFinite(lastPtr.y) && typeof document.elementFromPoint === 'function') {
+      const under = document.elementFromPoint(lastPtr.x, lastPtr.y);
+      const cand = under && under.closest && under.closest(TIP_SEL);
+      if (cand && cand === tipTarget) return;
+    }
+    hideTip();
+  }
   function initTips() {
     document.addEventListener('pointerover', (e) => {
       if (whatIsOn) return;
       if (e.pointerType === 'touch') return;
-      const t = e.target.closest && e.target.closest('[data-tip],[data-help],#t-measure,#t-sketch,#lt-params,#t-drone,#drone-assist');
+      if (Number.isFinite(e.clientX) && Number.isFinite(e.clientY) && (e.clientX !== 0 || e.clientY !== 0)) lastPtr = { x: e.clientX, y: e.clientY };
+      const t = e.target.closest && e.target.closest(TIP_SEL);
       if (t && t === tipTarget && (tipTimer || tipEl)) return;
-      clearTimeout(tipTimer); tipTimer = 0; clearTimeout(helpTimer); helpTimer = 0;
-      if (!t) { hideTip(); return; }
+      hideTip();
+      if (!t) return;
       tipTarget = t;
       tipTimer = setTimeout(() => { tipTimer = 0; showTip(t); }, 420);
     });
     document.addEventListener('pointerdown', hideTip, true);
-    document.addEventListener('scroll', hideTip, true);
+    document.addEventListener('scroll', onScrollTip, true);
   }
   function showTip(t) {
-    const tgt = t;
+    const tgt = reacquireTipTarget(t);
     hideTip();
-    if (!document.body.contains(tgt)) return;
+    if (!tgt || !document.body.contains(tgt)) return;
     tipTarget = tgt;
     const key = helpKey(tgt);
     tipEl = h('div', { class: 'tooltip' }, tgt.dataset.tip || (key ? HELP[key].tip : ''));
@@ -53064,11 +53164,13 @@ const UI = (() => {
     document.body.append(tipEl); placeTip(tgt);
     // länger drauf bleiben: ausführliche Hilfe
     if (key) helpTimer = setTimeout(() => {
-      if (!tipEl || !document.body.contains(tgt)) return;
+      const live = reacquireTipTarget(tgt);
+      if (!tipEl || !live || !document.body.contains(live)) return;
+      tipTarget = live;
       const H = HELP[key]; const m = tipEl.querySelector('.more'); if (m) m.remove();
       tipEl.classList.add('big');
       tipEl.append(h('span', { class: 'hl' }, H.hilfe), h('span', { class: 'tp' }, h('b', null, T('hint.tipPrefix')), H.tipp));
-      placeTip(tgt);
+      placeTip(live);
     }, 1100);
   }
   function placeTip(t) {
@@ -54795,7 +54897,9 @@ const Panels = (() => {
   }
 
   // ---------- Verlauf (links) ----------
+  let pendingLeftDirty = false;
   function renderLeft() {
+    pendingLeftDirty = false;
     const body = $('#left-body'); body.innerHTML = '';
     $('#lt-tree').setAttribute('aria-selected', leftTab === 'tree'); $('#lt-params').setAttribute('aria-selected', leftTab === 'params'); $('#lt-log').setAttribute('aria-selected', leftTab === 'log');
     if (leftTab === 'tree') renderTree(body); else if (leftTab === 'log') renderLog(body); else renderParams(body);
@@ -57275,7 +57379,19 @@ const Panels = (() => {
       const ms = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, T('panel.proj.matTitle')));
       const fixed = Mass.fixedOf(it);
       ms.append(UI.selectField({ id: 'p-mat', label: T('panel.proj.matLabel'), value: fixed ? '__fix' : it.mat || '', options: materialOptions([['', T('panel.item.matAsProj', { mat: pm.k })], ['__fix', T('panel.item.matBought')]]), onChange: (v) => {
-        if (v === '__fix') { Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); App.change('Festes Gewicht', (doc) => { const tgt = Model.find(doc, it.id).item; delete tgt.mat; tgt.massG = p ? round(p.mass, 1) : 10; }); }); return; }
+        if (v === '__fix') {
+          Mass.measure({ ensure: true }).then((r) => {
+            const p = Mass.partOf(r, it.id);
+            App.change('Festes Gewicht', (doc) => {
+              const found = Model.find(doc, it.id);
+              if (!found || !found.item) return false;
+              const tgt = found.item;
+              delete tgt.mat;
+              tgt.massG = p ? round(p.mass, 1) : 10;
+            });
+          });
+          return;
+        }
         App.change('Material gewählt', (doc) => { const tgt = Model.find(doc, it.id).item; delete tgt.massG; delete tgt.colorSet; if (v) tgt.mat = v; else delete tgt.mat; });
       } }));
       if (!fixed) ms.append(materialInfoBox(Mass.materialFor(it), 'p-mat-info'));
@@ -58019,17 +58135,18 @@ const Panels = (() => {
       });
     }
     let pendingRightForce = false;
-    const rerenderLeftHint = debounce(() => { renderLeft(); UI.renderHint(); }, 16);
+    const rerenderLeftHint = debounce(() => { pendingLeftDirty = false; renderLeft(); UI.renderHint(); }, 16);
     const rerender = debounce(() => {
       const force = pendingRightForce;
       pendingRightForce = false;
+      pendingLeftDirty = false;
       rerenderLeftHint.cancel();
       renderLeft();
       renderRight(force ? undefined : { preserveFocus: true });
       renderCtx();
       UI.renderHint();
     }, 16);
-    const scheduleRerender = (forceRight = true) => { if (forceRight) pendingRightForce = true; rerender(); };
+    const scheduleRerender = (forceRight = true) => { if (forceRight) pendingRightForce = true; pendingLeftDirty = true; rerender(); };
     let lastDocType = Model.docType(App.doc);
     const checkDocType = () => {
       const next = Model.docType(App.doc);
@@ -58037,7 +58154,7 @@ const Panels = (() => {
     };
     App.on('doc', () => { checkDocType(); scheduleRerender(false); });
     App.on('docLoaded', () => { checkDocType(); });
-    App.on('selection', () => { rerender.cancel(); pendingRightForce = false; renderRight(); renderCtx(); if (syncLeftSelection()) UI.renderHint(); else rerenderLeftHint(); });
+    App.on('selection', () => { rerender.cancel(); pendingRightForce = false; renderRight(); renderCtx(); const leftQuick = !pendingLeftDirty && syncLeftSelection(); if (leftQuick) UI.renderHint(); else rerenderLeftHint(); });
     App.on('results', () => scheduleRerender(false));
     DroneCheck.on('checked', () => { if (!App.sel.length) scheduleRerender(false); });
     Weak.on('analyzed', () => { if (!App.sel.length) scheduleRerender(false); });

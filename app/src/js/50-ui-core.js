@@ -557,27 +557,53 @@ const UI = (() => {
   // ---------- Tooltips ----------
   let tipEl = null, tipTarget = null, tipTimer = 0, helpTimer = 0;
   // Hilfe-Schlüssel eines Elements: data-help, sonst nach id oder Beschriftung
+  const TIP_SEL = '[data-tip],[data-help],#t-measure,#t-sketch,#lt-params,#t-drone,#drone-assist';
   const HELP_IDS = { 't-measure': 'measure', 't-sketch': 'sketchFace', 'lt-params': 'params', 'timeline': 'timeline', 't-drone': 'droneLib', 'drone-assist': 'frameAssist', 'var-new': 'variants', 'var-table': 'variantTable', 'var-cmp': 'variants' };
   const HELP_LABELS = { 'Spiegeln': 'mirror', 'Hochziehen': 'extrude', 'Skizze hierauf': 'sketchFace' };
   function helpKey(t) { const k = t.dataset.help || HELP_IDS[t.id] || HELP_LABELS[(t.textContent || '').trim()]; return k && HELP[k] ? k : null; }
+  function reacquireTipTarget(prev) {
+    if (prev && document.body.contains(prev)) return prev;
+    if (prev && Number.isFinite(lastPtr.x) && Number.isFinite(lastPtr.y)) {
+      const under = typeof document.elementFromPoint === 'function' ? document.elementFromPoint(lastPtr.x, lastPtr.y) : null;
+      const cand = under && under.closest && under.closest(TIP_SEL);
+      if (cand) {
+        const sameId = prev.id && cand.id === prev.id;
+        const sameHelp = prev.dataset && cand.dataset && prev.dataset.help && cand.dataset.help === prev.dataset.help;
+        const sameTip = prev.dataset && cand.dataset && prev.dataset.tip && cand.dataset.tip === prev.dataset.tip;
+        if (sameId || sameHelp || sameTip) return cand;
+      }
+    }
+    return prev;
+  }
+  function onScrollTip() {
+    if (tipEl) { hideTip(); return; }
+    if (!tipTimer || !tipTarget) return;
+    if (Number.isFinite(lastPtr.x) && Number.isFinite(lastPtr.y) && typeof document.elementFromPoint === 'function') {
+      const under = document.elementFromPoint(lastPtr.x, lastPtr.y);
+      const cand = under && under.closest && under.closest(TIP_SEL);
+      if (cand && cand === tipTarget) return;
+    }
+    hideTip();
+  }
   function initTips() {
     document.addEventListener('pointerover', (e) => {
       if (whatIsOn) return;
       if (e.pointerType === 'touch') return;
-      const t = e.target.closest && e.target.closest('[data-tip],[data-help],#t-measure,#t-sketch,#lt-params,#t-drone,#drone-assist');
+      if (Number.isFinite(e.clientX) && Number.isFinite(e.clientY) && (e.clientX !== 0 || e.clientY !== 0)) lastPtr = { x: e.clientX, y: e.clientY };
+      const t = e.target.closest && e.target.closest(TIP_SEL);
       if (t && t === tipTarget && (tipTimer || tipEl)) return;
-      clearTimeout(tipTimer); tipTimer = 0; clearTimeout(helpTimer); helpTimer = 0;
-      if (!t) { hideTip(); return; }
+      hideTip();
+      if (!t) return;
       tipTarget = t;
       tipTimer = setTimeout(() => { tipTimer = 0; showTip(t); }, 420);
     });
     document.addEventListener('pointerdown', hideTip, true);
-    document.addEventListener('scroll', hideTip, true);
+    document.addEventListener('scroll', onScrollTip, true);
   }
   function showTip(t) {
-    const tgt = t;
+    const tgt = reacquireTipTarget(t);
     hideTip();
-    if (!document.body.contains(tgt)) return;
+    if (!tgt || !document.body.contains(tgt)) return;
     tipTarget = tgt;
     const key = helpKey(tgt);
     tipEl = h('div', { class: 'tooltip' }, tgt.dataset.tip || (key ? HELP[key].tip : ''));
@@ -586,11 +612,13 @@ const UI = (() => {
     document.body.append(tipEl); placeTip(tgt);
     // länger drauf bleiben: ausführliche Hilfe
     if (key) helpTimer = setTimeout(() => {
-      if (!tipEl || !document.body.contains(tgt)) return;
+      const live = reacquireTipTarget(tgt);
+      if (!tipEl || !live || !document.body.contains(live)) return;
+      tipTarget = live;
       const H = HELP[key]; const m = tipEl.querySelector('.more'); if (m) m.remove();
       tipEl.classList.add('big');
       tipEl.append(h('span', { class: 'hl' }, H.hilfe), h('span', { class: 'tp' }, h('b', null, T('hint.tipPrefix')), H.tipp));
-      placeTip(tgt);
+      placeTip(live);
     }, 1100);
   }
   function placeTip(t) {

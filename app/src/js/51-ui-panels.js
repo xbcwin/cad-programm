@@ -599,7 +599,9 @@ const Panels = (() => {
   }
 
   // ---------- Verlauf (links) ----------
+  let pendingLeftDirty = false;
   function renderLeft() {
+    pendingLeftDirty = false;
     const body = $('#left-body'); body.innerHTML = '';
     $('#lt-tree').setAttribute('aria-selected', leftTab === 'tree'); $('#lt-params').setAttribute('aria-selected', leftTab === 'params'); $('#lt-log').setAttribute('aria-selected', leftTab === 'log');
     if (leftTab === 'tree') renderTree(body); else if (leftTab === 'log') renderLog(body); else renderParams(body);
@@ -3079,7 +3081,19 @@ const Panels = (() => {
       const ms = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, T('panel.proj.matTitle')));
       const fixed = Mass.fixedOf(it);
       ms.append(UI.selectField({ id: 'p-mat', label: T('panel.proj.matLabel'), value: fixed ? '__fix' : it.mat || '', options: materialOptions([['', T('panel.item.matAsProj', { mat: pm.k })], ['__fix', T('panel.item.matBought')]]), onChange: (v) => {
-        if (v === '__fix') { Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); App.change('Festes Gewicht', (doc) => { const tgt = Model.find(doc, it.id).item; delete tgt.mat; tgt.massG = p ? round(p.mass, 1) : 10; }); }); return; }
+        if (v === '__fix') {
+          Mass.measure({ ensure: true }).then((r) => {
+            const p = Mass.partOf(r, it.id);
+            App.change('Festes Gewicht', (doc) => {
+              const found = Model.find(doc, it.id);
+              if (!found || !found.item) return false;
+              const tgt = found.item;
+              delete tgt.mat;
+              tgt.massG = p ? round(p.mass, 1) : 10;
+            });
+          });
+          return;
+        }
         App.change('Material gewählt', (doc) => { const tgt = Model.find(doc, it.id).item; delete tgt.massG; delete tgt.colorSet; if (v) tgt.mat = v; else delete tgt.mat; });
       } }));
       if (!fixed) ms.append(materialInfoBox(Mass.materialFor(it), 'p-mat-info'));
@@ -3823,17 +3837,18 @@ const Panels = (() => {
       });
     }
     let pendingRightForce = false;
-    const rerenderLeftHint = debounce(() => { renderLeft(); UI.renderHint(); }, 16);
+    const rerenderLeftHint = debounce(() => { pendingLeftDirty = false; renderLeft(); UI.renderHint(); }, 16);
     const rerender = debounce(() => {
       const force = pendingRightForce;
       pendingRightForce = false;
+      pendingLeftDirty = false;
       rerenderLeftHint.cancel();
       renderLeft();
       renderRight(force ? undefined : { preserveFocus: true });
       renderCtx();
       UI.renderHint();
     }, 16);
-    const scheduleRerender = (forceRight = true) => { if (forceRight) pendingRightForce = true; rerender(); };
+    const scheduleRerender = (forceRight = true) => { if (forceRight) pendingRightForce = true; pendingLeftDirty = true; rerender(); };
     let lastDocType = Model.docType(App.doc);
     const checkDocType = () => {
       const next = Model.docType(App.doc);
@@ -3841,7 +3856,7 @@ const Panels = (() => {
     };
     App.on('doc', () => { checkDocType(); scheduleRerender(false); });
     App.on('docLoaded', () => { checkDocType(); });
-    App.on('selection', () => { rerender.cancel(); pendingRightForce = false; renderRight(); renderCtx(); if (syncLeftSelection()) UI.renderHint(); else rerenderLeftHint(); });
+    App.on('selection', () => { rerender.cancel(); pendingRightForce = false; renderRight(); renderCtx(); const leftQuick = !pendingLeftDirty && syncLeftSelection(); if (leftQuick) UI.renderHint(); else rerenderLeftHint(); });
     App.on('results', () => scheduleRerender(false));
     DroneCheck.on('checked', () => { if (!App.sel.length) scheduleRerender(false); });
     Weak.on('analyzed', () => { if (!App.sel.length) scheduleRerender(false); });

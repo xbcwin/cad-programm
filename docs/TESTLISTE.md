@@ -2770,6 +2770,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Schutz, Validierung, Speichern/Laden, i18n, Hilfen & Befehlssuche**: Im Einfach-Modus sind die Bereiche ausgeblendet und Dialoge/Prompts geben `null` zurück; `Store.validateProject`, Speichern/Laden mit `displayStates` und `asmVariants`, `HELP.displayStates`/`HELP.asmVariants`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-display-state-save`, `asm-variant-save` …) laufen ohne JS-Fehler (`t_a163_anzeige_zustaende_varianten`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe mit mehreren Teilen öffnen, einen Anzeige-Zustand mit ausgeblendetem Deckel und durchsichtigem Gehäuse anlegen, eine Baugruppen-Variante mit geändertem Maß oder Ersatzteil über „Verwalten“ einrichten und im Studio-Licht-Panel sowie Ansichtsmenü umschalten.
 
+## Volltest-Reparatur (Auto [F-11251455])
+
+- [x] **Toast über Zeitleiste & In-Place-Zeitleiste (`Zeitleiste`)**: `.toasts` sitzt oberhalb von `#timeline`, sodass `.tl-marker` frei anklick- und ziehbar bleibt; `Timeline.render()` aktualisiert Marker und Chips bei unveränderter Schrittliste in-place, rendert auf `App.on('doc')` sofort ohne Debounce-Verzögerung und verschiebt Neurendern während des Ziehens bis zum Loslassen (`t_tl`, `t_f11251455`).
+- [x] **Festsetzen-Panels & `doc`-Verlaufs-Abgleich (`[A-084]`)**: `Actions.setGrounded()` aktualisiert linkes und rechtes Panel unmittelbar (`lock-mark`, `#t-x.disabled`, `#grounded-hint`), und `pendingLeftDirty` verhindert, dass `syncLeftSelection()` ein ausstehendes `doc`-`renderLeft()` verwirft (`t_a084_unterbaugruppe_festsetzen`, `t_f11251455`).
+- [x] **`Mass.measure()` bei ladendem Kern & Tooltip-Stabilität (`Kaufteil mit festem Gewicht`, `[A-093]`)**: `Mass.measure()`/`measureDoc()` warten bei `Kernel.state === 'loading'` (oder `{ ensure: true }`) statt `null` zurückzugeben und cachen `null` nicht dauerhaft; `UI.initTips()` schließt beim Zielwechsel den vorherigen Tooltip sofort, `UI.showTip()` re-akquiriert ein während der Hover-Verzögerung neu gerendertes Zielelement über `elementFromPoint`, und `onScrollTip()` bricht laufende Tooltip-Timer bei einem `scroll`-Event nicht ab, solange dasselbe Ziel unter dem Mauszeiger bleibt (`t_festes_gewicht`, `t_a093_eigenschaften_je_teil`, `t_f11251455`).
+- [ ] **Von Hand**: Im Browser drei Körper anlegen, direkt während der Toast-Meldung den Zeitleisten-Marker verschieben, sowie in den Teileigenschaften über die Abschnitts-Überschrift fahren und prüfen, dass der Tooltip auch bei gleichzeitigem Neubau erscheint.
+
 ## Fehler melden
 
 ```
