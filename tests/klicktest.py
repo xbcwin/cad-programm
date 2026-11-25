@@ -590,12 +590,13 @@ def t_einfuehrung(p):
 # ---------- Schraubenlöcher ----------
 def t_schrauben(p):
     p.empty()
-    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('part',{lib:'screwHole',size:'M3',head:'none',fit:'medium',length:10},{role:'solid'})); }); App.select([App.doc.items[0].id])"); p.wait(2500)
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('part',{lib:'screwHole',size:'M3',head:'none',fit:'medium',length:10},{role:'solid'})); }); App.select([App.doc.items[0].id])")
+    warte_rechnen(p, 30)
     r = lambda: p.ev("const b=App.results.get(App.doc.items[0].id).data.bbox; return Math.round((b[3]-b[0])*1000)/1000")
     a = r()
-    p.pg.select_option('#lp-fit', 'fine'); p.wait(2000); b = r()
-    p.pg.select_option('#lp-fit', 'tap'); p.wait(2000); c = r()
-    p.pg.select_option('#lp-size', 'M1.6'); p.wait(2000)
+    p.pg.select_option('#lp-fit', 'fine'); warte_rechnen(p, 25); b = r()
+    p.pg.select_option('#lp-fit', 'tap'); warte_rechnen(p, 25); c = r()
+    p.pg.select_option('#lp-size', 'M1.6'); warte_rechnen(p, 25)
     d = p.ev("return App.errors.length")
     return (a, b, c) == (3.4, 3.2, 2.5) and d == 0, f'M3: {a} / {b} / {c} mm'
 
@@ -27868,6 +27869,30 @@ def t_a141_barrierefreiheit(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [F-11250803] Volltest-Reparatur: Schraubenlöcher bei kaltem Kern / Befehlssuche „Fläche auf Fläche“ ----------
+def t_f11250803(p):
+    # 1. Schraubenlöcher nach „Leeres Projekt“ mit kaltem Kern (A-054) wartet sauber auf den ersten Aufbau
+    p.empty()
+    cold = p.ev("return !Kernel.ready && Kernel.state === 'idle'")
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('part',{lib:'screwHole',size:'M3',head:'none',fit:'medium',length:10},{role:'solid'})); }); App.select([App.doc.items[0].id])")
+    warte_rechnen(p, 30)
+    dia = lambda: p.ev("const r=App.results.get(App.doc.items[0].id); const b=r && r.data && r.data.bbox; return b ? Math.round((b[3]-b[0])*1000)/1000 : null")
+    a = dia()
+    p.pg.select_option('#lp-fit', 'fine'); warte_rechnen(p, 25); b = dia()
+    p.pg.select_option('#lp-fit', 'tap'); warte_rechnen(p, 25); c = dia()
+    p.pg.select_option('#lp-size', 'M1.6'); warte_rechnen(p, 25)
+    ok1 = bool(cold and p.ev("return Kernel.ready && App.errors.length === 0") and (a, b, c) == (3.4, 3.2, 2.5))
+
+    # 2. Befehlssuche „fläche auf fläche“ findet mate-planar auf Platz 1 und „zylindrisch“ findet mate-cyl ([A-086])
+    cmd = p.ev("""return {
+      planar: Commands.search('fläche auf fläche').map(c => c.id),
+      cyl: Commands.search('zylindrisch').map(c => c.id),
+      errs: App.errors.length,
+    };""")
+    ok2 = bool(cmd['planar'] and cmd['planar'][0] == 'mate-planar' and 'mate-cyl' in cmd['cyl'] and cmd['errs'] == 0)
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -28119,6 +28144,7 @@ TESTS = [
     ('[A-139] Kommentar-Pins am Modell und Arbeitsflächen-Anordnung (BE-28, BE-29)', t_a139_pins_arbeitsflaechen),
     ('[A-138] Kreis-Menü (Q / Rechts-Halten / einstellbar) und Malen-Auswahl (Flächen / Kanten)', t_kreis_malen),
     ('[A-141] Tastaturbedienung, hoher Kontrast und Vorlese-Texte', t_a141_barrierefreiheit),
+    ('[F-11250803] Volltest-Reparatur: Schraubenlöcher bei kaltem Kern / Befehlssuche „Fläche auf Fläche“', t_f11250803),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -2575,6 +2575,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hoher Kontrast, Hilfe & DE/EN**: Einstellung `#set-highContrast` setzt `body.high-contrast` und speichert `highContrast` dauerhaft in `masswerk.view`; `HELP.highContrast`, DE/EN-Schlüsselgleichheit und Befehlssuche (`high-contrast`) geprüft (`t_a141_barrierefreiheit`).
 - [ ] **Von Hand**: Im Browser ein komplettes Teil nur per Tastatur (Tab, Pfeiltasten, Enter, Esc) im Modus „Hoher Kontrast“ (hell & dunkel) erstellen und mit VoiceOver (macOS) oder NVDA (Windows) prüfen, ob alle Symbolknöpfe verständlich vorgelesen werden.
 
+## Volltest-Reparatur (Auto [F-11250803])
+
+- [x] **Schraubenlöcher bei kaltem CAD-Kern**: Nach „Leeres Projekt“ (Kern noch im Zustand `idle` durch A-054) wartet `t_schrauben` per `warte_rechnen()` zuverlässig auf den ersten Kern-Start und jede `#lp-fit`/`#lp-size`-Änderung, sodass M3 `3,4 / 3,2 / 2,5 mm` und M1.6 ohne Fehler gelingen (`Schraubenlöcher`, `t_f11250803`).
+- [x] **Befehlssuche „Fläche auf Fläche“ (`[A-086]`)**: `Commands.search('fläche auf fläche')` liefert `mate-planar` auf Platz 1 und `Commands.search('zylindrisch')` findet `mate-cyl` (bereits durch `[F-11250536]` repariert, im Volltest-Nachlauf bestätigt: `t_a086_verbindungen_zyl_eben`, `t_f11250803`).
+- [ ] **Von Hand**: Im Browser über „Leeres Projekt“ (ohne vorher geladenen Kern) ein Schraubenloch M3 anlegen, Passung von Mittel auf Eng und Kernloch umschalten und in der Eingabezeile „fläche auf fläche“ suchen.
+
 ## Fehler melden
 
 ```
