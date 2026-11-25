@@ -2556,6 +2556,26 @@ const HELP = {
   "tip": "Luft prüfen: listet alle Teilepaare mit weniger als X mm Abstand auf (Profi)",
   "hilfe": "Misst im CAD-Kern den genauen kleinsten Abstand zwischen allen sichtbaren Körpern und Bauteilen. Jedes Paar unter deinem Grenzwert (z. B. 1 mm) erscheint in der Liste – Klick markiert die engste Stelle im Modell und fährt die Kamera direkt dorthin.",
   "tipp": "Schalte „Berührende Paare (0 mm) mit listen“ nur ein, wenn du zusätzlich auch gewollte Anlageflächen prüfen willst."
+ },
+ "stackHole": {
+  "tip": "Bohrung durch Stapel: bohrt ein Loch gleichzeitig durch mehrere Teile der Baugruppe (Profi)",
+  "hilfe": "Setzt ein einfaches Loch, eine genormte Schrauben-Durchgangsbohrung (wahlweise mit Senk- oder Zylinderkopf), ein Sackloch oder eine Passbohrung H7 direkt als Schritt in der Baugruppe. Alle getroffenen oder gezielt ausgewählten Teile erhalten gleichzeitig dasselbe Loch, bleiben aber getrennte Körper und verändern keine verknüpften Bauteil-Dateien.",
+  "tipp": "Unter „Zielteile“ kannst du auf „Nur gewählte Teile“ umschalten, wenn das Loch z. B. nur durch zwei bestimmte Platten gehen soll."
+ },
+ "asmCut": {
+  "tip": "Baugruppen-Schnitt: schneidet eine Skizze gleichzeitig durch mehrere Teile der Baugruppe (Profi)",
+  "hilfe": "Erzeugt auf einer gewählten Fläche oder Ebene einen geschlossenen Schnitt-Umriss und zieht ihn gleichzeitig von allen getroffenen oder ausgewählten Teilen der Baugruppe ab. Die Teile bleiben einzelne Baugruppen-Komponenten.",
+  "tipp": "Mit „Skizze bearbeiten“ passt du den Ausschnitt später an – alle betroffenen Teile werden sofort mitgeändert."
+ },
+ "displayStates": {
+  "tip": "Anzeige-Zustände: speichern, welche Teile sichtbar, durchsichtig oder farbig sind (Profi)",
+  "hilfe": "Merkt sich für jedes Teil der Baugruppe Sichtbarkeit, Durchsichtigkeit, eigene Farbe sowie die Darstellungsart unter einem Namen wie „ohne Deckel“ oder „Innenleben“. Ein Klick schaltet die ganze Ansicht sofort um, ohne am Modell etwas zu ändern.",
+  "tipp": "Du findest die Anzeige-Zustände im Verlauf, rechts im Projekt-Panel, im Ansichtsmenü und im Studio-Licht-Panel."
+ },
+ "asmVariants": {
+  "tip": "Varianten für Baugruppen: verschiedene Längen, aktive Teile oder Ersatz-Bauteile umschalten (Profi)",
+  "hilfe": "Speichert verschiedene Ausführungen deiner Baugruppe – etwa „Standard“ und „lang“ – mit eigenen Baugruppen-Maßen, ein- oder ausgeschalteten Teilen, eingesetzten Bauteil-Varianten oder getauschten Verweisen auf andere Bauteile. Beim Umschalten passt sich die ganze Baugruppe automatisch an.",
+  "tipp": "Im Fenster „Verwalten“ kannst du jeder Variante auch gleich einen passenden Anzeige-Zustand zuordnen."
  }
 };
 

@@ -374,5 +374,15 @@
     "was": "Setzt gleichmäßige Rillen (V-Profil, rund oder rechteckig) oder Noppen (Halbkugel, Kegel oder Zylinder) vertieft oder erhaben auf eine ebene Fläche oder einen Zylindermantel.",
     "wozu": "Ideal für griffige Gehäusekanten, Handgriffe, Tasten, Schiebeschalter und rutschsichere Auflagen.",
     "achtung": "Achte darauf, dass die Teilung größer bleibt als die Rillenbreite bzw. der Noppen-Durchmesser, damit zwischen den Elementen Platz bleibt."
+  },
+  "stackHole": {
+    "was": "Bohrt ein Loch (zylindrisch, Schraubendurchgang mit Senkung, Sackloch oder H7-Passbohrung) als Schritt der Baugruppe gleichzeitig durch mehrere gestapelte Teile.",
+    "wozu": "Ideal für gemeinsame Schraub-, Stift- und Durchgangslöcher in Baugruppen, ohne die Teile zu verschmelzen oder die Bauteil-Vorlagen zu verändern.",
+    "achtung": "Im Umfang rechts kannst du zwischen allen getroffenen Teilen und gezielt angehakten Teilen wählen."
+  },
+  "asmCut": {
+    "was": "Schneidet einen geschlossenen Skizzen-Umriss als Schritt der Baugruppe gleichzeitig durch mehrere Teile.",
+    "wozu": "Ideal für gemeinsame Aussparungen, Kabeldurchführungen oder Fenster über mehrere gestapelte Baugruppen-Teile hinweg.",
+    "achtung": "Wie bei der Stapelbohrung bleiben alle geschnittenen Teile eigene Körper, und die verknüpften Bauteil-Dokumente bleiben unverändert."
   }
 }

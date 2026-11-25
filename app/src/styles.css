@@ -1960,6 +1960,38 @@ body.high-contrast .motion-panel{border:1.5px solid var(--line-strong)}
 .asm-pat-row .swatch{display:grid;place-items:center;background:var(--surface-2);color:var(--accent);border:1px solid var(--line)}
 .asm-pat-row .swatch svg{width:12px;height:12px}
 
+/* Anzeige-Zustände & Varianten für Baugruppen (BG-27, BG-28) */
+.ds-tree .swatch,.av-tree .swatch{display:grid;place-items:center;background:var(--surface-2);color:var(--accent);border:1px solid var(--line)}
+.ds-tree .swatch svg,.av-tree .swatch svg{width:12px;height:12px}
+.ds-tree .ds-upd,.ds-tree .ds-del,.av-tree .av-upd,.av-tree .av-del{border:0;background:none;color:var(--muted);padding:3px;border-radius:6px;cursor:pointer;display:inline-grid;place-items:center}
+.ds-tree .ds-upd:hover,.av-tree .av-upd:hover{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.ds-tree .ds-del:hover,.av-tree .av-del:hover{color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,transparent)}
+.ds-tree .ds-upd svg,.ds-tree .ds-del svg,.av-tree .av-upd svg,.av-tree .av-del svg{width:14px;height:14px}
+.ds-chips,.av-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.ds-chip,.av-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%}
+.ds-chip .ds-chip-nm,.av-chip .av-chip-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds-chip .sub,.av-chip .sub{font-size:11px;opacity:.78}
+.ds-chip.primary .sub,.av-chip.primary .sub{color:inherit;opacity:.88}
+.ds-save-row,.av-save-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ds-name-inp,.av-name-inp{flex:1;min-width:90px;padding:6px 8px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);color:var(--ink);font:12.5px/1.3 var(--font)}
+.ds-dlg,.av-dlg{display:grid;gap:10px}
+.ds-bar,.av-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ds-bar select,.av-bar select{flex:1;min-width:140px;height:30px;padding:0 8px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);color:var(--ink);font-size:13px}
+.ds-table-wrap,.av-table-wrap{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.ds-table,.av-table{margin:0;width:100%}
+.ds-table th,.av-table th{position:sticky;top:0;background:var(--surface-2);z-index:1}
+.ds-opac-cell,.ds-color-cell{display:inline-flex;align-items:center;gap:6px}
+.ds-opac-inp{width:64px;height:26px;padding:0 6px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12.5px;text-align:right}
+.ds-col-inp{width:30px;height:24px;padding:0;border:1px solid var(--line);border-radius:6px;background:none;cursor:pointer}
+.av-subsec{display:grid;gap:8px;margin-top:8px}
+.av-subhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.av-dims-cell{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.av-dims-cell select{height:28px;padding:0 6px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12.5px;max-width:210px}
+.av-ip-fld{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted)}
+.av-ip-inp,.av-param-inp{width:76px;height:26px;padding:0 6px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12.5px}
+.av-param-inp{width:100%}
+.av-ip-inp.invalid,.av-param-inp.invalid{border-color:var(--bad);color:var(--bad)}
+
 
 
 

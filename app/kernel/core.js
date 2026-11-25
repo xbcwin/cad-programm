@@ -7684,7 +7684,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -11775,6 +11775,133 @@ export function createKernel(R, oc) {
     }
   }
 
+  function projBoxRange(wb, o, d) {
+    if (!wb || wb.length < 6) return [Infinity, -Infinity];
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 0; k < 8; k++) {
+      const px = (k & 1 ? wb[3] : wb[0]) - o[0];
+      const py = (k & 2 ? wb[4] : wb[1]) - o[1];
+      const pz = (k & 4 ? wb[5] : wb[2]) - o[2];
+      const t = px * d[0] + py * d[1] + pz * d[2];
+      if (t < lo) lo = t;
+      if (t > hi) hi = t;
+    }
+    return [lo, hi];
+  }
+  function rayHitsBoxPad(o, d, pad, wb) {
+    if (!wb || wb.length < 6) return false;
+    let tMin = -Infinity, tMax = Infinity;
+    for (let k = 0; k < 3; k++) {
+      const b0 = wb[k] - pad, b1 = wb[k + 3] + pad;
+      if (Math.abs(d[k]) < 1e-9) {
+        if (o[k] < b0 || o[k] > b1) return false;
+      } else {
+        let t0 = (b0 - o[k]) / d[k], t1 = (b1 - o[k]) / d[k];
+        if (t0 > t1) { const tmp = t0; t0 = t1; t1 = tmp; }
+        if (t0 > tMin) tMin = t0;
+        if (t1 < tMax) tMax = t1;
+        if (tMin > tMax) return false;
+      }
+    }
+    return true;
+  }
+  function bboxOverlapStrict(a, b, eps = 1e-4) {
+    if (!a || !b) return false;
+    return a[0] < b[3] - eps && a[3] > b[0] + eps && a[1] < b[4] - eps && a[4] > b[1] + eps && a[2] < b[5] - eps && a[5] > b[2] + eps;
+  }
+  function drillFrameMatrix(o, d) {
+    const z = norm([-d[0], -d[1], -d[2]]);
+    const ref = Math.abs(z[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+    const x = norm(cross(ref, z));
+    const y = norm(cross(z, x));
+    return [x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, z[0], z[1], z[2], 0, o[0], o[1], o[2], 1];
+  }
+  function stackHoleMaxRadius(p) {
+    const pf = Math.max(0, printFitDelta(p.printFit));
+    if (p.holeType === 'through') {
+      const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
+      const hd = holeD(s, p.fit);
+      const dMax = Math.max(hd, p.head === 'countersunk' ? (s.csk || 0) : 0, p.head === 'counterbore' ? (s.cbD || 0) : 0);
+      return (dMax + pf) / 2;
+    }
+    return (pos(p.d, 6) + pf) / 2;
+  }
+  function buildStackHoleWorldTool(p, minT, maxT) {
+    const o = [num(p.x, 0), num(p.y, 0), num(p.z, 0)];
+    const rawD = Array.isArray(p.dir) && p.dir.length >= 3 ? p.dir.map(Number) : [0, 0, -1];
+    const dLen = Math.hypot(rawD[0] || 0, rawD[1] || 0, rawD[2] || 0);
+    const d = dLen > 1e-6 ? [rawD[0] / dLen, rawD[1] / dLen, rawD[2] / dLen] : [0, 0, -1];
+    const pf = printFitDelta(p.printFit);
+    const LIFT = 0.2;
+    const ht = p.holeType || 'simple';
+    const isThroughAll = p.thru !== false && ht !== 'blind';
+    const hasHead = ht === 'through' && (p.head === 'countersunk' || p.head === 'counterbore');
+    const topExt = isThroughAll ? (hasHead ? LIFT : Math.max(LIFT, Number.isFinite(minT) ? -minT + 2 : LIFT)) : LIFT;
+    const botDepth = isThroughAll ? Math.max(pos(p.depth, 10), Number.isFinite(maxT) ? maxT + 2 : 20) : pos(p.depth, 10);
+    let local = null;
+    if (ht === 'through') {
+      const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
+      const hd = holeD(s, p.fit);
+      const r = Math.max(0.1, (hd + pf) / 2);
+      local = R.makeCylinder(r, botDepth + topExt, [0, 0, -botDepth], [0, 0, 1]);
+      if (p.head === 'countersunk' && s.csk > hd) {
+        const rTop = (s.csk + pf) / 2;
+        const halfAng = (num(s.cskAngle, 90) * Math.PI) / 360;
+        const h = (rTop - r) / Math.tan(halfAng);
+        const cone = revolveProfile([[0, -h], [r, -h], [rTop, 0], [rTop, topExt], [0, topExt]]);
+        const fused = local.fuse(cone);
+        safeDelete(cone);
+        safeDelete(local);
+        local = fused;
+      } else if (p.head === 'counterbore' && s.cbD > hd && s.cbH > 0) {
+        const cb = R.makeCylinder((s.cbD + pf) / 2, s.cbH + topExt, [0, 0, -s.cbH], [0, 0, 1]);
+        const fused = local.fuse(cb);
+        safeDelete(cb);
+        safeDelete(local);
+        local = fused;
+      }
+    } else if (ht === 'blind') {
+      const r = Math.max(0.1, (pos(p.d, 5) + pf) / 2);
+      const ang = num(p.tipAngle, 118);
+      if (ang > 1 && ang < 179.5) {
+        const tipH = r / Math.tan((ang * Math.PI) / 360);
+        local = revolveProfile([[0, -(botDepth + tipH)], [r, -botDepth], [r, topExt], [0, topExt]]);
+      } else {
+        local = R.makeCylinder(r, botDepth + topExt, [0, 0, -botDepth], [0, 0, 1]);
+      }
+    } else {
+      const r = Math.max(0.1, (pos(p.d, 6) + pf) / 2);
+      local = R.makeCylinder(r, botDepth + topExt, [0, 0, -botDepth], [0, 0, 1]);
+    }
+    const M = drillFrameMatrix(o, d);
+    const world = applyMatrix(local, M);
+    safeDelete(local);
+    return world;
+  }
+  function buildAsmCutWorldTool(it, p, minT, maxT) {
+    if (!Array.isArray(p.regions) || !p.regions.length) {
+      throw new Error('Baugruppen-Schnitt: Die Skizze hat keine geschlossene Fläche.');
+    }
+    let extP;
+    if (p.thru !== false) {
+      const dir = p.dir || 'reverse';
+      if (dir === 'normal') {
+        extP = { ...p, dir: 'normal', dist: Math.max(pos(p.dist, 10), Number.isFinite(maxT) ? maxT + 2 : 50), extra: 0.2 };
+      } else if (dir === 'reverse') {
+        extP = { ...p, dir: 'reverse', dist: Math.max(pos(p.dist, 10), Number.isFinite(minT) ? -minT + 2 : 50), extra: 0.2 };
+      } else {
+        extP = { ...p, dir: 'two', dist: Math.max(1, Number.isFinite(maxT) ? maxT + 2 : 50), dist2: Math.max(1, Number.isFinite(minT) ? -minT + 2 : 50), extra: 0 };
+      }
+    } else {
+      extP = { ...p, extra: 0.2 };
+    }
+    const local = buildExtrude(extP);
+    if (isIdentity(it.m)) return local;
+    const world = applyMatrix(local, it.m);
+    safeDelete(local);
+    return world;
+  }
+
   // ---------- Szene ----------
   // scene = { items: [ { id, kind, role, p, m (Weltmatrix), hidden, children, finishes } ] }
   // known = { id: resultKey } (was die Anzeige schon hat)
@@ -12501,6 +12628,124 @@ export function createKernel(R, oc) {
         bodies.set(tidA, srcA);
         bodies.set(tidB, srcB);
         if (track && track.stepKeys) track.stepKeys.set(it.id, keyOf(['lipGroove', kA, kB]));
+        continue;
+      }
+      if (it.kind === 'stackHole' || it.kind === 'asmCut') {
+        const p = it.p || {};
+        const isHole = it.kind === 'stackHole';
+        const candidates = [];
+        const seenTids = new Set();
+        let anyHidden = false;
+        if (p.scope === 'selected') {
+          for (const rawTid of Array.isArray(p.targets) ? p.targets : []) {
+            let tid = rawTid;
+            while (tid && consumed.has(tid)) tid = consumed.get(tid);
+            if (!tid || seenTids.has(tid)) continue;
+            seenTids.add(tid);
+            const t = byId.get(tid), src = live.get(tid);
+            if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+              if (hiddenIds && hiddenIds.has(tid)) anyHidden = true;
+              continue;
+            }
+            candidates.push({ tid, src });
+          }
+          if (!candidates.length) {
+            if (!anyHidden) errors.push({ itemId: it.id, code: 'op', message: isHole ? 'Bohrung durch Stapel: Wähle mindestens ein Zielteil vor diesem Schritt.' : 'Baugruppen-Schnitt: Wähle mindestens ein Zielteil vor diesem Schritt.' });
+            continue;
+          }
+        } else {
+          for (let k = 0; k < i; k++) {
+            const eid = evald[k].it.id;
+            if (consumed.has(eid)) continue;
+            const src = live.get(eid);
+            if (!src || !src.shape || src.it.role === 'hole') continue;
+            candidates.push({ tid: eid, src });
+          }
+          if (!candidates.length) {
+            errors.push({ itemId: it.id, code: 'op', message: isHole ? 'Bohrung durch Stapel: Keine Teile vor diesem Schritt vorhanden.' : 'Baugruppen-Schnitt: Keine Teile vor diesem Schritt vorhanden.' });
+            continue;
+          }
+        }
+        let minT = Infinity, maxT = -Infinity;
+        if (isHole) {
+          const o = [num(p.x, 0), num(p.y, 0), num(p.z, 0)];
+          const rawD = Array.isArray(p.dir) && p.dir.length >= 3 ? p.dir.map(Number) : [0, 0, -1];
+          const dLen = Math.hypot(rawD[0] || 0, rawD[1] || 0, rawD[2] || 0);
+          const d = dLen > 1e-6 ? [rawD[0] / dLen, rawD[1] / dLen, rawD[2] / dLen] : [0, 0, -1];
+          const rMax = stackHoleMaxRadius(p);
+          const hitCands = p.scope === 'selected' ? candidates : candidates.filter((c) => rayHitsBoxPad(o, d, rMax + 1, c.src.wb));
+          const spanList = hitCands.length ? hitCands : candidates;
+          for (const c of spanList) {
+            const [lo, hi] = projBoxRange(c.src.wb, o, d);
+            if (lo < minT) minT = lo;
+            if (hi > maxT) maxT = hi;
+          }
+        } else {
+          const pl = p.plane || { o: [0, 0, 0], n: [0, 0, 1] };
+          const oW = transformPoint(it.m, pl.o || [0, 0, 0]);
+          const nW = norm(transformDir(it.m, pl.n || [0, 0, 1]));
+          for (const c of candidates) {
+            const [lo, hi] = projBoxRange(c.src.wb, oW, nW);
+            if (lo < minT) minT = lo;
+            if (hi > maxT) maxT = hi;
+          }
+        }
+        const spanKey = p.thru !== false ? [Number.isFinite(minT) ? r6(minT) : 0, Number.isFinite(maxT) ? r6(maxT) : 0] : null;
+        const toolKey = keyOf([it.kind, 'tool', p, it.m.map(r6), spanKey]);
+        let toolCe = cacheEntry(toolKey);
+        let toolWorld = toolCe ? toolCe.shape : null;
+        if (!toolWorld) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            toolWorld = isHole ? buildStackHoleWorldTool(p, minT, maxT) : buildAsmCutWorldTool(it, p, minT, maxT);
+            cachePut(toolKey, toolWorld);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        const toolWB = bboxCached(toolKey, toolWorld);
+        const cutIds = [], cutKeys = [];
+        let cutFailed = null;
+        for (const c of candidates) {
+          if (!bboxOverlapStrict(toolWB, c.src.wb, 1e-4)) continue;
+          const kCut = keyOf([c.src.key, it.kind, toolKey, c.src.m.map(r6)]);
+          const ce = cacheEntry(kCut);
+          let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
+          let hitMeta = ce ? ce.resolved : null;
+          if (!next) {
+            if (track) track.rebuilt.add(it.id);
+            try {
+              const idS = isIdentity(c.src.m);
+              const locTool = idS ? toolWorld : applyMatrix(toolWorld, matInvRigid(c.src.m));
+              let volBefore = null;
+              try { volBefore = R.measureVolume(c.src.shape); } catch (_) {}
+              const br = boolWithTopo('cut', c.src.shape, c.src.topo, c.src.it.id, locTool, null, it.id, (isHole ? 'SH:' : 'AC:') + it.id);
+              if (!idS) safeDelete(locTool);
+              let volAfter = null;
+              try { volAfter = R.measureVolume(br.shape); } catch (_) {}
+              const didCut = volBefore == null || volAfter == null || Math.abs(volBefore - volAfter) > 1e-4;
+              next = br.shape; nextTopo = br.topo;
+              hitMeta = { hit: didCut };
+              cachePut(kCut, next, null, hitMeta, null, nextTopo);
+            } catch (err) {
+              cutFailed = err;
+              continue;
+            }
+          }
+          if (hitMeta && hitMeta.hit === false) continue;
+          c.src.shape = next; c.src.topo = nextTopo; c.src.key = kCut; c.src.wb = bboxTransform(bboxCached(kCut, next), c.src.m);
+          bodies.set(c.tid, c.src);
+          cutIds.push(c.tid);
+          cutKeys.push(kCut);
+        }
+        if (cutIds.length) consumed.set(it.id, cutIds[0]);
+        else if (p.scope === 'selected' && candidates.length) consumed.set(it.id, candidates[0].tid);
+        if (resolved) resolved[it.id] = { cutIds, count: cutIds.length, toolBox: toolWB };
+        if (!cutIds.length) {
+          errors.push({ itemId: it.id, code: cutFailed ? 'build' : 'op', message: cutFailed ? friendlyError(cutFailed) : (isHole ? 'Bohrung durch Stapel trifft kein Zielteil – prüfe Lage, Richtung oder Tiefe.' : 'Baugruppen-Schnitt trifft kein Zielteil – prüfe Skizze, Richtung oder Tiefe.') });
+        }
+        if (track && track.stepKeys) track.stepKeys.set(it.id, keyOf([it.kind, toolKey, cutKeys]));
         continue;
       }
       if (it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern') {

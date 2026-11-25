@@ -52,6 +52,8 @@ const KINDS = {
   gripPattern: { get label() { return T('kind.gripPattern'); }, params: [] },
   sketch3d: { get label() { return T('kind.sketch3d'); }, params: [] },
   ref: { get label() { return T('kind.ref'); }, params: [] },
+  stackHole: { get label() { return T('kind.stackHole'); }, params: [] },
+  asmCut: { get label() { return T('kind.asmCut'); }, params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
 
@@ -545,6 +547,10 @@ const Model = (() => {
         if (it.p.lipTarget) out.push({ from: me, to: top(it.p.lipTarget), what: 'Lippe an' });
         if (it.p.grooveTarget) out.push({ from: me, to: top(it.p.grooveTarget), what: 'Nut in' });
       }
+      if ((it.kind === 'stackHole' || it.kind === 'asmCut') && it.p && it.p.scope === 'selected' && Array.isArray(it.p.targets)) {
+        const what = it.kind === 'stackHole' ? 'bohrt durch' : 'schneidet durch';
+        for (const tid of it.p.targets) if (tid) out.push({ from: me, to: top(tid), what });
+      }
       if (it.kind === 'mirrorStep' && it.p) {
         for (const fid of Array.isArray(it.p.features) ? it.p.features : []) if (fid) out.push({ from: me, to: top(fid), what: 'spiegelt Schritt' });
         if (it.p.plane === 'FACE' && it.p.faceRef && it.p.faceRef.id) out.push({ from: me, to: top(it.p.faceRef.id), what: 'spiegelt an Fläche von' });
@@ -652,6 +658,28 @@ const Model = (() => {
     }
     return it.color || '#2f9e91';
   }
+  function withPartVariant(refDoc, variantId) {
+    if (!refDoc || !variantId || !Array.isArray(refDoc.variants)) return refDoc;
+    const vr = refDoc.variants.find((x) => x && (x.id === variantId || x.name === variantId));
+    if (!vr) return refDoc;
+    const vals = (vr.values && typeof vr.values === 'object') ? vr.values : {};
+    const params = (refDoc.params || []).map((p) => (p && Object.prototype.hasOwnProperty.call(vals, p.name) ? { ...p, expr: vals[p.name] } : p));
+    for (const [k, val] of Object.entries(vals)) {
+      if (!params.some((p) => p && p.name === k)) params.push({ id: uid('m'), name: k, expr: val });
+    }
+    const sup = new Set(Array.isArray(vr.suppressed) ? vr.suppressed : []);
+    const mapItems = (list) => (list || []).map((c) => {
+      if (!c) return c;
+      const next = { ...c };
+      if (sup.has(c.id)) next.suppressed = true;
+      else if (next.suppressed) delete next.suppressed;
+      if (Array.isArray(c.children)) next.children = mapItems(c.children);
+      return next;
+    });
+    const nextDoc = { ...refDoc, params, items: mapItems(refDoc.items) };
+    if (vr.material) nextDoc.settings = { ...(refDoc.settings || {}), material: vr.material };
+    return nextDoc;
+  }
   function kernelItem(it, V) {
     const prev = curV; curV = V;
     try {
@@ -663,7 +691,8 @@ const Model = (() => {
       if (it.comp) o.comp = true;
       if (it.kind === 'ref') {
         const refId = it.p && it.p.docId;
-        const refDoc = refId && (!visitedDocs || !visitedDocs.has(refId)) ? resolveDoc(refId) : null;
+        const rawRefDoc = refId && (!visitedDocs || !visitedDocs.has(refId)) ? resolveDoc(refId) : null;
+        const refDoc = withPartVariant(rawRefDoc, it.p && it.p.variantId);
         if (!refDoc) {
           const outMissing = { id: it.id, kind: 'group', role: it.role || 'solid', hidden: !!it.hidden, name: label(it), color: displayColor(it), m, comp: true, p: { assembly: true, subdoc: true, refMissing: true, refDocId: refId || null }, children: [] };
           if (it.opacity != null && it.opacity < 1) outMissing.opacity = Math.max(0.05, it.opacity);
@@ -686,7 +715,7 @@ const Model = (() => {
           visitedDocs = prevVisited;
         }
         const refColor = it.colorSet && it.color ? it.color : (refAct.length === 1 ? displayColor(refAct[0]) : displayColor(it));
-        const outRef = { id: it.id, kind: 'group', role: it.role || 'solid', hidden: !!it.hidden, name: label(it), color: refColor, m, comp: true, p: { assembly: true, subdoc: true, refDocId: refDoc.id }, children };
+        const outRef = { id: it.id, kind: 'group', role: it.role || 'solid', hidden: !!it.hidden, name: label(it), color: refColor, m, comp: true, p: { assembly: true, subdoc: true, refDocId: refDoc.id, ...(it.p && it.p.variantId ? { refVariantId: it.p.variantId } : {}) }, children };
         if (it.opacity != null && it.opacity < 1) outRef.opacity = Math.max(0.05, it.opacity);
         if (it.mir) outRef.mir = it.mir;
         return outRef;
@@ -886,6 +915,50 @@ const Model = (() => {
           from: p.from === 'top' || p.from === 'bottom' ? p.from : 'center',
           offset: num(p.offset, ownV, 0),
         };
+      } else if (it.kind === 'stackHole') {
+        const p = it.p || {};
+        const ht = p.holeType === 'through' || p.holeType === 'blind' || p.holeType === 'fit' ? p.holeType : 'simple';
+        const rawDir = Array.isArray(p.dir) && p.dir.length >= 3 ? p.dir.map(Number) : [0, 0, -1];
+        const dLen = Math.hypot(rawDir[0] || 0, rawDir[1] || 0, rawDir[2] || 0);
+        const dir = dLen > 1e-6 ? [rawDir[0] / dLen, rawDir[1] / dLen, rawDir[2] / dLen] : [0, 0, -1];
+        const size = typeof p.size === 'string' && p.size ? p.size : 'M4';
+        const head = p.head === 'countersunk' || p.head === 'counterbore' ? p.head : 'none';
+        const fit = p.fit === 'fine' || p.fit === 'coarse' || p.fit === 'tap' ? p.fit : 'medium';
+        o.p = {
+          holeType: ht,
+          d: Math.max(0.2, num(p.d, ownV, 6)),
+          size,
+          head,
+          fit,
+          tipAngle: num(p.tipAngle, ownV, 118),
+          thru: p.thru !== false,
+          depth: Math.max(0.2, num(p.depth, ownV, 20)),
+          x: num(p.x, ownV, 0),
+          y: num(p.y, ownV, 0),
+          z: num(p.z, ownV, 0),
+          dir,
+          scope: p.scope === 'selected' ? 'selected' : 'auto',
+          targets: Array.isArray(p.targets) ? p.targets.filter(Boolean) : [],
+          printFit: typeof p.printFit === 'string' ? p.printFit : '',
+        };
+        if (ht === 'through' && typeof threadEntry === 'function') {
+          const te = threadEntry(size);
+          if (te) o.p.spec = { fine: te.durchgang_fein_mm, hole: te.durchgang_mittel_mm, coarse: te.durchgang_grob_mm, tap: te.kernloch_mm, csk: te.senkung_senk_d_mm || 0, cskAngle: te.senkung_winkel_grad || 90, cbD: te.senkung_zyl_d_mm || 0, cbH: te.senkung_zyl_t_mm || 0 };
+        }
+      } else if (it.kind === 'asmCut') {
+        const p = it.p || {};
+        const sp = solveSketchRegions(p.sketch, p.sel, ownV);
+        const dist = Math.max(0.1, num(p.dist, ownV, 20));
+        o.p = {
+          plane: sp.plane,
+          regions: sp.regions,
+          dir: p.dir === 'normal' || p.dir === 'both' || p.dir === 'two' ? p.dir : 'reverse',
+          thru: p.thru !== false,
+          dist,
+          dist2: Math.max(0.1, num(p.dist2, ownV, dist)),
+          scope: p.scope === 'selected' ? 'selected' : 'auto',
+          targets: Array.isArray(p.targets) ? p.targets.filter(Boolean) : [],
+        };
       }
       else {
         o.p = resolveP(it.p, ownV);
@@ -921,27 +994,44 @@ const Model = (() => {
       return o;
     } finally { curV = prev; }
   }
-  function sketchParams(it, V) {
-    const p = it.p || {};
-    let skForSolve = p.sketch;
+  function solveSketchRegions(sketch, sel, V) {
+    let skForSolve = sketch;
     if (skForSolve && Array.isArray(skForSolve.blockInsts) && skForSolve.blockInsts.length && curDoc && Array.isArray(curDoc.blocks)) {
       skForSolve = { ...skForSolve, ents: (skForSolve.ents || []).slice() };
       syncSketchBlocks(skForSolve, curDoc.blocks, V);
     }
     const ents = skForSolve ? Solver.cached(skForSolve, V).ents : [];
-    const plane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const plane = sketch ? sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const regs = SK.regions(ents);
+    let chosen = regs;
+    if (Array.isArray(sel) && sel.length) {
+      const f = regs.filter((r) => sel.includes(r.key));
+      if (f.length) chosen = f;
+    }
+    return { ents, plane, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };
+  }
+  function sketchParams(it, V) {
+    const p = it.p || {};
+    let ents = [];
+    let plane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
     let out;
     if (it.kind === 'extrude' && p.thin) {
+      let skForSolve = p.sketch;
+      if (skForSolve && Array.isArray(skForSolve.blockInsts) && skForSolve.blockInsts.length && curDoc && Array.isArray(curDoc.blocks)) {
+        skForSolve = { ...skForSolve, ents: (skForSolve.ents || []).slice() };
+        syncSketchBlocks(skForSolve, curDoc.blocks, V);
+      }
+      ents = skForSolve ? Solver.cached(skForSolve, V).ents : [];
       const wall = num(p.wall, V, 2);
       const side = p.wallSide === 'in' || p.wallSide === 'out' ? p.wallSide : 'center';
       const tr = SKO.thinRegions(ents, wall, side, p.sel);
       out = { plane, regions: tr.regions, thin: true };
       if (tr.error) out.thinError = tr.error;
     } else {
-      const regs = SK.regions(ents);
-      let chosen = regs;
-      if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
-      out = { plane, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };
+      const sp = solveSketchRegions(p.sketch, p.sel, V);
+      ents = sp.ents;
+      plane = sp.plane;
+      out = { plane, regions: sp.regions };
     }
     if (p.sketch && p.sketch.planeRef && p.sketch.planeRef.kind === 'face' && !p.sketch.planeRef.frozen) {
       out.planeRef = {
@@ -2154,7 +2244,8 @@ const Model = (() => {
     }
     if (it.kind === 'ref') {
       const refId = it.p && it.p.docId;
-      const refDoc = refId && (!visitedDocs || !visitedDocs.has(refId)) ? resolveDoc(refId) : null;
+      const rawRefDoc = refId && (!visitedDocs || !visitedDocs.has(refId)) ? resolveDoc(refId) : null;
+      const refDoc = withPartVariant(rawRefDoc, it.p && it.p.variantId);
       if (!refDoc) return null;
       const refV = vars(refDoc).v;
       const prevVisited = visitedDocs;
@@ -2294,6 +2385,21 @@ const Model = (() => {
       case 'splineProfile': return `DIN ISO 14 · ${Math.round(p.teeth ?? 6)}×${f(p.rootD ?? 16)}${u}`;
       case 'knurl': return `${(it.p && it.p.style) === 'straight' ? 'Gerade' : (it.p && it.p.style) === 'angled' ? 'Schräg' : 'Gekreuzt'} · t ${f(p.pitch ?? 1)}${u}`;
       case 'gripPattern': return (it.p && it.p.kind) === 'bumps' ? `Noppen · Ø ${f(p.size ?? 2)}${u}` : `Rillen · ${f(p.pitch ?? 2.5)}${u}`;
+      case 'stackHole': {
+        const ip = it.p || {};
+        const ht = ip.holeType || 'simple';
+        const headLbl = ht === 'through' ? (ip.head === 'countersunk' ? ' Senk.' : ip.head === 'counterbore' ? ' Zyl.' : '') : '';
+        const szTxt = ht === 'through' ? `${ip.size || 'M4'}${headLbl}` : ht === 'fit' ? `Ø ${f(p.d ?? 6)}${u} H7` : `Ø ${f(p.d ?? 6)}${u}`;
+        const depTxt = ip.thru !== false && ht !== 'blind' ? ' · durch' : ` × ${f(p.depth ?? 20)}${u}`;
+        const tgtTxt = ip.scope === 'selected' && Array.isArray(ip.targets) && ip.targets.length ? ` · ${ip.targets.length} T.` : '';
+        return szTxt + depTxt + tgtTxt;
+      }
+      case 'asmCut': {
+        const ip = it.p || {};
+        const depTxt = ip.thru !== false ? 'durch' : `${f(p.dist ?? 20)}${u}`;
+        const tgtTxt = ip.scope === 'selected' && Array.isArray(ip.targets) && ip.targets.length ? ` · ${ip.targets.length} T.` : '';
+        return depTxt + tgtTxt;
+      }
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
       case 'deform': {
         const dm = (it.p && it.p.mode) || 'bend';
@@ -2446,6 +2552,84 @@ const Model = (() => {
           name: ps.name.trim(),
           states: ps.states && typeof ps.states === 'object' && !Array.isArray(ps.states) ? ps.states : {},
         }));
+    }
+    const VALID_DISPLAY_MODES = new Set(['edges', 'shaded', 'wire', 'hidden', 'illustration']);
+    if (doc.displayStates != null && !Array.isArray(doc.displayStates)) doc.displayStates = [];
+    if (Array.isArray(doc.displayStates)) {
+      doc.displayStates = doc.displayStates
+        .filter((ds) => ds && typeof ds === 'object' && typeof ds.name === 'string' && ds.name.trim())
+        .map((ds) => {
+          const items = {};
+          if (ds.items && typeof ds.items === 'object' && !Array.isArray(ds.items)) {
+            for (const [k, raw] of Object.entries(ds.items)) {
+              if (!k || !raw || typeof raw !== 'object') continue;
+              const op = Number(raw.opacity);
+              items[k] = {
+                hidden: !!raw.hidden,
+                opacity: raw.opacity != null && Number.isFinite(op) && op < 1 ? round(clamp(op, 0.05, 1), 3) : null,
+                color: typeof raw.color === 'string' && raw.color ? raw.color : null,
+                colorSet: !!raw.colorSet,
+              };
+            }
+          }
+          return {
+            id: typeof ds.id === 'string' && ds.id ? ds.id : uid('ds'),
+            name: ds.name.trim(),
+            items,
+            display: typeof ds.display === 'string' && VALID_DISPLAY_MODES.has(ds.display) ? ds.display : null,
+          };
+        });
+    }
+    if (doc.displayState != null) {
+      if (!(Array.isArray(doc.displayStates) && doc.displayStates.some((d) => d.id === doc.displayState))) {
+        delete doc.displayState;
+      }
+    }
+    if (doc.asmVariants != null && !Array.isArray(doc.asmVariants)) doc.asmVariants = [];
+    if (Array.isArray(doc.asmVariants)) {
+      doc.asmVariants = doc.asmVariants
+        .filter((av) => av && typeof av === 'object' && typeof av.name === 'string' && av.name.trim())
+        .map((av) => {
+          const values = av.values && typeof av.values === 'object' && !Array.isArray(av.values) ? { ...av.values } : {};
+          const suppressed = Array.isArray(av.suppressed) ? [...new Set(av.suppressed.filter((id) => typeof id === 'string' && id))] : [];
+          const refs = {};
+          if (av.refs && typeof av.refs === 'object' && !Array.isArray(av.refs)) {
+            for (const [k, r] of Object.entries(av.refs)) {
+              if (!k || !r || typeof r !== 'object' || typeof r.docId !== 'string' || !r.docId) continue;
+              refs[k] = {
+                docId: r.docId,
+                docName: typeof r.docName === 'string' ? r.docName : '',
+                ...(r.docType === 'assembly' ? { docType: 'assembly' } : {}),
+                ...(typeof r.variantId === 'string' && r.variantId ? { variantId: r.variantId } : {}),
+              };
+            }
+          }
+          const itemParams = {};
+          if (av.itemParams && typeof av.itemParams === 'object' && !Array.isArray(av.itemParams)) {
+            for (const [k, ip] of Object.entries(av.itemParams)) {
+              if (!k || !ip || typeof ip !== 'object' || Array.isArray(ip)) continue;
+              const cleanIp = {};
+              for (const [pk, pv] of Object.entries(ip)) {
+                if (typeof pv === 'number' || typeof pv === 'string' || typeof pv === 'boolean') cleanIp[pk] = pv;
+              }
+              if (Object.keys(cleanIp).length) itemParams[k] = cleanIp;
+            }
+          }
+          return {
+            id: typeof av.id === 'string' && av.id ? av.id : uid('av'),
+            name: av.name.trim(),
+            values,
+            suppressed,
+            refs,
+            itemParams,
+            displayStateId: typeof av.displayStateId === 'string' && av.displayStateId ? av.displayStateId : null,
+          };
+        });
+    }
+    if (doc.asmVariant != null) {
+      if (!(Array.isArray(doc.asmVariants) && doc.asmVariants.some((av) => av.id === doc.asmVariant))) {
+        delete doc.asmVariant;
+      }
     }
     if (doc.motion != null) {
       if (typeof doc.motion !== 'object' || Array.isArray(doc.motion)) {
@@ -2622,7 +2806,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'fillPattern' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || s.item.kind === 'knurl' || s.item.kind === 'gripPattern' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'fillPattern' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || s.item.kind === 'knurl' || s.item.kind === 'gripPattern' || s.item.kind === 'stackHole' || s.item.kind === 'asmCut' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {

@@ -878,10 +878,12 @@ const Store = (() => {
     'transform', 'scale', 'deform', 'thicken', 'rib', 'vent', 'fins', 'fillPattern', 'web', 'wrap',
     'emboss', 'splitFace', 'dome', 'mirrorStep', 'deleteBody', 'boss', 'lipGroove',
     'undercut', 'circlipGroove', 'keyway', 'splineProfile', 'knurl', 'gripPattern', 'sketch3d', 'ref',
+    'stackHole', 'asmCut',
   ]);
   const OPTIONAL_ARRAY_FIELDS = [
     'notes', 'blocks', 'fonts', 'variants', 'folders',
     'datums', 'axes', 'points', 'csys', 'joints', 'couplings', 'poses', 'measures', 'views', 'selSets', 'pointClouds', 'explodeSteps', 'asmPatterns',
+    'displayStates', 'asmVariants',
   ];
 
   function validateProject(input, opts = {}) {

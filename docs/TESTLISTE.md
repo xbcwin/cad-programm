@@ -2724,6 +2724,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Schutz, Speichern/Laden, Rückgängig & Hilfen**: Im Einfach-Modus ausgeblendet und gesperrt; `doc.motion` besteht `Store.validateProject`, bleibt nach JSON-Reload erhalten; `App.undo()`, `HELP.motionStudy`, DE/EN-Schlüsselgleichheit und Befehlssuche (`motion-study`) funktionieren ohne JS-Fehler (`t_a158_bewegungs_studie`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe mit mehreren Gelenken öffnen, einen Punkt über „Im Bild wählen“ direkt am 3D-Teil anklicken, die Zeitachse über „Abspielen“ und durch Ziehen im Weg-Zeit-Diagramm prüfen.
 
+## Bohrung durch Stapel und Baugruppen-Schnitt (Auto [A-161], BG-24, BG-25)
+
+- [x] **Profi-Trennung & Werkzeugleiste**: `#t-asm-stack-hole` und `#t-asm-cut` sind im Einfach-Modus ausgeblendet und im Profi-Modus in Baugruppen sichtbar (`t_a161_bohrung_stapel_baugruppe`).
+- [x] **Bohrung durch Stapel (BG-24)**: Zwei gestapelte `ref`-Platten (`40×40×10 mm` auf `z = 0` und `z = 10 mm`, je `16 000 mm³`) werden über `#t-asm-stack-hole` (`Ø 10 mm`) gleichzeitig gebohrt; beide Teile behalten getrennte Körper mit Zylinderflächen und sinken im Volumen um `≈ 785,4 mm³` auf `≈ 15 214,6 mm³`, während die Bauteil-Vorlage unverändert bleibt (`t_a161_bohrung_stapel_baugruppe`).
+- [x] **Zielteile, Senkung & Unterdrücken**: Umstellen auf „Nur gewählte Teile“ (`#sh-scope`) schneidet nur noch die ausgewählte Platte; Senkbohrung (`M5` Senkkopf) verkleinert die obere Platte stärker als die untere; Unterdrücken stellt beide Ausgangsvolumina (`16 000 mm³`) wieder her (`t_a161_bohrung_stapel_baugruppe`).
+- [x] **Baugruppen-Schnitt (BG-25), Validierung & Hilfen**: Ein rechteckiger Baugruppen-Schnitt (`asmCut`, `10×10 mm` durch beide Platten) verringert beide Volumina um je weitere `≈ 1 000 mm³`; `Sketch.editItem`, `Store.validateProject`, `App.undo()`, `HELP.stackHole`/`HELP.asmCut`, DE/EN-Schlüssel und Befehlssuche (`asm-stack-hole`, `asm-cut`) laufen fehlerfrei (`t_a161_bohrung_stapel_baugruppe`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus zwei gestapelte Teile als Baugruppe laden, auf der oberen Fläche eine „Stapel-Bohrung“ sowie über „Schnitt durch Teile“ einen eigenen Skizzen-Umriss durch beide Teile schneiden und die Vorschau sowie die getrennten Lochränder prüfen.
+
 ## Schrauben automatisch einsetzen (Auto [A-160], BG-23)
 
 - [x] **Einfach-Modus & M5-Schrauben aus 5,5-mm-Löchern**: Platte (`80 × 60 × 10 mm`) mit 4 Durchgangslöchern Ø `5,5 mm` in einer Baugruppe erkennt alle 4 Bohrungen (`#t-auto-screws` und `#proj-auto-screws` im Einfach-Modus sichtbar), schlägt `M5` mit passender Normlänge (`≥ 12 mm`) vor und setzt 4 `stdScrew`-Schrauben exakt an den 4 Lochpositionen ein (`t_a160_schrauben_einsetzen`).
@@ -2747,6 +2755,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Luft prüfen mit 1 mm & Anspringen**: Findet zwischen drei Quadern (0,5 mm und 4,5 mm Spalt) genau das 0,5-mm-Paar, wählt beim Klick beide Teile aus, markiert die engste Stelle mit Abstandsschild und schwenkt die Kamera dorthin; mit 0,3 mm meldet die Liste „Genug Luft überall“; in einer Baugruppe mit `ref`-Teilen klappt `#t-clearance` genauso (`t_a155_kollision_und_luft`).
 - [x] **Validierung, Undo, Menü, Befehle, Hilfen & i18n**: `Store.validateProject`, `App.undo()`, `#t-check`-Menü, Befehlssuche (`clearance-check`, `drag-stop-contact`), `HELP`/`werkzeug-hilfen.json` und DE/EN-Schlüsselgleichheit laufen ohne Fehler (`t_a155_kollision_und_luft`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus ein Bauteil mit „Beim Ziehen anhalten, wenn Teile sich berühren“ schräg gegen eine Ecke und entlang einer Fläche ziehen (inkl. Zahleneingabe beim Ziehen) sowie „Luft prüfen“ an einer größeren Baugruppe testen.
+
+## Anzeige-Zustände und Varianten für Baugruppen (Auto [A-163], BG-27, BG-28)
+
+- [x] **Anzeige-Zustand „ohne Deckel“ speichern & umschalten (BG-27)**: Im Profi-Modus lassen sich Sichtbarkeit (`hidden`), Durchsichtigkeit (`opacity`) und eigene Farbe (`colorSet`/`color`) sowie die Darstellungsart (`ViewPrefs.display` über `48-viewprefs.js`) als Anzeige-Zustand speichern (`#proj-ds-save`, `#ds-tree`, `#look-ds-sec`) und umschalten; in „ohne Deckel“ wird der Deckel sofort unsichtbar (`obj.visible === false`), das Gehäuse durchsichtig und die Platine farbig, und `Strg+Z` macht das Umschalten rückgängig (`t_a163_anzeige_zustaende_varianten`).
+- [x] **Baugruppen-Varianten mit anderen Maßen & Teilen (BG-28)**: Variante „Standard“ (`Laenge = 60`) und Variante „lang“ (`Laenge = 120`, Teil unterdrückt) ändern die 3D-Länge des Gehäuses exakt zwischen `60 mm` und `120 mm`; im `asmVariantDialog` lassen sich außerdem eingesetzte `ref`-Teile gegen andere Bauteile („Schiene kurz“ ↔ „Schiene lang“) sowie Bauteil-Varianten (`variantId` in `10-model.js`) umschalten (`t_a163_anzeige_zustaende_varianten`).
+- [x] **Profi-Schutz, Validierung, Speichern/Laden, i18n, Hilfen & Befehlssuche**: Im Einfach-Modus sind die Bereiche ausgeblendet und Dialoge/Prompts geben `null` zurück; `Store.validateProject`, Speichern/Laden mit `displayStates` und `asmVariants`, `HELP.displayStates`/`HELP.asmVariants`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-display-state-save`, `asm-variant-save` …) laufen ohne JS-Fehler (`t_a163_anzeige_zustaende_varianten`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe mit mehreren Teilen öffnen, einen Anzeige-Zustand mit ausgeblendetem Deckel und durchsichtigem Gehäuse anlegen, eine Baugruppen-Variante mit geändertem Maß oder Ersatzteil über „Verwalten“ einrichten und im Studio-Licht-Panel sowie Ansichtsmenü umschalten.
 
 ## Fehler melden
 
