@@ -29086,6 +29086,180 @@ def t_verlauf_abschalten(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8]
 
 
+# ---------- [A-146] Krümmungsglatte Rundung, Schritt 2: Ecken-Übergänge (KP-40) ----------
+def t_a146_ecken_uebergaenge(p):
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro');")
+
+    # 1. Würfel 30x30x30: drei Kanten an einer Ecke (15, 15, 30) mit G2 + Kugel-Ecke runden
+    p.ev("""
+      App.change('Würfel', d => {
+        d.items.push(Model.newItem('box', { w: 30, d: 30, h: 30 }));
+      });
+    """)
+    warte_rechnen(p, 40)
+    v_orig = volumen(p)
+    p.ev("""
+      const bid = App.doc.items[0].id;
+      const r = App.results.get(bid);
+      const idxs = [];
+      r.data.edges.forEach((e, i) => {
+        const isX = Math.abs(e.m[1] - 15) < 0.2 && Math.abs(e.m[2] - 30) < 0.2;
+        const isY = Math.abs(e.m[0] - 15) < 0.2 && Math.abs(e.m[2] - 30) < 0.2;
+        const isZ = Math.abs(e.m[0] - 15) < 0.2 && Math.abs(e.m[1] - 15) < 0.2;
+        if (isX || isY || isZ) idxs.push(i);
+      });
+      const sigs = idxs.map(i => Actions.edgeSigOf(bid, i));
+      App.change('3 Kanten an Ecke runden', d => {
+        d.items[0].finishes = [{ id: 'fc1', type: 'fillet', r: 5, shape: 'g2', edges: sigs }];
+      });
+      App.select([bid]);
+    """)
+    warte_rechnen(p, 40)
+    v_g2_sph = volumen(p)
+    st1 = p.ev("""
+      const bid = App.doc.items[0].id;
+      const r = App.results.get(bid);
+      return GeomCheck.run({ silent: true }).then(gc => ({
+        errs: App.errors.length,
+        faces: r && r.data && r.data.faces ? r.data.faces.length : 0,
+        gcIssues: gc.issues.length,
+        cornerOpts: [...document.querySelectorAll('#fin-corner-fc1 option')].map(o => o.value),
+      }));
+    """)
+    corner_el = p.pg.locator('#fin-corner-fc1')
+    ok1 = bool(
+        abs(v_orig - 27000) < 0.5
+        and st1['errs'] == 0
+        and st1['faces'] == 10
+        and st1['gcIssues'] == 0
+        and 26650 < v_g2_sph < 26750
+        and corner_el.count() == 1
+        and corner_el.is_visible()
+        and corner_el.input_value() == 'sphere'
+        and st1['cornerOpts'] == ['sphere', 'smooth']
+    )
+
+    # 2. Auf „Weicher Übergang“ umschalten: kleineres Volumen, 10 Flächen, Geometrie-Prüfung grün, Baum-Zeile markiert
+    p.pg.select_option('#fin-corner-fc1', 'smooth')
+    warte_rechnen(p, 40)
+    v_g2_smo = volumen(p)
+    p.ev("const tw = document.querySelector('#left-body .tw'); if (tw && !tw.classList.contains('open')) tw.click();")
+    p.wait(150)
+    st2 = p.ev("""
+      const bid = App.doc.items[0].id;
+      const r = App.results.get(bid);
+      const rowTxt = (document.querySelector('.finish-row') || {}).textContent || '';
+      return GeomCheck.run({ silent: true }).then(gc => ({
+        errs: App.errors.length,
+        corner: App.doc.items[0].finishes[0].corner,
+        faces: r && r.data && r.data.faces ? r.data.faces.length : 0,
+        gcIssues: gc.issues.length,
+        rowTxt,
+      }));
+    """)
+    ok2 = bool(
+        st2['errs'] == 0
+        and st2['corner'] == 'smooth'
+        and st2['faces'] == 10
+        and st2['gcIssues'] == 0
+        and v_g2_smo < v_g2_sph - 3.0
+        and 'G2' in st2['rowTxt']
+        and 'Weiche Ecke' in st2['rowTxt']
+    )
+
+    # 3. Klassisch rund + Weicher Übergang & Kugel-Ecke, sowie Einfach/Profi-Sichtbarkeit
+    p.pg.select_option('#fin-shape-fc1', 'round')
+    warte_rechnen(p, 40)
+    v_rnd_smo = volumen(p)
+    st3_smo = p.ev("return GeomCheck.run({ silent: true }).then(gc => ({ errs: App.errors.length, gcIssues: gc.issues.length, faces: App.results.get(App.doc.items[0].id).data.faces.length }));")
+
+    p.pg.select_option('#fin-corner-fc1', 'sphere')
+    warte_rechnen(p, 40)
+    v_rnd_sph = volumen(p)
+    st3_sph = p.ev("return GeomCheck.run({ silent: true }).then(gc => ({ errs: App.errors.length, gcIssues: gc.issues.length, faces: App.results.get(App.doc.items[0].id).data.faces.length, hasCorner: 'corner' in App.doc.items[0].finishes[0] }));")
+
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.wait(200)
+    hidden_simple = not corner_el.is_visible()
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(200)
+    shown_pro = corner_el.is_visible()
+    ok3 = bool(
+        st3_smo['errs'] == 0 and st3_smo['gcIssues'] == 0 and st3_smo['faces'] == 10
+        and st3_sph['errs'] == 0 and st3_sph['gcIssues'] == 0 and st3_sph['faces'] == 10
+        and not st3_sph['hasCorner']
+        and v_rnd_smo < v_rnd_sph - 1.0
+        and v_rnd_sph < v_g2_sph - 50.0
+        and hidden_simple and shown_pro
+    )
+
+    # 4. Speichern & Laden erhält G2 + Weicher Übergang; alle 12 Kanten eines Würfels (8 Ecken) sauber
+    p.pg.select_option('#fin-shape-fc1', 'g2')
+    warte_rechnen(p, 30)
+    p.pg.select_option('#fin-corner-fc1', 'smooth')
+    warte_rechnen(p, 30)
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(Model.newDoc('Leer'));")
+    warte_rechnen(p, 20)
+    p.ev("const doc = Model.migrate(JSON.parse(arg)); App.setDoc(doc, { forceReplace: true }); App.select([doc.items[0].id]);", saved)
+    warte_rechnen(p, 40)
+    v_loaded = volumen(p)
+    loaded_corner_val = p.pg.locator('#fin-corner-fc1').input_value()
+    st4_load = p.ev("return GeomCheck.run({ silent: true }).then(gc => ({ errs: App.errors.length, gcIssues: gc.issues.length, shape: App.doc.items[0].finishes[0].shape, corner: App.doc.items[0].finishes[0].corner }));")
+
+    p.ev("""
+      const d = Model.newDoc('All12');
+      const b = Model.newItem('box', { w: 30, d: 30, h: 30 });
+      b.finishes = [{ id: 'fa', type: 'fillet', r: 4, shape: 'g2', corner: 'smooth', edges: 'all' }];
+      d.items.push(b);
+      App.setDoc(d);
+    """)
+    warte_rechnen(p, 50)
+    st4_all = p.ev("""
+      const bid = App.doc.items[0].id;
+      const r = App.results.get(bid);
+      return GeomCheck.run({ silent: true }).then(gc => ({
+        errs: App.errors.length,
+        gcIssues: gc.issues.length,
+        faces: r && r.data && r.data.faces ? r.data.faces.length : 0,
+      }));
+    """)
+    ok4 = bool(
+        st4_load['errs'] == 0 and st4_load['gcIssues'] == 0
+        and st4_load['shape'] == 'g2' and st4_load['corner'] == 'smooth'
+        and loaded_corner_val == 'smooth'
+        and abs(v_loaded - v_g2_smo) < 0.2
+        and st4_all['errs'] == 0 and st4_all['gcIssues'] == 0 and st4_all['faces'] == 26
+    )
+
+    # 5. Hilfetext, DE/EN-Schlüsselgleichheit, Befehlssuche & Explain.local
+    meta = p.ev("""return (async () => {
+      const [hilfen, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const h = hilfen && hilfen.filletCorner;
+      const probe = document.createElement('div');
+      probe.dataset.help = 'filletCorner';
+      const desc = Explain.describeElement(probe);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nEq = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmdOk = Commands.search('eckübergang').some(c => c.id === 'fillet-corner-smooth');
+      const exp = Explain.local(App.doc.items[0].id);
+      const expOk = !!(exp && exp.lines && exp.lines.some(l => l.t.includes('krümmungsglatt, G2') && l.t.includes('weichem Eckübergang')));
+      return {
+        helpOk: !!(h && h.tip && h.hilfe && h.tipp && desc && desc.title === h.tip && desc.text === h.hilfe && desc.tip === h.tipp),
+        i18nEq,
+        cmdOk,
+        expOk,
+      };
+    })()""")
+    ok5 = bool(meta.get('helpOk') and meta.get('i18nEq') and meta.get('cmdOk') and meta.get('expOk') and not p.errs)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 # ---------- [A-149] Beispiel-Galerie, Schritt 1 (BE-34) ----------
 def t_a149_beispiel_galerie(p):
     # 1. Startseite in Profi und Einfach zeigt >= 8 Beispiele mit lokalen Vorschaubildern
@@ -29851,6 +30025,7 @@ TESTS = [
     ('[A-137] Technische Illustration (weiß/Kanten) und Vierfach-Ansicht (4 drehbare Ansichten)', t_a137_illustration_vierfach),
     ('[F-11250803] Volltest-Reparatur: Schraubenlöcher bei kaltem Kern / Befehlssuche „Fläche auf Fläche“', t_f11250803),
     ('[A-145] Krümmungsglatte Rundung (G2): Form-Wahl, Volumen, Profi & Speichern/Laden (KP-40)', t_a145_rundung_g2),
+    ('[A-146] Krümmungsglatte Rundung, Schritt 2: Ecken-Übergänge (KP-40)', t_a146_ecken_uebergaenge),
     ('[A-143] Alles als Paket (ZIP) und Sicherheit beim Einlesen', t_paket_und_sicherheit),
     ('[A-148] Trackpad-, Touch- und Stift-Gesten: Zoom, langes Drücken, Stift in Skizze & Einstellung aus (BE-21)', t_a148_gesten),
     ('[A-147] Verlauf abschalten: freies Bearbeiten, Schritt 1', t_verlauf_abschalten),

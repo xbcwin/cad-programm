@@ -1032,7 +1032,8 @@ const Panels = (() => {
             const cnt = (fin.edges || []).length;
             const eTxt = typeof fin.edges === 'string' ? (eMap[fin.edges] ? ' · ' + eMap[fin.edges] : '') : ' · ' + (cnt === 1 ? T('panel.edges.oneEdge') : T('panel.edges.manyEdges', { n: cnt }));
             const g2Txt = fin.type === 'fillet' && fin.shape === 'g2' ? ' · ' + T('panel.edges.shapeG2Short') : '';
-            fr.append(h('span', null, (fin.type === 'chamfer' ? T('panel.edges.chamfer') : T('panel.edges.fillet')) + ' ' + Units.fmtLenU(Model.num(fin.r, V, 1), 2) + g2Txt + eTxt));
+            const cornerTxt = fin.type === 'fillet' && fin.corner === 'smooth' ? ' · ' + T('panel.edges.cornerSmoothShort') : '';
+            fr.append(h('span', null, (fin.type === 'chamfer' ? T('panel.edges.chamfer') : T('panel.edges.fillet')) + ' ' + Units.fmtLenU(Model.num(fin.r, V, 1), 2) + g2Txt + cornerTxt + eTxt));
           }
           if (isRef) {
             const iss = refIssues.find((x) => x.finishId === fin.id);

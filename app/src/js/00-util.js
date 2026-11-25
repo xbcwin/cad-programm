@@ -2465,6 +2465,11 @@ const HELP = {
   "hilfe": "Friert deinen aktuellen Körper als feste Form ein und blendet die Schritte-Liste aus. Neue Änderungen wie Verschieben, Bohren oder Abrunden wirken sofort direkt am Körper, ohne neue Schritte zu sammeln. Rückgängig (Strg Z) funktioniert weiter wie gewohnt.",
   "tipp": "Wenn du wieder mit Schritten arbeiten willst, nimm das Häkchen einfach wieder heraus – nach einer kurzen Rückfrage startet der eingefrorene Stand als erster Schritt im Verlauf."
  },
+ "filletCorner": {
+  "tip": "Eck-Übergang bei drei abgerundeten Kanten an einer Ecke wählen: Kugel-Ecke oder weicher Übergang (Profi)",
+  "hilfe": "Treffen drei abgerundete Kanten an einer Ecke zusammen, füllt „Kugel-Ecke“ die dreieckige Ecke direkt bündig zwischen den drei Rundungen. „Weicher Übergang“ zieht die Rundungen vor der Ecke etwas früher zurück und spannt ein größeres, sanft überlaufendes Eckfeld auf.",
+  "tipp": "Funktioniert sowohl bei krümmungsglatten (G2) als auch bei klassisch runden Kanten."
+ },
  "exampleGallery": {
   "tip": "Beispiel-Galerie: fertige CAD-Projekte als eigene Kopie zum Ausprobieren öffnen",
   "hilfe": "Hier findest du eine Sammlung fertiger Projekte – vom Handyhalter über Zahnräder und eine gedrehte Vase bis hin zur beweglichen Scharnier-Baugruppe und einer technischen Zeichnung. Ein Klick öffnet immer eine frische Kopie für dich, sodass du nach Lust und Laune ändern kannst.",
