@@ -2180,6 +2180,16 @@ const HELP = {
   "tip": "3D-Skizze mit Linien und Bögen frei im Raum zeichnen (Profi)",
   "hilfe": "Im Profi-Modus startest du eine 3D-Skizze ohne feste Ebene (über „Skizze → 3D-Skizze“ oder die Befehlssuche). Setze Punkte per Klick im Raum, fange exakt an Körperecken und Kantenmitten oder gib X, Y und Z rechts ein. Jede Linie und jeder 3-Punkt-Bogen lässt sich über Längenmaße (auch Formeln) festlegen und anschließend mit „Entlang Pfad“ zu einem Körper ziehen.",
   "tipp": "Wenn du an einer Körperecke fängst, merkt sich die 3D-Skizze diesen Körper und wandert mit, falls sich der Körper verschiebt."
+ },
+ "polarGrid": {
+  "tip": "Zwischen rechteckigem und polarem Raster (Ringe und Strahlen) umschalten (Profi)",
+  "hilfe": "Im Profi-Modus schaltet das polare Raster konzentrische Ringe um den Nullpunkt und Winkelstrahlen ein. Punkte und Zeichenwerkzeuge fangen genau auf jedem Ring-Abstand und Winkel-Schritt.",
+  "tipp": "Mit einem Klick auf das Ecksymbol links oben zwischen den Linealen schaltest du jederzeit direkt zwischen rechteckig und polar um."
+ },
+ "rulerGuides": {
+  "tip": "Hilfslinien vom Lineal-Rand in die Skizze ziehen (Profi)",
+  "hilfe": "Ziehe aus dem linken Lineal eine senkrechte X-Hilfslinie oder aus dem oberen Lineal eine waagerechte Y-Hilfslinie in die Skizze. Alle Zeichenwerkzeuge und gezogene Punkte rasten magnetisch auf diesen Linien und ihren Schnittpunkten ein.",
+  "tipp": "Im Auswahl-Werkzeug kannst du jede Hilfslinie verschieben – ziehst du sie zurück aufs Lineal, verschwindet sie wieder."
  }
 };
 
