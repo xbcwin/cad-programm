@@ -2495,6 +2495,16 @@ const HELP = {
   "tip": "Kurvenscheibe / Nocken: Ein Stößel folgt beim Drehen der Außenkontur einer Scheibe – mit Weg-Kurve als Diagramm (Profi)",
   "hilfe": "Verbindet ein Drehgelenk an einer Scheibe (Nocken oder Exzenter) mit einem Schiebegelenk an einem Stößel. Dreht sich die Scheibe, tastet der Stößel automatisch ihre Außenkontur ab – als Kontur-/Rollenstößel oder als Flachstößel. Das Weg-Kurven-Diagramm zeigt den gesamten Hub über 360° und lässt sich direkt anklicken.",
   "tipp": "Klicke im Diagramm auf einen Winkel oder nutze „An Kontur anlegen“, um den Stößel direkt an die Scheibe zu fahren."
+ },
+ "coupleGear": {
+  "tip": "Zahnrad-Kopplung: Zwei Drehgelenke über Zähnezahl oder Verhältnis koppeln (Profi)",
+  "hilfe": "Verbindet zwei Drehgelenke wie ein Zahnradpaar. Aus den Zähnezahlen (z. B. 20 : 40) oder einem eigenen Verhältnis (z. B. 1:2) dreht sich das zweite Zahnrad im passenden Verhältnis mit – und zwar in beide Richtungen.",
+  "tipp": "Wenn beide Teile Zahnräder aus der Bibliothek sind, übernimmt Tracery die Zähnezahlen automatisch."
+ },
+ "coupleRack": {
+  "tip": "Zahnstangen-Kopplung: Drehen eines Ritzels schiebt die Zahnstange um π · d · Winkel / 360 (Profi)",
+  "hilfe": "Verbindet ein Drehgelenk (Ritzel) mit einem Schiebegelenk (Zahnstange). Aus dem Teilkreis-Durchmesser d (oder aus Modul × Zähnezahl) schiebt jede Drehung die Zahnstange genau um den abgerollten Umfang π · d · Winkel / 360 weiter.",
+  "tipp": "Auch Ziehen an der Zahnstange dreht das Ritzel sofort im passenden Winkel zurück."
  }
 };
 

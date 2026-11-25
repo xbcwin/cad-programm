@@ -3772,5 +3772,17 @@
   "joint.camSnapBtn": "Snap to contour",
   "joint.camChartTitle": "Displacement curve (0° – 360°)",
   "joint.camStrokeLabel": "Stroke",
-  "joint.camAngleLabel": "Cam angle"
+  "joint.camAngleLabel": "Cam angle",
+  "ctx.coupleGear": "Coupling: Gear – Gear",
+  "ctx.coupleRack": "Coupling: Rack & Pinion",
+  "joint.gearKind": "Gear",
+  "joint.rackKind": "Rack & Pinion",
+  "joint.gearModeLabel": "Ratio by",
+  "joint.gearModeTeeth": "Teeth count (Gear 1 : Gear 2)",
+  "joint.gearModeRatio": "Ratio (e.g. 1:2 or 0.5)",
+  "joint.gearRevLabel": "Opposite direction (external mesh / reverse)",
+  "joint.rackModeLabel": "Pitch circle by",
+  "joint.rackModeDia": "Pitch diameter (mm)",
+  "joint.rackModeMod": "Module & teeth (gear)",
+  "joint.rackRevLabel": "Reverse direction (−)"
 }
