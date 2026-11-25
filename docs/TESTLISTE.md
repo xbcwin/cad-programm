@@ -2862,6 +2862,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Schutz, Undo/Redo, Speichern/Laden, Hilfen & I18n**: Im Einfach-Modus sind `#t-tables` und `#dw-tables-sec` verborgen/gesperrt, `setHoleTable`/`setRevTable`/`addFreeTable` blockiert und Befehle ausgeblendet; Löschen + `App.undo()`, `Store.validateProject`, Neuladen, alle 4 Hilfen in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`drawingHoleTable`, `drawingRevTable`, `drawingFreeTable`) laufen fehlerfrei (`t_a176_zeichnung_tabellen`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus in „Zeichnung“ eine Platte mit mehreren Bohrungen öffnen, den Nullpunkt per „Nullpunkt klicken“ auf eine Bohrung setzen, Tabellen auf dem Blatt per Ziehen verschieben und die exportierte PDF- sowie DXF-Datei prüfen.
 
+## Zeichnung: unterbrochene Ansicht und Hilfsansicht (Auto [A-169], ZE-16, ZE-17)
+
+- [x] **Unterbrochene Ansicht (ZE-16)**: Eine 500 mm lange Welle wird in der Vorderansicht per `#t-break` mit Bruchlinien auf unter 150 mm Anzeigebreite gekürzt; zwei `polyline.breakline`-Linien erscheinen, automatisches Breitenmaß und manuell gesetztes End-zu-End-Maß zeigen weiterhin exakt `500` (auch in PDF und DXF), Spaltbreite und Wellen-/Zickzack-Stil sind im Panel umstellbar, Rückgängig/Wiederherstellen und Speichern/Laden bleiben stabil.
+- [x] **Hilfsansicht (ZE-17)**: Ein Prisma mit einer unter 30° geneigten 40 × 30 mm-Fläche zeigt diese in der Vorderansicht verkürzt (`~34,64 mm`), nach Klick auf die 30°-Kante in der Draufsicht per `#t-aux` entsteht `Ansicht A` mit Blickpfeil senkrecht zur Kante, die Fläche erscheint exakt unverzerrt (`40 × 30 mm`), ein manuelles Maß auf der Kante zeigt `40`, Richtungsumkehr (`.aux-flip`), Verschieben, PDF-/DXF-Export, Löschen/Rückgängig und Speichern/Laden funktionieren.
+- [x] **Profi-Trennung, Hilfetexte, I18n & Befehlssuche**: Im Einfach-Modus ist die Zeichnung ausgeblendet, `HELP.drawingBreakView` & `HELP.drawingAuxView` sind mit `werkzeug-hilfen.json` synchron, `data-help`-Attribute sitzen auf `#t-break`, `#t-aux`, `#dw-add-break`, `#dw-add-aux`, DE/EN-Schlüssel sind deckungsgleich und `Commands.search` findet `unterbrechen` und `hilfsansicht`.
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine lange abgestufte Welle per Werkzeugleiste („Unterbrechen“, Taste `U`) mit Wellen-Bruchlinien kürzen, danach an einer Schrägkante über „Hilfsansicht“ (Taste `H`) eine Ansicht anlegen, auf dem Blatt verschieben und als PDF öffnen.
+
 ## Fehler melden
 
 ```

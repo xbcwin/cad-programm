@@ -1659,16 +1659,6 @@
     "hilfe": "Wähle den Außenmantel eines Zylinders oder einer Welle und klicke auf „Rändel“. Du kannst zwischen gekreuztem Rändel (Diamantmuster), geraden Rillen und schrägen Rillen wählen sowie Teilung, Tiefe, Winkel und Länge exakt festlegen.",
     "tipp": "Der maximale Außendurchmesser bleibt beim Rändeln erhalten – die Spitzen liegen genau auf dem ursprünglichen Zylindermantel."
   },
-  "drawingNormThreads": {
-    "tip": "Gewinde in der Zeichnung nach Norm als Dreiviertelkreis und dünne Linien darstellen (Profi)",
-    "hilfe": "Zeichnet alle Gewinde im Modell (Gewindebohrungen, gedruckte Innengewinde, Gewindebolzen, Normschrauben, Muttern und kosmetische Gewinde) nach DIN ISO 6410-1: In der Draufsicht erscheint ein dünner Dreiviertelkreis (270°), in der Seiten- und Schnittansicht dünne parallele Linien samt Gewindegrenze.",
-    "tipp": "Bei Durchgangs- und Sacklochgewinden steht in der Bemaßung automatisch das Gewindemaß wie „M6“ statt nur der Bohrloch-Durchmesser."
-  },
-  "drawingMaterialHatch": {
-    "tip": "Schnittflächen in der Zeichnung je nach Werkstoff unterschiedlich schraffieren (Profi)",
-    "hilfe": "Passt die Schraffur jeder geschnittenen Fläche automatisch an den zugewiesenen Werkstoff des Bauteils an (z. B. einfache 45°-Linien für Stahl, Doppellinien für Aluminium, abwechselnde Strichlinien für Messing/Kupfer und Kreuzschraffur für Kunststoffe).",
-    "tipp": "Eine kleine Legende direkt darunter zeigt dir alle im Modell verwendeten Werkstoffe und ihre Schraffur-Muster auf einen Blick."
-  },
   "gripPattern": {
     "tip": "Rillen oder Noppen als Griffmuster auf Fläche oder Zylindermantel setzen (Profi)",
     "hilfe": "Wähle eine ebene Fläche oder einen Zylindermantel und klicke auf „Griffmuster“. Entscheide dich für parallele bzw. umlaufende Rillen (V-Profil, rund oder rechteckig) oder für Noppen (Halbkugel, Kegel oder Zylinder, versetzt oder im Raster) – jeweils vertieft oder erhaben.",
@@ -1839,10 +1829,15 @@
     "hilfe": "Speichert verschiedene Ausführungen deiner Baugruppe – etwa „Standard“ und „lang“ – mit eigenen Baugruppen-Maßen, ein- oder ausgeschalteten Teilen, eingesetzten Bauteil-Varianten oder getauschten Verweisen auf andere Bauteile. Beim Umschalten passt sich die ganze Baugruppe automatisch an.",
     "tipp": "Im Fenster „Verwalten“ kannst du jeder Variante auch gleich einen passenden Anzeige-Zustand zuordnen."
   },
-  "skeletonSketch": {
-    "tip": "Skelett-Skizze (Profi): eine Hauptskizze steuert mehrere Teile der Baugruppe",
-    "hilfe": "In einer Skelett-Skizze zeichnest du die wichtigen Linien und Maße der gesamten Baugruppe an einer zentralen Stelle. Jedes benannte Maß wird automatisch als verknüpfter Parameter bereitgestellt – änderst du später ein Maß in der Hauptskizze, rechnen alle damit verbundenen Teile sofort neu.",
-    "tipp": "Auch eingesetzte Bauteile aus eigenen Dokumenten lassen sich im Skelett-Panel direkt über „Verknüpfen“ mit einem Steuer-Maß verbinden."
+  "asmSingleBody": {
+    "tip": "Baugruppe als einen Körper speichern: verschmilzt alle Teile zu einem einzigen Körper für Export, 3D-Druck oder Weiterarbeit (Profi)",
+    "hilfe": "Fasst alle sichtbaren Teile einer Baugruppe über den CAD-Kern zu einem einzigen Körper zusammen und speichert ihn als STEP, STL, 3MF, BREP oder als neues Bauteil im eigenen Tab. So kannst du eine fertige Baugruppe wie ein einzelnes Teil weitergeben oder drucken.",
+    "tipp": "Im Export-Fenster gibt es zusätzlich das Häkchen „Als einen Körper“, wenn du mehrere Formate auf einmal als Einzelkörper in eine ZIP-Datei packen willst."
+  },
+  "tolChain": {
+    "tip": "Toleranzkette in einer Richtung rechnen: Maße mit ± auswählen, schlimmster Fall und Mittelwert werden berechnet (Profi)",
+    "hilfe": "Misst gewählte Teile der Baugruppe entlang einer Achse (X, Y, Z oder senkrecht zu einer gewählten Fläche) und rechnet die Toleranzkette sofort aus: sowohl den schlimmsten Fall (Summe aller ± Toleranzen) als auch den wahrscheinlichen Bereich um den Mittelwert (Wurzelsumme der Quadrate).",
+    "tipp": "Mit dem Knopf „+“ vor einer Zeile wechselst du das Vorzeichen auf „−“, um ein Spiel oder einen Spalt (Schließmaß) gegen die übrigen Maße zu prüfen."
   },
   "dragCollisionStop": {
     "tip": "Beim Ziehen anhalten, wenn sich Teile berühren (Profi)",
@@ -1854,25 +1849,40 @@
     "hilfe": "Misst im CAD-Kern den genauen kleinsten Abstand zwischen allen sichtbaren Körpern und Bauteilen. Jedes Paar unter deinem Grenzwert (z. B. 1 mm) erscheint in der Liste – Klick markiert die engste Stelle im Modell und fährt die Kamera direkt dorthin.",
     "tipp": "Schalte „Berührende Paare (0 mm) mit listen“ nur ein, wenn du zusätzlich auch gewollte Anlageflächen prüfen willst."
   },
-  "asmSingleBody": {
-    "tip": "Baugruppe als einen Körper speichern: verschmilzt alle Teile zu einem einzigen Körper für Export, 3D-Druck oder Weiterarbeit (Profi)",
-    "hilfe": "Fasst alle sichtbaren Teile einer Baugruppe über den CAD-Kern zu einem einzigen Körper zusammen und speichert ihn als STEP, STL, 3MF, BREP oder als neues Bauteil im eigenen Tab. So kannst du eine fertige Baugruppe wie ein einzelnes Teil weitergeben oder drucken.",
-    "tipp": "Im Export-Fenster gibt es zusätzlich das Häkchen „Als einen Körper“, wenn du mehrere Formate auf einmal als Einzelkörper in eine ZIP-Datei packen willst."
+  "asmCable": {
+    "tip": "Kabel oder Schlauch zwischen zwei Anschlusspunkten mit Durchmesser und Biegeradius verlegen (Profi)",
+    "hilfe": "Erzeugt eine weiche 3D-Kurve zwischen zwei Punkten (direkt eingeben oder auf Bauteilflächen anklicken) mit frei wählbarem Durchmesser, Wandstärke (bei Schläuchen) und Biegeradius. Werden die Anschlusspunkte auf Bauteile geklickt, wandert das Kabel beim Verschieben mit, und die exakte Länge erscheint in der Stückliste.",
+    "tipp": "Wähle „Schlauch (hohl)“, um einen Innenhohlraum über die Wandstärke zu erhalten, oder füge rechts im Panel Zwischenpunkte hinzu."
   },
-  "tolChain": {
-    "tip": "Toleranzkette in einer Richtung rechnen: Maße mit ± auswählen, schlimmster Fall und Mittelwert werden berechnet (Profi)",
-    "hilfe": "Misst gewählte Teile der Baugruppe entlang einer Achse (X, Y, Z oder senkrecht zu einer gewählten Fläche) und rechnet die Toleranzkette sofort aus: sowohl den schlimmsten Fall (Summe aller ± Toleranzen) als auch den wahrscheinlichen Bereich um den Mittelwert (Wurzelsumme der Quadrate).",
-    "tipp": "Mit dem Knopf „+“ vor einer Zeile wechselst du das Vorzeichen auf „−“, um ein Spiel oder einen Spalt (Schließmaß) gegen die übrigen Maße zu prüfen."
+  "skeletonSketch": {
+    "tip": "Skelett-Skizze (Profi): eine Hauptskizze steuert mehrere Teile der Baugruppe",
+    "hilfe": "In einer Skelett-Skizze zeichnest du die wichtigen Linien und Maße der gesamten Baugruppe an einer zentralen Stelle. Jedes benannte Maß wird automatisch als verknüpfter Parameter bereitgestellt – änderst du später ein Maß in der Hauptskizze, rechnen alle damit verbundenen Teile sofort neu.",
+    "tipp": "Auch eingesetzte Bauteile aus eigenen Dokumenten lassen sich im Skelett-Panel direkt über „Verknüpfen“ mit einem Steuer-Maß verbinden."
+  },
+  "drawingBreakView": {
+    "tip": "Lange Teile mit Bruchlinien verkürzen (Profi): Maße zeigen trotzdem die echte Länge",
+    "hilfe": "Klicke in einer Zeichnungsansicht zuerst auf die erste Bruchstelle und dann auf die zweite. Das lange Zwischenstück wird mit Zickzack- oder Wellenlinien auf einen kurzen Restspalt zusammengeschoben. Alle automatischen und von Hand gesetzten Maße zeigen weiterhin die ungekürzte, echte Modelllänge.",
+    "tipp": "Mit gedrückter Umschalt-Taste wechselst du beim ersten Klick zwischen waagerechtem und senkrechtem Kürzen; im rechten Panel stellst du Spaltbreite und Linienart nachträglich um."
+  },
+  "drawingAuxView": {
+    "tip": "Hilfsansicht senkrecht zu einer schrägen Kante (Profi): zeigt schräge Flächen unverzerrt",
+    "hilfe": "Klicke im Werkzeug „Hilfsansicht“ auf eine schräge oder gerade Kante einer Zeichnungsansicht. Tracery legt genau senkrecht zu dieser Kante eine neue Ansicht („Ansicht A“) mit Blickpfeil an der Kante an, sodass schräge Flächen in wahrer Größe und Form erscheinen und sich direkt bemaßen lassen.",
+    "tipp": "Wenn die Hilfsansicht von der falschen Seite auf die Kante schaut, drehst du den Blick im rechten Panel mit „Umkehren“."
+  },
+  "drawingNormThreads": {
+    "tip": "Gewinde in der Zeichnung nach Norm als Dreiviertelkreis und dünne Linien darstellen (Profi)",
+    "hilfe": "Zeichnet alle Gewinde im Modell (Gewindebohrungen, gedruckte Innengewinde, Gewindebolzen, Normschrauben, Muttern und kosmetische Gewinde) nach DIN ISO 6410-1: In der Draufsicht erscheint ein dünner Dreiviertelkreis (270°), in der Seiten- und Schnittansicht dünne parallele Linien samt Gewindegrenze.",
+    "tipp": "Bei Durchgangs- und Sacklochgewinden steht in der Bemaßung automatisch das Gewindemaß wie „M6“ statt nur der Bohrloch-Durchmesser."
+  },
+  "drawingMaterialHatch": {
+    "tip": "Schnittflächen in der Zeichnung je nach Werkstoff unterschiedlich schraffieren (Profi)",
+    "hilfe": "Passt die Schraffur jeder geschnittenen Fläche automatisch an den zugewiesenen Werkstoff des Bauteils an (z. B. einfache 45°-Linien für Stahl, Doppellinien für Aluminium, abwechselnde Strichlinien für Messing/Kupfer und Kreuzschraffur für Kunststoffe).",
+    "tipp": "Eine kleine Legende direkt darunter zeigt dir alle im Modell verwendeten Werkstoffe und ihre Schraffur-Muster auf einen Blick."
   },
   "drawingSectionKinds": {
     "tip": "Weitere Schnittarten in der Zeichnung (Profi): Halbschnitt, abgesetzter Schnitt und Ausbruch",
     "hilfe": "Im Profi-Modus stehen dir neben dem normalen Vollschnitt drei weitere Schnittarten zur Wahl: Beim Halbschnitt siehst du die eine Hälfte als Außenansicht und die andere als Schnitt (ideal für runde oder symmetrische Teile). Beim abgesetzten Schnitt knickst du die Schnittlinie im rechten Winkel ab, um versetzte Bohrungen oder Taschen gemeinsam zu schneiden. Beim Ausbruch brichst du nur einen gezeichneten Bereich bis zur gewünschten Tiefe auf.",
     "tipp": "Beim Halbschnitt kannst du die geschnittene Seite jederzeit rechts im Panel wechseln; beim Ausbruch lässt sich die Schnitttiefe dort genau eintippen."
-  },
-  "asmCable": {
-    "tip": "Kabel oder Schlauch zwischen zwei Anschlusspunkten mit Durchmesser und Biegeradius verlegen (Profi)",
-    "hilfe": "Erzeugt eine weiche 3D-Kurve zwischen zwei Punkten (direkt eingeben oder auf Bauteilflächen anklicken) mit frei wählbarem Durchmesser, Wandstärke (bei Schläuchen) und Biegeradius. Werden die Anschlusspunkte auf Bauteile geklickt, wandert das Kabel beim Verschieben mit, und die exakte Länge erscheint in der Stückliste.",
-    "tipp": "Wähle „Schlauch (hohl)“, um einen Innenhohlraum über die Wandstärke zu erhalten, oder füge rechts im Panel Zwischenpunkte hinzu."
   },
   "drawingExplode": {
     "tip": "Explosionsansicht der Baugruppe auf das Blatt legen",
