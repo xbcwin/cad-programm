@@ -918,8 +918,19 @@ const Print = (() => {
     const initCsys = preset.csysId && csysAll.some((c) => c.id === preset.csysId) ? preset.csysId : '';
     const initHc = holeComp();
     const opts = { step: true, iges: false, brep: false, stl: false, mf: false, obj: false, glb: false, amf: false, ply: false, dxf: false, plates: plates.map((p) => p.id), csysId: initCsys, holeComp: initHc };
+    let dlg = null;
     const body = h('div', { style: { display: 'grid', gap: '12px' } });
     body.append(h('p', null, T('dlg.export.intro')));
+    // Alles als Paket (IO-18, in Einfach und Profi sichtbar)
+    const bundleBtn = h('button', { type: 'button', class: 'btn', id: 'ex-bundle-btn', style: { marginTop: '8px' } }, T('dlg.export.bundleBtn'));
+    bundleBtn.onclick = () => { if (dlg) dlg.close(); exportBundle({ q: opts.q, stlText: opts.stlText, holeComp: opts.holeComp, csysId: opts.csysId, onlySel: opts.onlySel }); };
+    const bundleBox = h('div', { class: 'hint-box', id: 'ex-bundle-box', 'data-help': 'exportBundle' },
+      h('b', null, T('dlg.export.bundleTitle')),
+      h('br'),
+      h('small', { style: { color: 'var(--muted)' } }, T('dlg.export.bundleDesc')),
+      h('div', null, bundleBtn),
+    );
+    body.append(bundleBox);
     const mk = (k, label, sub) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'ex-' + k, checked: opts[k] }), h('span', null, h('b', null, label), h('br'), h('small', { style: { color: 'var(--muted)' } }, sub))); l.querySelector('input').onchange = (e) => { opts[k] = e.target.checked; }; return l; };
     const stepRow = mk('step', T('dlg.export.step'), T('dlg.export.stepSub')); stepRow.setAttribute('data-help', 'exportStep');
     const igesRow = mk('iges', T('dlg.export.iges'), T('dlg.export.igesSub')); igesRow.setAttribute('data-help', 'exportIgesBrep');
@@ -968,17 +979,17 @@ const Print = (() => {
       const warnBox = h('div', { class: 'hint-box warn', id: 'ex-warn-box' }, h('div', { html: T('dlg.export.warnHtml', { t: esc(cs[0].t), d: esc(cs[0].d) }) }));
       if (cs[0].fit && cs[0].fit.suggestion && cs[0].fit.suggestion.canFit) {
         const rb = h('button', { type: 'button', class: 'btn', id: 'ex-bed-rotate', style: { marginTop: '6px' } }, T('ampel.rotateBtn'));
-        rb.onclick = () => { UI.closeModal(); applyRotationSuggestion(cs[0].fit.suggestion); };
+        rb.onclick = () => { if (dlg) dlg.close(); applyRotationSuggestion(cs[0].fit.suggestion); };
         warnBox.append(rb);
       }
       if (cs[0].nozzleWall) {
         const wb = h('button', { type: 'button', class: 'btn', id: 'ex-nozzle-show', style: { marginTop: '6px' } }, T('ampel.showSpotsBtn'));
-        wb.onclick = () => { UI.closeModal(); Views.thin(true, { limit: cs[0].nozzleWall.minWall }); };
+        wb.onclick = () => { if (dlg) dlg.close(); Views.thin(true, { limit: cs[0].nozzleWall.minWall }); };
         warnBox.append(wb);
       }
       body.append(warnBox);
     }
-    UI.modal({ title: T('dlg.export.title'), body, actions: [{ label: T('common.cancel') }, { label: T('dlg.export.saveZip'), primary: true, run: () => { runExport(opts); } }] });
+    dlg = UI.modal({ title: T('dlg.export.title'), body, actions: [{ label: T('common.cancel') }, { label: T('dlg.export.saveZip'), primary: true, run: () => { runExport(opts); } }] });
   }
   // Bild speichern (PNG) – in Bildschirm- oder Druckgröße, auf Wunsch mit durchsichtigem Hintergrund
   function imageDialog() {
@@ -1162,7 +1173,7 @@ const Print = (() => {
     if (doSave) await save(safeName(App.doc.name) + (blob.type.includes('mp4') ? '.mp4' : '.webm'), blob);
     return blob;
   }
-  let lastExport = null, lastTris = 0, lastHoleComp = null;
+  let lastExport = null, lastBundle = null, lastTris = 0, lastHoleComp = null;
   async function runExport(opts) {
     if (!opts.stl && !opts.mf && !opts.obj && !opts.glb && !opts.amf && !opts.ply && !opts.step && !opts.iges && !opts.brep && !(opts.dxf && opts.plates.length)) { UI.toast(T('dlg.export.needFmt'), { kind: 'bad' }); return; }
     const tst = UI.toast(T('dlg.export.building'), { icon: 'export', ms: 20000 });
@@ -1233,6 +1244,87 @@ const Print = (() => {
       await save(name + '.zip', new Blob([zip]));
       try { Panels.firstStepDone('saved'); } catch (_) {}
     } catch (e) { tst.remove(); UI.toast('Export hat nicht geklappt: ' + e.message, { kind: 'bad' }); }
+  }
+  // ---------- IO-18: Alles als Paket (ZIP mit Projekt, Zeichnungen als PDF, STEP und STL je Körper) ----------
+  async function exportBundle(opts = {}) {
+    if (!App.doc || !App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) {
+      UI.toast(T('dlg.export.nothing'), { icon: 'info' });
+      return null;
+    }
+    const tst = UI.toast(T('dlg.export.bundleBuilding'), { icon: 'export', ms: 30000 });
+    try {
+      const name = safeName(App.doc.name);
+      const scene = Model.kernelScene(App.doc);
+      const only = opts.onlySel ? exportSelection() : null;
+      const originMat = opts.csysId && typeof Datums !== 'undefined' ? Datums.csysExportMatrix(opts.csysId) : null;
+      const hc = opts.holeComp != null ? Math.max(0, Math.min(1, Number(opts.holeComp) || 0)) : holeComp();
+      const files = [];
+
+      // 1. Tracery-Projekt (.tracery.json) zuerst sichern, bevor Zeichnungs-Projektion ggf. leere Zeichnung anlegt
+      const projJson = await Start.projectPayload();
+      files.push({ name: name + '.tracery.json', data: new TextEncoder().encode(projJson) });
+
+      // 2. STEP (exakte Geometrie)
+      const stepRes = await Kernel.call('exportSTEP', { scene, only, originMat });
+      files.push({ name: name + '.step', data: new Uint8Array(stepRes.data) });
+
+      // 3. STL je Körper
+      const meshRes = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1, originMat, holeComp: hc });
+      lastTris = meshRes.objects.reduce((s, o) => s + o.triangles.length / 3, 0);
+      lastHoleComp = { mm: hc, holes: meshRes.compensatedHoles || 0 };
+      const objs = (only ? meshRes.objects.filter((o) => only.includes(o.id)) : meshRes.objects).map((o) => {
+        const f = Model.find(App.doc, o.id);
+        return f ? { ...o, name: o.name || Model.label(f.item), color: o.bodyColor || o.color || f.item.color } : o;
+      });
+      if (!objs.length) throw new Error('Es gibt keinen Körper zum Speichern.');
+      const STL = opts.stlText ? buildSTLText : buildSTL;
+      const used = new Map();
+      for (const o of objs) {
+        const f = Model.find(App.doc, o.id);
+        let base = safeName(o.name || (f ? Model.label(f.item) : 'Körper'));
+        const n = (used.get(base) || 0) + 1; used.set(base, n); if (n > 1) base += '-' + n;
+        files.push({ name: 'STL/' + base + '.stl', data: STL([o], base) });
+      }
+
+      // 4. Zeichnungen (PDF)
+      let pdfIncluded = false;
+      if (typeof Drawing !== 'undefined' && Drawing.buildPDFBytes) {
+        try {
+          const pdfBytes = await Drawing.buildPDFBytes();
+          if (pdfBytes && pdfBytes.byteLength > 100) {
+            files.push({ name: 'Zeichnungen/' + name + '.pdf', data: pdfBytes });
+            pdfIncluded = true;
+          }
+        } catch (pdfErr) {
+          console.warn('Paket-Zeichnung (PDF):', pdfErr);
+        }
+      }
+
+      // 5. LIESMICH.txt
+      files.push({
+        name: 'LIESMICH.txt',
+        data: new TextEncoder().encode(
+          `${App.doc.name}\nPaket erstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n\nInhalt:\n` +
+          `- ${name}.tracery.json: vollständiges Tracery-Projekt zum Weiterbearbeiten\n` +
+          (pdfIncluded ? `- Zeichnungen/${name}.pdf: technische Zeichnungen als mehrseitiges PDF\n` : '') +
+          `- ${name}.step: exakte 3D-Geometrie mit Namen, Farben und Struktur (STEP)\n` +
+          `- STL/: ${objs.length} ${objs.length === 1 ? 'STL-Datei' : 'STL-Dateien'} (eine pro Körper, Millimeter)\n`,
+        ),
+      });
+
+      const filename = name + '-Paket.zip';
+      lastExport = files.map((f) => f.name);
+      lastBundle = { filename, files: lastExport.slice(), bodyCount: objs.length };
+      const zip = await Zip.make(files);
+      tst.remove();
+      if (opts.save !== false) await save(filename, new Blob([zip], { type: 'application/zip' }));
+      try { Panels.firstStepDone('saved'); } catch (_) {}
+      return { filename, files: lastExport.slice(), bodyCount: objs.length, zip };
+    } catch (e) {
+      tst.remove();
+      UI.toast('Paket-Export hat nicht geklappt: ' + (e && e.message ? e.message : e), { kind: 'bad' });
+      return null;
+    }
   }
   // ---------- PF-17: 3D-Druck-Schätzung (Filamentmenge, Kosten & Druckzeit) ----------
   const PRINT_FILAMENTS = ['PLA', 'PETG', 'ABS', 'ASA', 'TPU 95A', 'PA6', 'PA12', 'PC'];
@@ -1606,7 +1698,7 @@ const Print = (() => {
     App.on('doc', debounce(() => { wallCache = null; updateAmpel(); }, 200));
     $('#ampel').addEventListener('click', (e) => openAmpel(e.currentTarget));
   }
-  return { PRINTERS, PRINT_FILAMENTS, SPEED_PROFILES, findPrinter, setPrinter, nozzle, setNozzle, printFit, setPrintFit, PRINT_FITS: typeof PRINT_FITS !== 'undefined' ? PRINT_FITS : [], printFitMm: typeof printFitMm === 'function' ? printFitMm : () => 0, holeComp, setHoleComp, fitCheck, applyRotationSuggestion, nozzleWallCheck, bestPrintOrientation, orientForPrint, printCostSettings, setPrintCostSettings, computePrintEstimate, estimatePrint, costDialog, formatDuration, get lastHoleComp() { return lastHoleComp; }, turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, buildAMF, buildPLY, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
+  return { PRINTERS, PRINT_FILAMENTS, SPEED_PROFILES, findPrinter, setPrinter, nozzle, setNozzle, printFit, setPrintFit, PRINT_FITS: typeof PRINT_FITS !== 'undefined' ? PRINT_FITS : [], printFitMm: typeof printFitMm === 'function' ? printFitMm : () => 0, holeComp, setHoleComp, fitCheck, applyRotationSuggestion, nozzleWallCheck, bestPrintOrientation, orientForPrint, printCostSettings, setPrintCostSettings, computePrintEstimate, estimatePrint, costDialog, formatDuration, get lastHoleComp() { return lastHoleComp; }, turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, buildAMF, buildPLY, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, get lastBundle() { return lastBundle; }, runExport, exportBundle, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
 })();
 
 // ---------- ZIP (mit Kompression, wenn der Browser sie kann) ----------
@@ -1626,28 +1718,43 @@ const Zip = (() => {
   async function read(buf, filter) {
     const bytes = buf instanceof Uint8Array ? buf : ArrayBuffer.isView(buf) ? new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength) : new Uint8Array(buf);
     const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), dec = new TextDecoder('utf-8'), out = new Map();
+    const maxEntries = (typeof Store !== 'undefined' && Store.LIMITS && Store.LIMITS.zipMaxEntries) || 2000;
+    const maxEntry = (typeof Store !== 'undefined' && Store.LIMITS && Store.LIMITS.zipEntry) || 100 * 1024 * 1024;
+    const maxTotal = (typeof Store !== 'undefined' && Store.LIMITS && Store.LIMITS.zipUncompressed) || 200 * 1024 * 1024;
     let eocd = -1;
     for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
       if (dv.getUint32(i, true) === 0x06054b50 && i + 22 + dv.getUint16(i + 20, true) <= bytes.length) { eocd = i; break; }
     }
     if (eocd < 0) throw new Error('Das ist keine gültige 3MF-/ZIP-Datei.');
     const entries = dv.getUint16(eocd + 10, true), cdOff = dv.getUint32(eocd + 16, true);
-    let p = cdOff;
+    if (entries > maxEntries) throw new Error('Die ZIP-Datei enthält zu viele Einträge.');
+    let p = cdOff, totalUncomp = 0;
     for (let i = 0; i < entries; i++) {
       if (p + 46 > bytes.length || dv.getUint32(p, true) !== 0x02014b50) throw new Error('Die 3MF-/ZIP-Datei ist beschädigt.');
       const method = dv.getUint16(p + 10, true), compSize = dv.getUint32(p + 20, true), uncompSize = dv.getUint32(p + 24, true);
       const nameLen = dv.getUint16(p + 28, true), extraLen = dv.getUint16(p + 30, true), commentLen = dv.getUint16(p + 32, true), localOff = dv.getUint32(p + 42, true);
       const name = dec.decode(bytes.subarray(p + 46, p + 46 + nameLen)).replace(/\\/g, '/').replace(/^\/+/, '');
       p += 46 + nameLen + extraLen + commentLen;
+      if (name.split('/').includes('..')) throw new Error('Ungültiger Dateipfad in der ZIP-Datei.');
       if (name.endsWith('/') || (filter && !filter(name))) continue;
+      if (uncompSize > maxEntry) throw new Error('Ein Eintrag in der ZIP-Datei ist zu groß (über 100 MB).');
+      totalUncomp += uncompSize;
+      if (totalUncomp > maxTotal) throw new Error('Die entpackte ZIP-Datei ist zu groß (über 200 MB).');
       if (localOff + 30 > bytes.length || dv.getUint32(localOff, true) !== 0x04034b50) throw new Error('Die 3MF-/ZIP-Datei ist beschädigt.');
       const dataOff = localOff + 30 + dv.getUint16(localOff + 26, true) + dv.getUint16(localOff + 28, true);
       if (dataOff + compSize > bytes.length) throw new Error('Die 3MF-/ZIP-Datei ist unvollständig.');
       const raw = bytes.subarray(dataOff, dataOff + compSize);
       if (uncompSize === 0 && compSize === 0) out.set(name, new Uint8Array(0));
       else if (method === 0) out.set(name, raw.slice());
-      else if (method === 8) out.set(name, await inflate(raw));
-      else throw new Error('Nicht unterstützte ZIP-Kompression (' + method + ').');
+      else if (method === 8) {
+        const inf = await inflate(raw);
+        if (inf.byteLength > maxEntry) throw new Error('Ein Eintrag in der ZIP-Datei ist zu groß (über 100 MB).');
+        if (inf.byteLength > uncompSize) {
+          totalUncomp += (inf.byteLength - uncompSize);
+          if (totalUncomp > maxTotal) throw new Error('Die entpackte ZIP-Datei ist zu groß (über 200 MB).');
+        }
+        out.set(name, inf);
+      } else throw new Error('Nicht unterstützte ZIP-Kompression (' + method + ').');
     }
     return out;
   }

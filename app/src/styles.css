@@ -1770,6 +1770,28 @@ body.high-contrast .btn,body.high-contrast .tool,body.high-contrast .icon-btn,bo
 body.high-contrast .tool.primary,body.high-contrast .btn.primary{border-color:var(--accent);background:var(--accent);color:var(--accent-ink)}
 body.high-contrast .node.sel,body.high-contrast .seg button[aria-pressed="true"],body.high-contrast .tabs button[aria-selected="true"],body.high-contrast .tool.active,body.high-contrast .tool[aria-expanded="true"]{outline:1.5px solid var(--accent)}
 
+/* ---------- Technische Illustration & Vierfach-Ansicht (AN-17, AN-18) ---------- */
+body.tech-illustration .center{background:#ffffff}
+body.quad-view-on .viewcube,body.quad-view-on .axis-gizmo{display:none}
+.quad-view{position:absolute;inset:0;z-index:8;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;pointer-events:none}
+.quad-pane{position:relative;min-width:0;min-height:0;border-right:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);pointer-events:auto}
+.quad-pane:nth-child(2n){border-right:0}
+.quad-pane:nth-child(n+3){border-bottom:0}
+.quad-pane.active{box-shadow:inset 0 0 0 2px var(--accent)}
+.quad-hit{position:absolute;inset:0;cursor:grab;touch-action:none}
+.quad-hit:active{cursor:grabbing}
+.quad-head{position:absolute;top:8px;left:8px;z-index:2;display:inline-flex;align-items:center;gap:4px;padding:3px 5px 3px 8px;border-radius:8px;background:color-mix(in srgb,var(--surface) 88%,transparent);border:1px solid var(--line);box-shadow:var(--shadow-1);backdrop-filter:blur(4px);pointer-events:auto;user-select:none}
+.quad-pane.active .quad-head{border-color:var(--accent-line)}
+.quad-label{font:600 12px/1 var(--font-cond);letter-spacing:.04em;text-transform:uppercase;color:var(--ink);padding-right:2px}
+.quad-proj{border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);border-radius:5px;padding:2px 6px;font:600 11px/1.2 var(--font-cond)}
+.quad-proj[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.quad-reset{width:22px;height:22px;border:0;border-radius:5px;background:transparent;color:var(--muted);display:grid;place-items:center;padding:0}
+.quad-reset:hover{background:var(--surface-3);color:var(--ink)}
+.quad-reset svg{width:13px;height:13px}
+.quad-close-btn{position:absolute;top:8px;right:10px;z-index:3;display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);font:600 12.5px/1 var(--font-cond);box-shadow:var(--shadow-1);pointer-events:auto}
+.quad-close-btn:hover{border-color:var(--accent);color:var(--accent)}
+.quad-close-btn svg{width:14px;height:14px}
+
 
 
 

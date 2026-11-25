@@ -28262,6 +28262,343 @@ def t_a145_rundung_g2(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_paket_und_sicherheit(p):
+    import base64, tempfile, zipfile
+    p.empty()
+
+    # 1. Zwei Körper anlegen und prüfen: „Alles als Paket“ in Einfach und Profi sichtbar + Hilfe + Befehlssuche
+    p.ev("""App.change('Paket-Test', d => {
+      const a = Model.newItem('box', {w: 30, d: 20, h: 10}, {name: 'Deckel'});
+      const b = Model.newItem('cylinder', {d: 16, h: 12}, {name: 'Boden'});
+      b.t.x = 40;
+      d.items.push(a, b);
+    })""")
+    warte_rechnen(p)
+
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(300)
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(400)
+    vis_simple = p.pg.locator('#ex-bundle-btn').is_visible()
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(300)
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(400)
+    vis_pro = p.pg.locator('#ex-bundle-btn').is_visible()
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    eb_help = hilfen.get('exportBundle') or {}
+    meta = p.ev("""return {
+      cmd: Commands.search('alles als paket').some(c => c.id === 'export-bundle'),
+    };""")
+    ok1 = vis_simple and vis_pro and bool(eb_help.get('tip') and eb_help.get('hilfe') and eb_help.get('tipp')) and meta['cmd']
+
+    # 2. Paket-ZIP mit 2 Körpern: Projekt, Zeichnung (PDF), STEP und 2 STL-Dateien
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.locator('#ex-bundle-btn').click()
+    zpath = os.path.join(tempfile.gettempdir(), 'tracery-a143-paket.zip')
+    dl.value.save_as(zpath)
+    with zipfile.ZipFile(zpath) as zf:
+        names = zf.namelist()
+        json_files = [n for n in names if n.endswith('.tracery.json')]
+        pdf_files = [n for n in names if n.startswith('Zeichnungen/') and n.endswith('.pdf')]
+        step_files = [n for n in names if n.endswith('.step')]
+        stl_files = sorted(n for n in names if n.startswith('STL/') and n.endswith('.stl'))
+        proj_ok = False
+        if len(json_files) == 1:
+            proj = json.loads(zf.read(json_files[0]).decode('utf-8'))
+            proj_ok = proj.get('format') == 'masswerk' and len(proj.get('items', [])) == 2
+        pdf_ok = len(pdf_files) == 1 and zf.read(pdf_files[0]).startswith(b'%PDF-') and len(zf.read(pdf_files[0])) > 200
+        step_ok = len(step_files) == 1 and b'ISO-10303-21' in zf.read(step_files[0])
+        stl_ok = stl_files == ['STL/Boden.stl', 'STL/Deckel.stl'] and all(len(zf.read(s)) > 84 for s in stl_files)
+        ok2 = proj_ok and pdf_ok and step_ok and stl_ok and ('LIESMICH.txt' in names)
+
+    # 3. SVG mit <script>, Event-Handlern und externen Links einlesen
+    p.ev("Start.newProject(true); window.__a143_xss = 0;"); p.wait(400)
+    evil_svg = """<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="20mm" viewBox="0 0 40 20">
+  <script>window.__a143_xss = 1;</script>
+  <style>@import url(https://evil.example/style.css);</style>
+  <a href="https://evil.example/click">
+    <rect x="0" y="0" width="40" height="20" onclick="window.__a143_xss = 2"/>
+  </a>
+  <image href="https://evil.example/img.png" width="5" height="5"/>
+</svg>"""
+    p.ev("Start.openBlob(new File([arg], 'sicher.svg', {type: 'image/svg+xml'}))", evil_svg)
+    p.wait(800); warte_rechnen(p, 40)
+    svg_res = p.ev("""const it = App.doc.items[0];
+      const R = it && App.results.get(it.id);
+      const san = Store.sanitizeSVG(arg);
+      return {
+        xss: window.__a143_xss,
+        stats: Start.lastSvgSanitize,
+        clean: san && san.svg,
+        n: App.doc.items.length,
+        errs: App.errors.length,
+        bb: R && R.data && R.data.bbox,
+      };""", evil_svg)
+    toast_txt = p.pg.locator('.toast').last.inner_text()
+    bb = svg_res['bb']
+    clean_low = (svg_res['clean'] or '').lower()
+    st = svg_res['stats'] or {}
+    ok3 = (
+        svg_res['xss'] == 0
+        and st.get('scripts') == 1
+        and st.get('handlers', 0) >= 1
+        and st.get('externalLinks', 0) >= 2
+        and '<script' not in clean_low
+        and 'onclick' not in clean_low
+        and 'evil.example' not in clean_low
+        and svg_res['n'] == 1
+        and svg_res['errs'] == 0
+        and bb is not None and abs(bb[3] - bb[0] - 40) < 0.05 and abs(bb[4] - bb[1] - 20) < 0.05
+        and ('Skripte' in toast_txt or 'Sicherheitsgründen' in toast_txt)
+    )
+
+    # 4. SVG-Aufkleber und normalizeDecal bereinigen unsichere SVG-Daten
+    decal_out = p.ev("""return Actions.parseDecalFile(new File([arg], 'aufkleber.svg', {type: 'image/svg+xml'})).then(d => ({
+      src: d && d.src,
+      badUrlRejected: Model.normalizeDecal({src: 'javascript:alert(1)', face: {n: [0,0,1], c: [0,0,0]}}) === null,
+    }));""", evil_svg)
+    dec_src = decal_out.get('src') or ''
+    dec_svg = ''
+    if dec_src.startswith('data:image/svg+xml;base64,'):
+        dec_svg = base64.b64decode(dec_src.split(',', 1)[1]).decode('utf-8', 'replace').lower()
+    ok4 = (
+        bool(dec_svg)
+        and '<script' not in dec_svg
+        and 'onclick' not in dec_svg
+        and 'evil.example' not in dec_svg
+        and decal_out.get('badUrlRejected') is True
+    )
+
+    # 5. Größenlimit, unbekanntes Format, Prototype-Pollution & ZIP-Pfad-Schutz
+    sec = p.ev("""const big = Store.checkFileSize({name: 'riesig.svg', size: 12 * 1024 * 1024}, 'svg');
+      const pj = Store.safeParseJSON('{"format":"masswerk","__proto__":{"a143Polluted":1},"items":[]}');
+      const polluted = ({}).a143Polluted !== undefined;
+      let travErr = '';
+      return Start.openBlob(new File(['MZ'], 'virus.exe')).then(async () => {
+        const zBad = await Print.build3MF([], 'x').catch(() => null);
+        // Manuelles ZIP mit '../evil.txt' prüfen
+        const enc = new TextEncoder();
+        const nm = enc.encode('../evil.txt'), data = enc.encode('hi');
+        const lh = new DataView(new ArrayBuffer(30));
+        lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, nm.length, true);
+        const ch = new DataView(new ArrayBuffer(46));
+        ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, nm.length, true);
+        const off = 30 + nm.length + data.length;
+        const end = new DataView(new ArrayBuffer(22));
+        end.setUint32(0, 0x06054b50, true); end.setUint16(8, 1, true); end.setUint16(10, 1, true); end.setUint32(12, 46 + nm.length, true); end.setUint32(16, off, true);
+        const zipBytes = new Uint8Array(off + 46 + nm.length + 22);
+        zipBytes.set(new Uint8Array(lh.buffer), 0); zipBytes.set(nm, 30); zipBytes.set(data, 30 + nm.length);
+        zipBytes.set(new Uint8Array(ch.buffer), off); zipBytes.set(nm, off + 46); zipBytes.set(new Uint8Array(end.buffer), off + 46 + nm.length);
+        try { await Start.parse3MF(zipBytes); } catch (e) { travErr = e && e.message || String(e); }
+        return { big, pjOk: pj.ok, polluted, travErr };
+      });""")
+    bad_toast = p.pg.locator('.toast').last.inner_text()
+    ok5 = (
+        sec['big']['ok'] is False
+        and 'zu groß' in sec['big']['message']
+        and sec['pjOk'] is True
+        and sec['polluted'] is False
+        and 'Ungültiger Dateipfad' in sec['travErr']
+        and 'nicht unterstützt' in bad_toast
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a137_illustration_vierfach(p):
+    p.empty()
+    p.ev("""
+      App.change('a137-setup', d => {
+        const b = Model.newItem('box', { w: 40, d: 30, h: 15 }, { name: 'Klotz', color: '#d9483f' });
+        const c = Model.newItem('cylinder', { d: 20, h: 25 }, { name: 'Welle', color: '#3067d0' });
+        c.t.x = 45;
+        d.items.push(b, c);
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("ViewPrefs.set({ level: 'simple', display: 'edges', look: 'studio' }); if (Views.quadActive) Views.quad(false);")
+    p.wait(250)
+
+    # 1. Profi-Sichtbarkeit: in Einfach ausgeblendet, in Profi vorhanden
+    p.pg.click('#t-more'); p.wait(200)
+    p.pg.locator('.menu button').filter(has_text='Ansicht:').first.click(); p.wait(200)
+    simple_hidden = p.pg.locator('#disp-illustration').count() == 0 and p.pg.locator('#view-quad').count() == 0
+    p.pg.keyboard.press('Escape'); p.wait(150)
+
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    p.pg.click('#t-views'); p.wait(200)
+    pro_vis = p.pg.locator('#disp-illustration').count() == 1 and p.pg.locator('#view-quad').count() == 1
+    ok1 = bool(simple_hidden and pro_vis)
+
+    # 2. Technische Illustration (AN-17): weiße Flächen, dunkle Kanten, Silhouetten-Umriss, weißer Grund
+    p.pg.click('#disp-illustration'); p.wait(350)
+    ill = p.ev("""
+      const ids = App.doc.items.map(it => it.id);
+      const nodes = ids.map(id => {
+        const n = Viewer.nodes.get(id);
+        const m = n && n.mesh && n.mesh.material;
+        const em = n && n.edges && n.edges.material;
+        return n ? {
+          isBasic: !!(m && m.isMeshBasicMaterial),
+          col: m && m.color ? m.color.getHexString() : null,
+          vc: !!(m && m.vertexColors),
+          edgeVis: !!(n.edges && n.edges.visible),
+          edgeCol: em && em.color ? em.color.getHexString() : null,
+          edgeOp: em ? em.opacity : null,
+          outlineVis: !!(n.outline && n.outline.visible),
+        } : null;
+      });
+      return {
+        disp: ViewPrefs.get().display,
+        cls: document.body.classList.contains('tech-illustration'),
+        bg: getComputedStyle(document.querySelector('.center')).backgroundColor,
+        floorVis: !!(Viewer.floor && Viewer.floor.visible),
+        nodes,
+      };
+    """)
+    p.pg.click('#t-views'); p.wait(200)
+    p.pg.click('#disp-edges'); p.wait(300)
+    ill_off = p.ev("""
+      const n0 = Viewer.nodes.get(App.doc.items[0].id);
+      return {
+        disp: ViewPrefs.get().display,
+        cls: document.body.classList.contains('tech-illustration'),
+        hasOutline: !!(n0 && n0.outline),
+        isBasic: !!(n0 && n0.mesh && n0.mesh.material && n0.mesh.material.isMeshBasicMaterial),
+      };
+    """)
+    ok2 = (
+        ill['disp'] == 'illustration' and ill['cls'] is True and ill['bg'] == 'rgb(255, 255, 255)'
+        and ill['floorVis'] is False and len(ill['nodes']) == 2
+        and all(n and n['isBasic'] and n['col'] == 'ffffff' and not n['vc'] and n['edgeVis'] and n['edgeCol'] == '11161c' and n['edgeOp'] == 1 and n['outlineVis'] for n in ill['nodes'])
+        and ill_off['disp'] == 'edges' and ill_off['cls'] is False and ill_off['hasOutline'] is False and ill_off['isBasic'] is False
+    )
+
+    # 3. Vierfach-Ansicht (AN-18): einschalten -> 4 Bereiche (Vorn, Oben, Rechts, Schräg)
+    p.pg.click('#t-views'); p.wait(200)
+    p.pg.click('#view-quad'); p.wait(450)
+    q_info = p.ev("""
+      const panes = [...document.querySelectorAll('.quad-pane')].map(el => {
+        const r = el.getBoundingClientRect();
+        const lbl = el.querySelector('.quad-label');
+        return { key: el.dataset.quad, label: lbl ? lbl.textContent.trim() : '', x: r.left, y: r.top, w: r.width, h: r.height };
+      });
+      const vPanes = Viewer.quadPanes.map(q => {
+        const d = [q.camPos[0] - q.target[0], q.camPos[1] - q.target[1], q.camPos[2] - q.target[2]];
+        const L = Math.hypot(d[0], d[1], d[2]) || 1;
+        return { key: q.key, ortho: q.ortho, camPos: q.camPos, dir: [d[0] / L, d[1] / L, d[2] / L] };
+      });
+      return {
+        active: Views.quadActive,
+        vQuad: Viewer.quad,
+        cls: document.body.classList.contains('quad-view-on'),
+        ctrlDisabled: !Viewer.controls.enabled,
+        panes,
+        vPanes,
+      };
+    """)
+    p_by_k = {x['key']: x for x in q_info['panes']}
+    vp_by_k = {x['key']: x for x in q_info['vPanes']}
+    ok3 = (
+        q_info['active'] is True and q_info['vQuad'] is True and q_info['cls'] is True and q_info['ctrlDisabled'] is True
+        and len(q_info['panes']) == 4 and len(q_info['vPanes']) == 4
+        and p_by_k['front']['label'] == 'Vorn' and p_by_k['top']['label'] == 'Oben'
+        and p_by_k['right']['label'] == 'Rechts' and p_by_k['iso']['label'] == 'Schräg'
+        and all(x['w'] > 100 and x['h'] > 100 for x in q_info['panes'])
+        and p_by_k['front']['x'] < p_by_k['top']['x'] and p_by_k['front']['y'] < p_by_k['right']['y']
+        and vp_by_k['front']['dir'][1] < -0.99 and vp_by_k['top']['dir'][2] > 0.99 and vp_by_k['right']['dir'][0] > 0.99
+        and vp_by_k['iso']['ortho'] is False and vp_by_k['front']['ortho'] is True
+    )
+
+    # 4. Jede Ansicht einzeln drehbar + Reset + Ortho/Persp
+    def cam_dist(a, b):
+        return math.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3)))
+
+    def wait_settled(key):
+        prev = {x['key']: x['camPos'] for x in p.ev("return Viewer.quadPanes")}
+        stable = 0
+        for _ in range(20):
+            p.wait(300)
+            cur = {x['key']: x['camPos'] for x in p.ev("return Viewer.quadPanes")}
+            if cam_dist(prev[key], cur[key]) < 1e-4:
+                stable += 1
+                if stable >= 2:
+                    return cur
+            else:
+                stable = 0
+            prev = cur
+        return prev
+
+    before = {x['key']: x['camPos'] for x in p.ev("return Viewer.quadPanes")}
+    fb = p.pg.locator('.quad-pane[data-quad="front"] .quad-hit').bounding_box()
+    fx, fy = fb['x'] + fb['width'] * 0.5, fb['y'] + fb['height'] * 0.5
+    p.pg.mouse.move(fx, fy); p.pg.mouse.down(); p.pg.mouse.move(fx + 90, fy - 50, steps=8); p.pg.mouse.up()
+    after_front = wait_settled('front')
+
+    ib = p.pg.locator('.quad-pane[data-quad="iso"] .quad-hit').bounding_box()
+    ix, iy = ib['x'] + ib['width'] * 0.5, ib['y'] + ib['height'] * 0.5
+    p.pg.mouse.move(ix, iy); p.pg.mouse.down(); p.pg.mouse.move(ix - 80, iy + 45, steps=8); p.pg.mouse.up()
+    after_iso = wait_settled('iso')
+
+    p.pg.click('.quad-pane[data-quad="front"] .quad-reset'); p.wait(250)
+    front_dir_reset = p.ev("""
+      const f = Viewer.quadPanes.find(x => x.key === 'front');
+      const d = [f.camPos[0] - f.target[0], f.camPos[1] - f.target[1], f.camPos[2] - f.target[2]];
+      const L = Math.hypot(d[0], d[1], d[2]) || 1;
+      return d[1] / L;
+    """)
+    p.pg.click('.quad-pane[data-quad="iso"] .quad-proj'); p.wait(200)
+    iso_ortho = p.ev("return { ortho: Viewer.quadPanes.find(x => x.key === 'iso').ortho, txt: document.querySelector('.quad-pane[data-quad=\"iso\"] .quad-proj').textContent.trim() }")
+    ok4 = (
+        cam_dist(before['front'], after_front['front']) > 1.0
+        and cam_dist(before['top'], after_front['top']) < 1e-3
+        and cam_dist(before['right'], after_front['right']) < 1e-3
+        and cam_dist(before['iso'], after_front['iso']) < 1e-3
+        and cam_dist(after_front['iso'], after_iso['iso']) > 1.0
+        and cam_dist(after_front['front'], after_iso['front']) < 1e-3
+        and cam_dist(after_front['top'], after_iso['top']) < 1e-3
+        and cam_dist(after_front['right'], after_iso['right']) < 1e-3
+        and front_dir_reset < -0.99
+        and iso_ortho['ortho'] is True and iso_ortho['txt'] == 'Ortho'
+    )
+
+    # 5. Ausschalten -> wieder 1 Ansicht + Hilfen/DE-EN/Befehle
+    p.pg.click('#quad-close'); p.wait(300)
+    closed = p.ev("""
+      return {
+        active: Views.quadActive,
+        vQuad: Viewer.quad,
+        cls: document.body.classList.contains('quad-view-on'),
+        domCount: document.querySelectorAll('.quad-pane').length,
+        paneLen: Viewer.quadPanes.length,
+        ctrlEnabled: !!Viewer.controls.enabled,
+        vcVis: getComputedStyle(document.querySelector('.viewcube')).display !== 'none',
+      };
+    """)
+    meta = p.ev("""return (async () => {
+      const [h, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const chkHelp = (k) => { const b = document.createElement('button'); b.dataset.help = k; return Explain.describeElement(b); };
+      const eIll = chkHelp('illustration'), eQuad = chkHelp('quadView');
+      const helpOk = !!(h.illustration && h.illustration.tip && h.illustration.hilfe && h.illustration.tipp
+        && h.quadView && h.quadView.tip && h.quadView.hilfe && h.quadView.tipp
+        && eIll && eIll.text === h.illustration.hilfe && eQuad && eQuad.text === h.quadView.hilfe);
+      const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+      const i18nEq = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+      const cmdIll = Commands.search('illustration').some(c => c.id === 'disp-illustration');
+      const cmdQuad = Commands.search('vierfach').some(c => c.id === 'quad-view');
+      return { helpOk, i18nEq, cmdIll, cmdQuad };
+    })()""")
+    ok5 = bool(
+        closed['active'] is False and closed['vQuad'] is False and closed['cls'] is False
+        and closed['domCount'] == 0 and closed['paneLen'] == 0 and closed['ctrlEnabled'] is True and closed['vcVis'] is True
+        and meta.get('helpOk') and meta.get('i18nEq') and meta.get('cmdIll') and meta.get('cmdQuad') and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -28514,8 +28851,10 @@ TESTS = [
     ('[A-138] Kreis-Menü (Q / Rechts-Halten / einstellbar) und Malen-Auswahl (Flächen / Kanten)', t_kreis_malen),
     ('[A-142] Als App installieren, ohne Internet nutzbar (BE-23)', t_a142_pwa_offline),
     ('[A-141] Tastaturbedienung, hoher Kontrast und Vorlese-Texte', t_a141_barrierefreiheit),
+    ('[A-137] Technische Illustration (weiß/Kanten) und Vierfach-Ansicht (4 drehbare Ansichten)', t_a137_illustration_vierfach),
     ('[F-11250803] Volltest-Reparatur: Schraubenlöcher bei kaltem Kern / Befehlssuche „Fläche auf Fläche“', t_f11250803),
     ('[A-145] Krümmungsglatte Rundung (G2): Form-Wahl, Volumen, Profi & Speichern/Laden (KP-40)', t_a145_rundung_g2),
+    ('[A-143] Alles als Paket (ZIP) und Sicherheit beim Einlesen', t_paket_und_sicherheit),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -2596,6 +2596,22 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Konkave Kante, Zylinder-Kreiskante, variabler Radius, Hilfen & DE/EN**: Innere Kante an L-Winkel (`r = 4`), Zylinder-Oberkante (`r = 3`) und veränderliche G2-Rundung rechnen fehlerfrei; zu großer Radius meldet `toobig`; `HELP.filletG2` und `werkzeug-hilfen.json` sind gleich, DE/EN-Schlüssel komplett gleich, Befehl `fillet-g2` und `Explain.local` geprüft (`t_a145_rundung_g2`).
 - [ ] **Von Hand**: Im Browser einen Quader mit „Studio-Look“ und einer krümmungsglatten Rundung (`G2`) neben einer normalen runden Kante vergleichen und die weicher einlaufenden Lichtreflexe auf der G2-Fläche prüfen.
 
+## Alles als Paket (ZIP) und Sicherheit beim Einlesen (Auto [A-143], IO-18, PL-16)
+
+- [x] **Einfach & Profi, Hilfe und Befehlssuche**: Knopf `#ex-bundle-btn` („Alles als Paket speichern“) ist sowohl in „Einfach“ als auch in „Profi“ im Export-Dialog sichtbar; Hilfetext `exportBundle` und Befehl `export-bundle` sind vorhanden (`t_paket_und_sicherheit`).
+- [x] **Alles als Paket (ZIP) mit 2 Körpern (`IO-18`)**: Exportiert über `#ex-bundle-btn` ein `<Name>-Paket.zip` mit der Projektdatei (`.tracery.json`, 2 Körper), den technischen Zeichnungen (`Zeichnungen/<Name>.pdf` als gültiges `%PDF-`), exakt einer `.step`-Datei, genau zwei STL-Dateien (`STL/Deckel.stl`, `STL/Boden.stl`) sowie `LIESMICH.txt` (`t_paket_und_sicherheit`).
+- [x] **SVG-Schutz ohne Ausführung (`PL-16`)**: SVG mit `<script>`, `onclick`-Handler, `<style>@import …</style>` und externen `href`-Links wird ohne Skriptausführung eingelesen (`window.__a143_xss === 0`), die Skripte/Handler/Links werden entfernt (`Start.lastSvgSanitize`), das Rechteck (40 × 20 mm) sauber importiert und ein Hinweis-Toast angezeigt; SVG-Aufkleber (`Actions.parseDecalFile`) und `Model.normalizeDecal` bereinigen unsichere Inhalte ebenso (`t_paket_und_sicherheit`).
+- [x] **Größenlimits, Dateiformat, Prototype-Pollution & ZIP-Schutz**: Übergroße Dateien (`Store.checkFileSize`), nicht unterstützte Endungen (`virus.exe`), `__proto__`-Schlüssel in JSON (`Store.safeParseJSON`) und `..`-Pfade in ZIPs (`Zip.read`) werden mit klaren deutschen Meldungen abgewiesen (`t_paket_und_sicherheit`).
+- [ ] **Von Hand**: Im Browser ein Projekt mit mehreren Körpern und einer bemaßten Zeichnung sowohl in „Einfach“ als auch in „Profi“ über Projekt-Menü und Export-Dialog als Paket herunterladen, entpacken und die erzeugte PDF-Zeichnung, STEP und STLs in einem externen Viewer öffnen sowie eine große (> 8 MB) oder fremde Datei per Drag-and-Drop ins Fenster ziehen.
+
+## Technische Illustration und vier Ansichten (Auto [A-137], AN-17, AN-18)
+
+- [x] **Profi-Sichtbarkeit**: `#disp-illustration` und `#view-quad` sind im Einfach-Modus ausgeblendet und im Profi-Ansichtsmenü (`#t-views`) verfügbar (`t_a137_illustration_vierfach`).
+- [x] **Technische Illustration (`AN-17`)**: `#disp-illustration` schaltet `body.tech-illustration` mit rein weißem Hintergrund (`rgb(255, 255, 255)`), weißen Flächen ohne Werkstoff-/Flächenfarben oder Boden-Schatten sowie dunklen Kanten (`#11161c`) und Silhouetten-Umriss (`n.outline`) ein; Zurückschalten auf `#disp-edges` stellt die normale Darstellung wieder her (`t_a137_illustration_vierfach`).
+- [x] **Vierfach-Ansicht (`AN-18`)**: `#view-quad` teilt das 3D-Fenster in vier Bereiche (Vorn, Oben, Rechts, Schräg) mit eigenen Kameras und `OrbitControls`; Ziehen in einem Bereich dreht nur diesen Bereich, `.quad-reset` und `.quad-proj` (Ortho/Persp) steuern ihn gezielt, `#quad-close` kehrt sauber zur Einzelansicht zurück (`t_a137_illustration_vierfach`).
+- [x] **Hilfen, DE/EN & Befehle**: `HELP.illustration`/`HELP.quadView`, DE/EN-Schlüsselgleichheit und Befehlssuche (`disp-illustration`, `quad-view`) geprüft (`t_a137_illustration_vierfach`).
+- [ ] **Von Hand**: Im Browser einen abgerundeten Körper mit Bohrungen in „Technische Illustration“ drehen, die Kanten- und Umrissqualität (auch per „Bild speichern“) prüfen und in der Vierfach-Ansicht gleichzeitig aus allen vier Blickrichtungen modellieren.
+
 ## Fehler melden
 
 ```

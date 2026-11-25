@@ -1217,7 +1217,8 @@ const Start = (() => {
       : /\.(igs|iges)$/i.test(f.name) ? 'iges'
       : /\.brep$/i.test(f.name) ? 'brep'
       : 'step';
-    if (f.size > 100e6) { UI.toast('Die Datei ist zu groß (über 100 MB).', { kind: 'bad' }); return; }
+    const sz = Store.checkFileSize(f, 'cad');
+    if (!sz.ok) { UI.toast(sz.message, { kind: 'bad', ms: 7000 }); return; }
     ensureModelMode();
     if (el) newProject(true);
     const bytes = new Uint8Array(await f.arrayBuffer());
@@ -1312,7 +1313,7 @@ const Start = (() => {
     };
     const normHex = (s) => { const m = /^\s*#?([0-9a-f]{6})(?:[0-9a-f]{2})?\s*$/i.exec(s || ''); return m ? '#' + m[1].toLowerCase() : null; };
     const dec = new TextDecoder('utf-8'), parser = new DOMParser();
-    const parseXml = (bytes) => parser.parseFromString(dec.decode(bytes).replace(/^\uFEFF/, ''), 'application/xml');
+    const parseXml = (bytes) => parser.parseFromString(Store.stripXmlDoctype(dec.decode(bytes)), 'application/xml');
     let mainPath = null;
     const rels = findEntry('_rels/.rels');
     if (rels) {
@@ -1455,7 +1456,8 @@ const Start = (() => {
     return { parts, unit: rootModel.unitName, unitScale: rootModel.unitScale, title: rootModel.title };
   }
   async function import3MF(f) {
-    if (f.size > 100e6) { UI.toast('Die Datei ist zu groß (über 100 MB).', { kind: 'bad' }); return; }
+    const sz = Store.checkFileSize(f, 'cad');
+    if (!sz.ok) { UI.toast(sz.message, { kind: 'bad', ms: 7000 }); return; }
     let parsed;
     try { parsed = await parse3MF(await f.arrayBuffer()); } catch (e) {
       UI.toast('Diese 3MF-Datei kann ich nicht lesen: ' + (e && e.message ? e.message : 'unbekannter Fehler'), { kind: 'bad', ms: 7000 });
@@ -1555,7 +1557,8 @@ const Start = (() => {
     return { parts };
   }
   async function importOBJ(f) {
-    if (f.size > 100e6) { UI.toast('Die Datei ist zu groß (über 100 MB).', { kind: 'bad' }); return; }
+    const sz = Store.checkFileSize(f, 'cad');
+    if (!sz.ok) { UI.toast(sz.message, { kind: 'bad', ms: 7000 }); return; }
     let parsed;
     try { parsed = parseOBJ(await f.text()); } catch (e) {
       UI.toast('Diese OBJ-Datei kann ich nicht lesen: ' + (e && e.message ? e.message : 'unbekannter Fehler'), { kind: 'bad', ms: 7000 });
@@ -1597,7 +1600,7 @@ const Start = (() => {
     } else {
       xmlText = new TextDecoder('utf-8').decode(bytes);
     }
-    const doc = new DOMParser().parseFromString(xmlText.replace(/^\uFEFF/, ''), 'application/xml');
+    const doc = new DOMParser().parseFromString(Store.stripXmlDoctype(xmlText), 'application/xml');
     const root = doc.documentElement;
     if (!root || root.localName !== 'amf' || doc.querySelector('parsererror')) {
       throw new Error('Die AMF-XML-Datei ist ungültig oder beschädigt.');
@@ -1737,7 +1740,8 @@ const Start = (() => {
     return { parts, unit: unitName, unitScale };
   }
   async function importAMF(f) {
-    if (f.size > 100e6) { UI.toast('Die Datei ist zu groß (über 100 MB).', { kind: 'bad' }); return; }
+    const sz = Store.checkFileSize(f, 'cad');
+    if (!sz.ok) { UI.toast(sz.message, { kind: 'bad', ms: 7000 }); return; }
     let parsed;
     try { parsed = await parseAMF(await f.arrayBuffer()); } catch (e) {
       UI.toast('Diese AMF-Datei kann ich nicht lesen: ' + (e && e.message ? e.message : 'unbekannter Fehler'), { kind: 'bad', ms: 7000 });
@@ -2012,7 +2016,8 @@ const Start = (() => {
     };
   }
   async function importPLY(f) {
-    if (f.size > 100e6) { UI.toast('Die Datei ist zu groß (über 100 MB).', { kind: 'bad' }); return; }
+    const sz = Store.checkFileSize(f, 'cad');
+    if (!sz.ok) { UI.toast(sz.message, { kind: 'bad', ms: 7000 }); return; }
     let parsed;
     try { parsed = parsePLY(await f.arrayBuffer()); } catch (e) {
       UI.toast('Diese PLY-Datei kann ich nicht lesen: ' + (e && e.message ? e.message : 'unbekannter Fehler'), { kind: 'bad', ms: 7000 });
@@ -2160,7 +2165,8 @@ const Start = (() => {
     return { ok: true, points, is3D, colors, skipped, hasHeader, bbox: [x0, y0, z0, x1, y1, z1], error: null };
   }
   async function importPoints(f, opts = {}) {
-    if (f.size > 50e6) { UI.toast('Die Punkte-Datei ist zu groß (über 50 MB).', { kind: 'bad' }); return null; }
+    const sz = Store.checkFileSize(f, 'points');
+    if (!sz.ok) { UI.toast(sz.message, { kind: 'bad', ms: 7000 }); return null; }
     let txt;
     try { txt = await f.text(); } catch (_) { UI.toast('Die Punkte-Datei konnte nicht gelesen werden.', { kind: 'bad' }); return null; }
     if (!opts.target && Sketch.active) {
@@ -2330,9 +2336,12 @@ const Start = (() => {
     return { ents: ents.filter((e) => !((e.type === 'line' || e.type === 'arc') && Math.hypot(e.a[0] - e.b[0], e.a[1] - e.b[1]) < 1e-6)), unit, w: (x1 - x0) * unit, h: (y1 - y0) * unit };
   }
   // ---------- SVG lesen: Pfade, Rechtecke, Kreise, Ellipsen, Linien und Vielecke werden eine Skizze ----------
+  let lastSvgSanitize = null;
   function parseSVG(txt) {
-    const doc = new DOMParser().parseFromString(txt, 'image/svg+xml'), root = doc.documentElement;
-    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return null;
+    const san = Store.sanitizeSVG(txt);
+    if (!san.ok) return null;
+    lastSvgSanitize = san.stats;
+    const doc = san.doc, root = san.root;
     const ents = [], f = (v) => parseFloat(v) || 0, num = (el, k, d = 0) => (el.hasAttribute(k) ? f(el.getAttribute(k)) : d);
     // Einheit: Breite mit mm/cm/in und viewBox → Millimeter je Einheit, sonst 96 Punkte pro Zoll
     const MM = { mm: 1, cm: 10, in: 25.4, pt: 25.4 / 72, pc: 25.4 / 6, px: 25.4 / 96, '': 25.4 / 96 };
@@ -2455,14 +2464,16 @@ const Start = (() => {
       for (const c of el.children || []) walk(c, m);
     };
     walk(root, [1, 0, 0, 1, 0, 0]);
-    const r = tidyOutline(ents, unit); r.texts = texts; return r;
+    const r = tidyOutline(ents, unit); r.texts = texts; r.sanitized = san.stats; r.cleanSvg = san.svg; return r;
   }
   // Datei lesen und prüfen; Meldung, wenn nichts Brauchbares darin ist
   async function readOutline(f) {
     const svg = /\.svg$/i.test(f.name), K = svg ? 'SVG' : 'DXF';
-    if (f.size > 8e6) { UI.toast(`Die ${K}-Datei ist zu groß (über 8 MB).`, { kind: 'bad' }); return null; }
+    const sz = Store.checkFileSize(f, svg ? 'svg' : 'dxf');
+    if (!sz.ok) { UI.toast(sz.message, { kind: 'bad', ms: 7000 }); return null; }
     let r = null; try { const txt = await f.text(); r = svg ? parseSVG(txt) : parseDXF(txt); } catch (e) { console.warn(e); }
     if (!r) { UI.toast(svg ? 'Diese SVG kann ich nicht lesen – die Datei ist beschädigt oder kein SVG.' : 'Diese DXF kann ich nicht lesen. Speichere sie im anderen Programm als „DXF (ASCII / Text)“ – die binäre Fassung geht nicht.', { kind: 'bad', ms: 8000 }); return null; }
+    if (svg && r.sanitized && r.sanitized.stripped > 0) UI.toast(T('import.svgSanitized'), { icon: 'warn', ms: 6000 });
     if (!r.ents.length) { UI.toast(svg ? 'In der SVG habe ich keine Formen gefunden.' + (r.texts ? ' Text muss im Zeichenprogramm zuerst in Pfade umgewandelt werden („Objekt in Pfad“).' : ' Bilder (Fotos) in einer SVG kann ich nicht nachzeichnen.') : 'In der DXF habe ich keine Linien, Kreise oder Bögen gefunden. Liegt die Zeichnung in einem Block? Dann löse ihn im anderen Programm vorher auf („Explode“).', { kind: 'bad', ms: 9000 }); return null; }
     if (r.ents.length > 4000) { UI.toast(`Die ${K} hat ${r.ents.length} Elemente – das ist zu viel für eine Skizze (höchstens 4000).`, { kind: 'bad', ms: 7000 }); return null; }
     return r;
@@ -2471,7 +2482,8 @@ const Start = (() => {
   async function insertOutline(f) {
     const r = await readOutline(f); if (!r) return;
     const n = Sketch.insertEnts(r.ents);
-    if (n) UI.toast(`„${f.name}“ in die Skizze eingefügt: ${n} Elemente, ${fmt(r.w)} × ${fmt(r.h)} mm, Mitte auf dem Nullpunkt.` + (r.texts ? ' Text in der SVG fehlt – wandle ihn im Zeichenprogramm vorher in Pfade um.' : '') + ' Passt die Größe nicht? Werkzeug „Auswahl“ → rechts „Breite ändern“.', { icon: 'folder', ms: 8000 });
+    const sanNote = r.sanitized && r.sanitized.stripped > 0 ? ' (Unsichere Skripte/Links wurden entfernt.)' : '';
+    if (n) UI.toast(`„${f.name}“ in die Skizze eingefügt: ${n} Elemente, ${fmt(r.w)} × ${fmt(r.h)} mm, Mitte auf dem Nullpunkt.` + (r.texts ? ' Text in der SVG fehlt – wandle ihn im Zeichenprogramm vorher in Pfade um.' : '') + ' Passt die Größe nicht? Werkzeug „Auswahl“ → rechts „Breite ändern“.' + sanNote, { icon: 'folder', ms: 8000 });
   }
   async function importDXF(f) {
     const svg = /\.svg$/i.test(f.name), K = svg ? 'SVG' : 'DXF';
@@ -2485,10 +2497,12 @@ const Start = (() => {
     it.p = { sketch: { plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, ents: r.ents, dims: [], cons: [] }, dist: svg ? 1 : 3, dir: 'normal' };
     App.change(K + ' importiert', (doc) => { doc.items.push(it); });
     App.select([it.id]);
-    UI.toast(`„${f.name}“ importiert: ${r.ents.length} Elemente, ${fmt(r.w)} × ${fmt(r.h)} mm` + (!svg && r.unit !== 1 ? ' (in Millimeter umgerechnet)' : '') + `. Die Platte ist ${svg ? 1 : 3} mm dick – die Dicke änderst du rechts unter „Höhe“, den Umriss mit „Skizze bearbeiten“.` + (svg ? ' Stimmt die Größe nicht? „Skizze bearbeiten“ → rechts „Breite ändern“.' : '') + (r.texts ? ' Text in der SVG fehlt – wandle ihn im Zeichenprogramm vorher in Pfade um.' : ''), { icon: 'folder', ms: 9000 });
+    const sanNote = r.sanitized && r.sanitized.stripped > 0 ? ' (Unsichere Skripte/Links wurden entfernt.)' : '';
+    UI.toast(`„${f.name}“ importiert: ${r.ents.length} Elemente, ${fmt(r.w)} × ${fmt(r.h)} mm` + (!svg && r.unit !== 1 ? ' (in Millimeter umgerechnet)' : '') + `. Die Platte ist ${svg ? 1 : 3} mm dick – die Dicke änderst du rechts unter „Höhe“, den Umriss mit „Skizze bearbeiten“.` + (svg ? ' Stimmt die Größe nicht? „Skizze bearbeiten“ → rechts „Breite ändern“.' : '') + (r.texts ? ' Text in der SVG fehlt – wandle ihn im Zeichenprogramm vorher in Pfade um.' : '') + sanNote, { icon: 'folder', ms: 9000 });
     setTimeout(() => Viewer.fit([it.id]), 1500);
   }
   async function openBlob(f, opts = {}) {
+    if (!f) return;
     if (/\.(dxf|svg)$/i.test(f.name)) {
       if (Sketch.active) {
         if (Sketch.state && Sketch.state.step) {
@@ -2501,8 +2515,18 @@ const Start = (() => {
     }
     if (/\.(csv|xyz)$/i.test(f.name)) return importPoints(f, opts);
     if (/\.(step|stp|igs|iges|brep|stl|3mf|obj|amf|ply)$/i.test(f.name)) return importCAD(f);
+    const fn = String(f.name || '');
+    if (fn && !/\.json$/i.test(fn) && (f.type || '') !== 'application/json') {
+      UI.toast(T('import.errUnsupported', { name: fn }), { kind: 'bad', ms: 7000 });
+      return;
+    }
+    const sz = Store.checkFileSize(f, 'project');
+    if (!sz.ok) { UI.toast(sz.message, { kind: 'bad', ms: 7000 }); return; }
     try {
-      const txt = await f.text(); const doc = JSON.parse(txt);
+      const txt = await f.text();
+      const parsed = Store.safeParseJSON(txt, { limit: Store.LIMITS.project, name: fn });
+      if (!parsed.ok) throw new Error(parsed.error);
+      const doc = parsed.data;
       if (doc && typeof doc === 'object' && !Array.isArray(doc) && doc.format === 'tracery-settings' && typeof ViewPrefs !== 'undefined' && ViewPrefs.importData) {
         ViewPrefs.importData(doc);
         return;
@@ -3157,7 +3181,7 @@ const Start = (() => {
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dropEl && !dropEl.hidden) hideDropOverlay(); });
   }
   return {
-    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importAMF, parseAMF, importPLY, parsePLY, importPoints, parsePointsFile, openPointsFile, importDXF, parseDXF, parseSVG, show, hide, newProject, newAssembly, openNewTab, openStoredInTab, renderTabs, openTabAddMenu, newProjectDialog, saveAsTemplate, openTemplate, openFile, openBlob, saveFile, projectPayload,
+    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importAMF, parseAMF, importPLY, parsePLY, importPoints, parsePointsFile, openPointsFile, importDXF, parseDXF, parseSVG, sanitizeSVG: (...a) => Store.sanitizeSVG(...a), get lastSvgSanitize() { return lastSvgSanitize; }, show, hide, newProject, newAssembly, openNewTab, openStoredInTab, renderTabs, openTabAddMenu, newProjectDialog, saveAsTemplate, openTemplate, openFile, openBlob, saveFile, projectPayload,
     checkImport, healImport, importCheckOf, setImportHealOpts, dismissImportBanner,
     folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
     checkRecoveryOnBoot, startRecoveryTracking, restoreRecovery, dismissRecovery, flushRecovery,

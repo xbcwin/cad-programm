@@ -1693,5 +1693,20 @@
     "tip": "Form der Rundung wählen: klassisch rund (Kreisbogen) oder krümmungsglatt (G2, weicher Einlauf, Profi)",
     "hilfe": "Bei „Rund“ entsteht ein normaler Kreisbogen. Bei „Krümmungsglatt (G2)“ läuft die Rundung ohne Krümmungssprung sanft aus den Nachbarflächen heraus (Kegelschnitt-artiger Verlauf) – ideal für glatte Gehäuseteile und schöne Lichtreflexe.",
     "tipp": "Die gewählte Größe steuert weiterhin denselben Einlauf-Abstand auf den Nachbarflächen."
+  },
+  "illustration": {
+    "tip": "Technische Illustration: weiße Flächen mit klaren Umrissen und Kanten auf weißem Grund (Profi)",
+    "hilfe": "Stellt alle Körper wie in einer technischen Zeichnung oder Anleitung dar: weiße Flächen verdecken die Rückseite, während alle Kanten und äußeren Umrisse als scharfe dunkle Linien auf weißem Hintergrund gezeichnet werden.",
+    "tipp": "Ideal zusammen mit „Bild speichern (PNG)“ für Anleitungen, Dokumentationen oder Patentskizzen."
+  },
+  "quadView": {
+    "tip": "Vierfach-Ansicht: Vorn, Oben, Rechts und Schräg gleichzeitig im Bild (Profi)",
+    "hilfe": "Teilt das 3D-Fenster in vier Bereiche (Vorn, Oben, Rechts und Schräg). Jeden Bereich kannst du einzeln mit der Maus drehen, zoomen und verschieben, per Knopf zwischen orthografisch und perspektivisch umschalten oder auf seine Grundrichtung zurücksetzen.",
+    "tipp": "Ein Klick auf „1 Ansicht“ oben rechts oder erneut auf „Vierfach-Ansicht“ im Ansicht-Menü kehrt sofort zur großen Einzelansicht zurück."
+  },
+  "exportBundle": {
+    "tip": "Alles als Paket (ZIP): Projekt, Zeichnungen (PDF), STEP und STL je Körper zusammen speichern",
+    "hilfe": "Packt dein gesamtes Projekt in eine einzige ZIP-Datei: die Tracery-Projektdatei zum Weiterbauen, alle technischen Zeichnungen als PDF, das komplette Modell als STEP sowie eine eigene STL-Datei für jeden sichtbaren Körper.",
+    "tipp": "Ideal zum Weitergeben, Archivieren oder für den Fertiger – alle wichtigen Formate sind direkt dabei."
   }
 }

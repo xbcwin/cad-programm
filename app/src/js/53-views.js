@@ -2,7 +2,7 @@
 // Alles hier ändert nur, wie das Modell gezeigt wird – nie das Modell selbst. Nichts davon landet
 // in der Zeitleiste oder in der Projektdatei.
 const Views = (() => {
-  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, exTimer: null, exWaitOff: null, focus: null, ov: null, exGroups: false };
+  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, exTimer: null, exWaitOff: null, focus: null, ov: null, exGroups: false, quad: null };
   let wrap = null;   // Leisten links oben
   function bars() {
     if (!wrap || !wrap.isConnected) { wrap = h('div', { class: 'viewbars' }); $('#overlay').append(wrap); }
@@ -923,6 +923,7 @@ const Views = (() => {
       st.present = null; sync(); setTimeout(() => Viewer.requestRender(), 50); return;
     }
     if (st.present) return;
+    if (st.quad) quad(false);
     App.clearSelection(); Handles.clear();
     const o = { spin: true, raf: 0, last: performance.now(), wasFs: false };
     o.onFs = () => {
@@ -1046,6 +1047,105 @@ const Views = (() => {
     st.wind = o; Viewer.setOrtho(true); drawWind(true); sync(); windTop(o);
   }
 
+  // ---------- Vierfach-Ansicht (AN-18): Vorn, Oben, Rechts, Schräg ----------
+  const QUAD_KEYS = ['front', 'top', 'right', 'iso'];
+  function quad(on = !st.quad) {
+    if (!on) {
+      if (!st.quad) return;
+      const q = st.quad;
+      st.quad = null;
+      if (q.off) q.off();
+      if (q.el) q.el.remove();
+      document.body.classList.remove('quad-view-on');
+      Viewer.setQuad(false);
+      sync();
+      UI.toast(T('quad.toastOff'), { icon: 'info', ms: 1800, noNotice: true });
+      return;
+    }
+    if (st.quad) return;
+    if (App.mode !== 'model' || (typeof Sketch !== 'undefined' && Sketch.active)) return;
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) return;
+    if (st.present) present(false);
+    App.clearSelection(); Handles.clear();
+    const wrap = h('div', { class: 'quad-view', id: 'quad-view', role: 'region', 'aria-label': T('quad.aria') });
+    const hostMap = {};
+    const paneEls = {};
+    for (const key of QUAD_KEYS) {
+      const pane = h('div', { class: 'quad-pane', 'data-quad': key });
+      const hit = h('div', { class: 'quad-hit', 'data-quad-hit': key });
+      hit.addEventListener('contextmenu', (e) => e.preventDefault());
+      let clickPt = null;
+      hit.addEventListener('pointerdown', (e) => {
+        if (e.button === 0) clickPt = { x: e.clientX, y: e.clientY };
+        Viewer.setActiveQuadPane(key);
+      });
+      hit.addEventListener('pointerup', (e) => {
+        if (clickPt && e.button === 0 && Math.hypot(e.clientX - clickPt.x, e.clientY - clickPt.y) <= 4) {
+          const res = Viewer.pickInPane(key, e.clientX, e.clientY);
+          if (res) App.select([res.id]);
+          else App.clearSelection();
+        }
+        clickPt = null;
+      });
+      hit.addEventListener('dblclick', () => Viewer.resetQuadPane(key));
+      const lbl = h('span', { class: 'quad-label' }, T('quad.' + key));
+      const proj = h('button', { type: 'button', class: 'quad-proj', 'aria-label': T('quad.toggleProj'), 'data-tip': T('quad.toggleProj'), 'aria-pressed': key === 'iso' ? 'false' : 'true' }, key === 'iso' ? T('quad.persp') : T('quad.ortho'));
+      proj.onclick = (e) => {
+        e.stopPropagation();
+        const cur = Viewer.quadPanes.find((x) => x.key === key);
+        Viewer.setQuadPaneOrtho(key, !(cur && cur.ortho));
+      };
+      const rst = h('button', { type: 'button', class: 'quad-reset', 'aria-label': T('quad.resetPane'), 'data-tip': T('quad.resetPane') });
+      rst.innerHTML = icon('rotate');
+      rst.onclick = (e) => { e.stopPropagation(); Viewer.resetQuadPane(key); };
+      const head = h('div', { class: 'quad-head' }, lbl, proj, rst);
+      pane.append(hit, head);
+      wrap.append(pane);
+      hostMap[key] = hit;
+      paneEls[key] = { pane, lbl, proj, rst };
+    }
+    const closeBtn = h('button', { type: 'button', class: 'quad-close-btn', id: 'quad-close', 'aria-label': T('quad.exitAria'), 'data-help': 'quadView' });
+    closeBtn.innerHTML = icon('close') + `<span>${esc(T('quad.exit'))}</span>`;
+    closeBtn.onclick = () => quad(false);
+    wrap.append(closeBtn);
+    $('#overlay').prepend(wrap);
+    document.body.classList.add('quad-view-on');
+    Viewer.setQuad(true, hostMap);
+    const syncQuadUI = () => {
+      if (!st.quad) return;
+      const panes = Viewer.quadPanes;
+      for (const info of panes) {
+        const ui = paneEls[info.key]; if (!ui) continue;
+        ui.pane.classList.toggle('active', !!info.active);
+        ui.proj.textContent = info.ortho ? T('quad.ortho') : T('quad.persp');
+        ui.proj.setAttribute('aria-pressed', info.ortho ? 'true' : 'false');
+      }
+    };
+    const updateQuadLabels = () => {
+      if (!st.quad) return;
+      wrap.setAttribute('aria-label', T('quad.aria'));
+      closeBtn.setAttribute('aria-label', T('quad.exitAria'));
+      const sp = closeBtn.querySelector('span');
+      if (sp) sp.textContent = T('quad.exit');
+      for (const key of QUAD_KEYS) {
+        const ui = paneEls[key]; if (!ui) continue;
+        ui.lbl.textContent = T('quad.' + key);
+        ui.proj.setAttribute('aria-label', T('quad.toggleProj'));
+        ui.proj.setAttribute('data-tip', T('quad.toggleProj'));
+        ui.rst.setAttribute('aria-label', T('quad.resetPane'));
+        ui.rst.setAttribute('data-tip', T('quad.resetPane'));
+      }
+      syncQuadUI();
+    };
+    const offV = Viewer.on('viewmode', syncQuadUI);
+    const offI = typeof I18n !== 'undefined' && I18n.on ? I18n.on('change', updateQuadLabels) : null;
+    st.quad = { el: wrap, panes: paneEls, off: () => { offV && offV(); offI && offI(); } };
+    syncQuadUI();
+    sync();
+    Viewer.renderNow();
+    UI.toast(T('quad.toastOn'), { icon: 'quadView', ms: 2600 });
+  }
+
   // ---------- Menü und Zustand ----------
   function menu(anchor) {
     UI.menu(anchor, [
@@ -1053,6 +1153,7 @@ const Views = (() => {
       { label: (st.xray ? '✓ ' : '') + T('menu.view.xray'), icon: 'xray', kbd: 'X', help: 'xray', run: () => xray() },
       { label: (st.exGoal > 0 ? '✓ ' : '') + T('menu.view.explode'), icon: 'explode', kbd: 'U', help: 'explode', run: () => explode() },
       { label: (st.focus ? '✓ ' : '') + T('menu.view.focus'), icon: 'focusView', help: 'focusView', run: () => focus() },
+      { label: (st.quad ? '✓ ' : '') + T('menu.view.quad'), icon: 'quadView', help: 'quadView', id: 'view-quad', hidden: ViewPrefs.simple, run: () => quad() },
       { label: (st.ov ? '✓ ' : '') + T('menu.view.overhang'), icon: 'overhang', help: 'overhang', run: () => overhang() },
       { label: (st.thin ? '✓ ' : '') + T('menu.view.thin'), icon: 'ruler', help: 'thinWalls', id: 'view-thin', run: () => thin() },
       { label: (typeof Measure !== 'undefined' && Measure.draftActive ? '✓ ' : '') + T('menu.view.draft'), icon: 'chamfer', help: 'draftAnalysis', id: 'view-draft', run: () => Measure.draft() },
@@ -1069,7 +1170,7 @@ const Views = (() => {
     const tip = { studio: 'Studio-Look: Teile zeigen ihren Werkstoff – Metall glänzt, Kohlefaser ist dunkel.', plain: 'Einfache Darstellung: matt und am schnellsten.', clay: 'Prüfansicht Ton: Jede Delle und jeder Knick fällt auf.', chrome: 'Prüfansicht Chrom: Laufen die Streifen ohne Knick über eine Kante, gehen die Flächen glatt ineinander über.' }[k];
     UI.toast(tip, { icon: 'info', ms: 3200 });
   }
-  const DISPKEYS = ['edges', 'shaded', 'wire', 'hidden'];
+  const DISPKEYS = ['edges', 'shaded', 'wire', 'hidden', 'illustration'];
   // gespeicherte Ansichten (im Projekt): Blickwinkel, Ausschnitt und Projektion
   async function saveView() {
     const name = await UI.prompt('Ansicht speichern', 'Name der Ansicht', `Ansicht ${(App.doc.views || []).length + 1}`, 'Speichern');
@@ -1087,7 +1188,10 @@ const Views = (() => {
   function removeView(id) { App.change('Ansicht gelöscht', (doc) => { doc.views = (doc.views || []).filter((x) => x.id !== id); }); }
   function lookItems() {
     const pv = ViewPrefs.get(), out = [];
-    for (const k of DISPKEYS) out.push({ label: (pv.display === k || (!pv.display && k === 'edges') ? '✓ ' : '') + T('menu.view.disp.' + k), icon: k === 'wire' ? 'cube' : 'eye', help: 'display', id: 'disp-' + k, run: () => ViewPrefs.set({ display: k }) });
+    for (const k of DISPKEYS) {
+      if (k === 'illustration' && ViewPrefs.simple) continue;
+      out.push({ label: (pv.display === k || (!pv.display && k === 'edges') ? '✓ ' : '') + T('menu.view.disp.' + k), icon: k === 'wire' ? 'cube' : k === 'illustration' ? 'illustration' : 'eye', help: k === 'illustration' ? 'illustration' : 'display', id: 'disp-' + k, run: () => ViewPrefs.set({ display: k }) });
+    }
     out.push('-');
     for (const k of LOOKKEYS) out.push({ label: (pv.look === k ? '✓ ' : '') + T('menu.view.look.' + k), icon: k === 'studio' ? 'spark' : 'eye', help: 'look', id: 'look-' + k, run: () => setLook(k) });
     if (pv.look === 'studio') {
@@ -1101,7 +1205,7 @@ const Views = (() => {
     return out;
   }
   function sync() {
-    const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus || st.ov || st.thin || st.wind || (typeof Measure !== 'undefined' && Measure.draftActive)));
+    const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus || st.ov || st.thin || st.wind || st.quad || (typeof Measure !== 'undefined' && Measure.draftActive)));
     const x = document.querySelector('.view-btns [data-view="xray"]'); if (x) x.classList.toggle('on', st.xray);
     const c = document.querySelector('.view-btns [data-view="cut"]'); if (c) c.classList.toggle('on', !!st.cut);
   }
@@ -1114,7 +1218,10 @@ const Views = (() => {
     return false;
   }
   function init() {
-    App.on('mode', () => { if (App.mode !== 'model') reset(); });
+    App.on('mode', () => {
+      if (App.mode !== 'model') reset();
+      else if (typeof Sketch !== 'undefined' && Sketch.active && st.quad) quad(false);
+    });
     // Während die Gruppen zerlegt gezeigt werden: nach jeder Änderung die Einzelteile neu aufbauen
     App.on('doc', () => { if (!st.exGroups) return; const { extra, hide } = splitGroups(); App.extra = extra; App.hideIds = hide; });
     App.on('results', () => {
@@ -1137,9 +1244,10 @@ const Views = (() => {
       }
     });
   }
-  function reset() { section(false); if (st.xray) xray(false); if (st.exWaitOff) { st.exWaitOff(); st.exWaitOff = null; } stopExAnim(); if (st.exGoal > 0 || st.ex > 0) { st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); thin(false); wind(false); present(false); if (typeof Measure !== 'undefined' && Measure.draftActive) Measure.draft(false); if (typeof Measure !== 'undefined' && Measure.silhouetteActive) Measure.silhouette(false); if (typeof InnerRadius !== 'undefined' && InnerRadius.active) InnerRadius.close(); if (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) SymmetryCheck.close(); if (typeof Versions !== 'undefined' && Versions.comparing) Versions.compareOff(); if (st.exGroups) setGroups(false); }
-  return { saveView, goView, removeView,     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
+  function reset() { section(false); if (st.xray) xray(false); if (st.exWaitOff) { st.exWaitOff(); st.exWaitOff = null; } stopExAnim(); if (st.exGoal > 0 || st.ex > 0) { st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); quad(false); overhang(false); thin(false); wind(false); present(false); if (typeof Measure !== 'undefined' && Measure.draftActive) Measure.draft(false); if (typeof Measure !== 'undefined' && Measure.silhouetteActive) Measure.silhouette(false); if (typeof InnerRadius !== 'undefined' && InnerRadius.active) InnerRadius.close(); if (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) SymmetryCheck.close(); if (typeof Versions !== 'undefined' && Versions.comparing) Versions.compareOff(); if (st.exGroups) setGroups(false); }
+  return { saveView, goView, removeView,     init, section, xray, explode, collapse, focus, quad, overhang, menu, onKey, reset, sync, bars,
     present, get presenting() { return !!st.present; }, thin, get thinInfo() { return st.thin ? { area: st.thin.area, minT: st.thin.minT } : null; },
+    get quadActive() { return !!st.quad; }, get quadPanes() { return Viewer.quadPanes; },
     get overhangArea() { return st.ov ? st.ov.area : null; },
     get overhangAngle() { return st.ov ? st.ov.angle : 45; },
     wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area, cw: st.wind.cw, v: st.wind.v, drag: st.wind.drag, top: st.wind.top || null } : null; }, cwGuess, topSpeed, dragN,

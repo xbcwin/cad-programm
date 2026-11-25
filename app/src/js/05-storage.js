@@ -646,8 +646,227 @@ const Store = (() => {
 
   function whenIdle() { return Promise.all([flushBlobs(), writeQueue]); }
 
+  // ---------- Sicherheit beim Einlesen fremder Dateien (PL-16) ----------
+  const LIMITS = Object.freeze({
+    cad: 100 * 1024 * 1024,            // 100 MB (STEP, IGES, BREP, STL, 3MF, OBJ, AMF, PLY)
+    project: 50 * 1024 * 1024,         // 50 MB (Tracery-Projekt .json)
+    points: 50 * 1024 * 1024,          // 50 MB (CSV/XYZ Punktwolken)
+    image: 20 * 1024 * 1024,           // 20 MB (Aufkleber, Vorlagen, Umgebungsbild)
+    font: 15 * 1024 * 1024,            // 15 MB (TTF/OTF)
+    svg: 8 * 1024 * 1024,              // 8 MB (SVG)
+    dxf: 8 * 1024 * 1024,              // 8 MB (DXF)
+    csv: 5 * 1024 * 1024,              // 5 MB (Parameter-/Varianten-CSV)
+    settings: 2 * 1024 * 1024,         // 2 MB (Einstellungen)
+    zipUncompressed: 200 * 1024 * 1024, // 200 MB gesamt entpackt (ZIP-Bomben-Schutz)
+    zipEntry: 100 * 1024 * 1024,       // 100 MB je ZIP-Eintrag
+    zipMaxEntries: 2000,
+  });
+
+  function tr(key, vars, fallback) {
+    if (typeof T === 'function') {
+      const s = T(key, vars);
+      if (s && s !== key) return s;
+    }
+    return fallback;
+  }
+
+  function formatBytes(n) {
+    const v = Math.max(0, Number(n) || 0);
+    const fmtN = (x, dec) => (typeof fmtFixed === 'function' ? fmtFixed(x, dec) : x.toFixed(dec).replace('.', ','));
+    if (v < 1024) return `${Math.round(v)} B`;
+    if (v < 1024 * 1024) return `${fmtN(v / 1024, 1)} KB`;
+    return `${fmtN(v / (1024 * 1024), 1)} MB`;
+  }
+
+  function checkFileSize(file, kind = 'cad', opts = {}) {
+    const limit = opts.limit || LIMITS[kind] || LIMITS.cad;
+    if (!file) {
+      return { ok: false, reason: 'missing', size: 0, limit, message: tr('import.errNoFile', null, 'Keine Datei zum Einlesen gewählt.') };
+    }
+    const name = file.name || 'Datei';
+    const size = Number(file.size) || 0;
+    if (!opts.allowEmpty && size <= 0) {
+      return { ok: false, reason: 'empty', size, limit, message: tr('import.errEmpty', { name }, `Die Datei „${name}“ ist leer und kann nicht geöffnet werden.`) };
+    }
+    if (size > limit) {
+      const sizeStr = formatBytes(size);
+      const maxStr = formatBytes(limit);
+      return {
+        ok: false,
+        reason: 'too_large',
+        size,
+        limit,
+        message: tr('import.errTooBig', { name, size: sizeStr, max: maxStr }, `Die Datei „${name}“ ist zu groß (${sizeStr} – erlaubt sind höchstens ${maxStr}).`),
+      };
+    }
+    return { ok: true, reason: null, size, limit, message: '' };
+  }
+
+  function stripXmlDoctype(xml) {
+    let s = String(xml || '').replace(/^\uFEFF/, '');
+    s = s.replace(/<\?xml-stylesheet[\s\S]*?\?>/gi, '');
+    s = s.replace(/<!DOCTYPE\b[\s\S]*?(?:\[[\s\S]*?\]\s*)?>/gi, '');
+    s = s.replace(/<!ENTITY\b[\s\S]*?>/gi, '');
+    return s;
+  }
+
+  const SVG_FORBIDDEN_TAGS = new Set([
+    'script', 'foreignobject', 'iframe', 'object', 'embed', 'applet',
+    'audio', 'video', 'canvas', 'link', 'meta', 'base', 'form', 'input', 'button',
+    'animate', 'animatemotion', 'animatetransform', 'set', 'handler', 'listener',
+  ]);
+  const SVG_LINK_ATTRS = new Set(['href', 'src', 'action', 'formaction', 'poster', 'data', 'ping']);
+  const SVG_CSS_ATTRS = new Set([
+    'style', 'fill', 'stroke', 'filter', 'clip-path', 'mask',
+    'marker-start', 'marker-mid', 'marker-end', 'cursor', 'background', 'background-image',
+  ]);
+
+  function sanitizeCssText(val, stats, isStyleTag = false) {
+    let out = String(val || '');
+    const strippedComments = out.replace(/\/\*[\s\S]*?\*\//g, '');
+    if (/@import\b/i.test(strippedComments)) {
+      stats.externalLinks++;
+      out = out.replace(/@import[^;]*(;|$)/gi, '');
+    }
+    if (/expression\s*\(|(?:javascript|vbscript)\s*:/i.test(strippedComments.replace(/[\u0000-\u0020]+/g, ''))) {
+      stats.handlers++;
+      out = out.replace(/expression\s*\([^)]*\)/gi, 'none').replace(/(?:javascript|vbscript)\s*:[^;"')]*/gi, 'none');
+    }
+    out = out.replace(/url\s*\(\s*(['"]?)([^)'"]*)\1\s*\)/gi, (m, _q, target) => {
+      const t = String(target || '').trim();
+      if (/^#[A-Za-z_][\w:.-]*$/.test(t)) return m;
+      if (/^(?:javascript|vbscript):/i.test(t.replace(/[\u0000-\u0020]+/g, ''))) stats.handlers++;
+      else stats.externalLinks++;
+      return 'none';
+    });
+    if (isStyleTag) return out.trim();
+    return out.trim();
+  }
+
+  function sanitizeSVG(raw, opts = {}) {
+    if (typeof raw !== 'string') {
+      return { ok: false, error: tr('import.errSvgBad', null, 'Diese SVG kann ich nicht lesen – die Datei ist beschädigt oder kein gültiges SVG.') };
+    }
+    const maxChars = opts.maxChars || LIMITS.svg * 2;
+    if (raw.length > maxChars) {
+      return { ok: false, error: tr('import.errTooBig', { name: opts.name || 'SVG', size: formatBytes(raw.length), max: formatBytes(LIMITS.svg) }, `Die SVG-Datei ist zu groß (erlaubt sind höchstens ${formatBytes(LIMITS.svg)}).`) };
+    }
+    const cleanedInput = stripXmlDoctype(raw);
+    const doc = new DOMParser().parseFromString(cleanedInput, 'image/svg+xml');
+    const root = doc && doc.documentElement;
+    const rootTag = root ? (root.localName || root.nodeName || '').toLowerCase().replace(/^[^:]+:/, '') : '';
+    if (!root || rootTag !== 'svg' || doc.querySelector('parsererror')) {
+      return { ok: false, error: tr('import.errSvgBad', null, 'Diese SVG kann ich nicht lesen – die Datei ist beschädigt oder kein gültiges SVG.') };
+    }
+    const stats = { scripts: 0, handlers: 0, externalLinks: 0, elements: 0, stripped: 0 };
+    const cleanNode = (node) => {
+      for (const child of [...node.childNodes]) {
+        if (child.nodeType === 7) {
+          child.remove();
+          stats.elements++;
+          continue;
+        }
+        if (child.nodeType !== 1) continue;
+        const tag = (child.localName || child.nodeName || '').toLowerCase().replace(/^[^:]+:/, '');
+        if (SVG_FORBIDDEN_TAGS.has(tag)) {
+          child.remove();
+          if (tag === 'script') stats.scripts++;
+          else stats.elements++;
+          continue;
+        }
+        if (tag === 'style') {
+          child.textContent = sanitizeCssText(child.textContent || '', stats, true);
+        }
+        for (const attr of [...child.attributes]) {
+          const aname = String(attr.name || '').toLowerCase();
+          const local = String(attr.localName || aname.replace(/^[^:]+:/, '')).toLowerCase();
+          if (/^(?:[a-z0-9_-]+:)?on[a-z]/i.test(aname)) {
+            child.removeAttribute(attr.name);
+            stats.handlers++;
+            continue;
+          }
+          if (SVG_LINK_ATTRS.has(local)) {
+            const val = String(attr.value || '').trim();
+            if (!/^#[A-Za-z_][\w:.-]*$/.test(val) || tag === 'a') {
+              const compact = val.replace(/[\u0000-\u0020]+/g, '').toLowerCase();
+              child.removeAttribute(attr.name);
+              if (/^(?:javascript|vbscript|data):/i.test(compact)) stats.handlers++;
+              else if (val) stats.externalLinks++;
+            }
+            continue;
+          }
+          if (SVG_CSS_ATTRS.has(local)) {
+            const nextVal = sanitizeCssText(attr.value, stats, false);
+            if (!nextVal) child.removeAttribute(attr.name);
+            else if (nextVal !== attr.value) child.setAttribute(attr.name, nextVal);
+          }
+        }
+        cleanNode(child);
+      }
+    };
+    // Root-Attribute ebenfalls prüfen
+    for (const attr of [...root.attributes]) {
+      const aname = String(attr.name || '').toLowerCase();
+      const local = String(attr.localName || aname.replace(/^[^:]+:/, '')).toLowerCase();
+      if (/^(?:[a-z0-9_-]+:)?on[a-z]/i.test(aname) || SVG_LINK_ATTRS.has(local)) {
+        root.removeAttribute(attr.name);
+        if (/on[a-z]/i.test(aname)) stats.handlers++;
+        else stats.externalLinks++;
+      } else if (SVG_CSS_ATTRS.has(local)) {
+        const nextVal = sanitizeCssText(attr.value, stats, false);
+        if (!nextVal) root.removeAttribute(attr.name);
+        else if (nextVal !== attr.value) root.setAttribute(attr.name, nextVal);
+      }
+    }
+    cleanNode(root);
+    stats.stripped = stats.scripts + stats.handlers + stats.externalLinks + stats.elements;
+    const svg = new XMLSerializer().serializeToString(root);
+    return { ok: true, svg, doc, root, stats };
+  }
+
+  function sanitizeImageDataUrl(src, opts = {}) {
+    if (typeof src !== 'string') return null;
+    const s = src.trim();
+    if (!s || s.length > LIMITS.image * 1.4) return null;
+    if (/^data:image\/(?:png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=\s]+$/i.test(s)) return s;
+    if (opts.allowSvg === false) return null;
+    const m = /^data:image\/svg\+xml([^,]*),(.*)$/i.exec(s);
+    if (!m) return null;
+    let svgRaw = '';
+    try {
+      if (/;base64/i.test(m[1])) {
+        svgRaw = new TextDecoder('utf-8').decode(base64ToBytes(m[2].replace(/\s+/g, '')));
+      } else {
+        svgRaw = decodeURIComponent(m[2]);
+      }
+    } catch (_) {
+      return null;
+    }
+    const san = sanitizeSVG(svgRaw);
+    if (!san.ok) return null;
+    return 'data:image/svg+xml;base64,' + bytesToBase64(new TextEncoder().encode(san.svg));
+  }
+
+  const BAD_JSON_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+  function safeParseJSON(raw, opts = {}) {
+    if (typeof raw !== 'string') {
+      return { ok: false, error: tr('import.errJsonBad', null, 'Die JSON-Datei ist beschädigt oder nicht lesbar.') };
+    }
+    const limit = opts.limit || LIMITS.project;
+    if (raw.length > limit) {
+      return { ok: false, error: tr('import.errTooBig', { name: opts.name || 'JSON', size: formatBytes(raw.length), max: formatBytes(limit) }, `Die Datei ist zu groß (erlaubt sind höchstens ${formatBytes(limit)}).`) };
+    }
+    try {
+      const data = JSON.parse(raw.replace(/^\uFEFF/, ''), (k, v) => (BAD_JSON_KEYS.has(k) ? undefined : v));
+      return { ok: true, data };
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || tr('import.errJsonBad', null, 'Die JSON-Datei ist beschädigt oder nicht lesbar.') };
+    }
+  }
+
   return {
     init, ensureDB, whenIdle,
+    LIMITS, formatBytes, checkFileSize, stripXmlDoctype, sanitizeSVG, sanitizeImageDataUrl, safeParseJSON,
     bytesToBase64, base64ToBytes,
     registerBlob, putBlob, getBlobSync, getBlob, flushBlobs,
     extractBlobs, collectBlobIds, hydrateDoc, inlineBlobs,
