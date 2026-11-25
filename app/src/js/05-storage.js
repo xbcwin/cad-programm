@@ -864,9 +864,277 @@ const Store = (() => {
     }
   }
 
+  // ---------- Projektdatei-Prüfung (PL-12, siehe docs/DATEIFORMAT.md) ----------
+  const PROJECT_FORMAT = 'masswerk';
+  const PROJECT_VERSION = 1;
+  const VALID_UNITS = new Set(['mm', 'cm', 'm', 'in']);
+  const VALID_DOC_TYPES = new Set(['part', 'assembly']);
+  const VALID_ROLES = new Set(['solid', 'hole']);
+  const VALID_OP_TYPES = new Set(['join', 'cut', 'common']);
+  const VALID_T_KEYS = ['x', 'y', 'z', 'rx', 'ry', 'rz'];
+  const KNOWN_ITEM_KINDS = new Set([
+    'box', 'cylinder', 'tube', 'sphere', 'hemisphere', 'cone', 'pyramid', 'torus', 'prism', 'wedge',
+    'extrude', 'revolve', 'loft', 'sweep', 'helix', 'import', 'group', 'part',
+    'transform', 'scale', 'deform', 'thicken', 'rib', 'vent', 'fins', 'fillPattern', 'web', 'wrap',
+    'emboss', 'splitFace', 'dome', 'mirrorStep', 'deleteBody', 'boss', 'lipGroove',
+    'undercut', 'circlipGroove', 'keyway', 'splineProfile', 'knurl', 'gripPattern', 'sketch3d', 'ref',
+  ]);
+  const OPTIONAL_ARRAY_FIELDS = [
+    'notes', 'blocks', 'fonts', 'variants', 'folders',
+    'datums', 'axes', 'points', 'csys', 'joints', 'measures', 'views', 'selSets', 'pointClouds',
+  ];
+
+  function validateProject(input, opts = {}) {
+    const errors = [];
+    const warnings = [];
+    let itemCount = 0;
+    const isPlainObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+    const isNonEmptyStr = (v) => typeof v === 'string' && v.trim().length > 0;
+    const isNumOrExpr = (v) => (typeof v === 'number' && Number.isFinite(v)) || typeof v === 'string';
+    const knownKinds = new Set(KNOWN_ITEM_KINDS);
+    if (typeof KINDS !== 'undefined' && KINDS) {
+      for (const k of Object.keys(KINDS)) knownKinds.add(k);
+    }
+
+    let doc = input;
+    if (typeof input === 'string') {
+      const parsed = safeParseJSON(input, { limit: opts.limit || LIMITS.project, name: opts.name || 'Projektdatei' });
+      if (!parsed.ok) {
+        const msg = /^Die (?:JSON-)?Datei\b/.test(parsed.error)
+          ? parsed.error
+          : 'Die Projektdatei ist kein gültiges JSON: ' + parsed.error;
+        errors.push(msg);
+        return { ok: false, errors, warnings, message: errors[0], version: null, docType: null, itemCount: 0 };
+      }
+      doc = parsed.data;
+    }
+
+    if (!isPlainObj(doc)) {
+      errors.push('Die Projektdatei muss ein JSON-Objekt sein.');
+      return { ok: false, errors, warnings, message: errors[0], version: null, docType: null, itemCount: 0 };
+    }
+
+    // Pflichtfelder auf oberster Ebene
+    if (doc.format === undefined || doc.format === null || doc.format === '') {
+      errors.push(`Pflichtfeld „format“ fehlt – erwartet wird „${PROJECT_FORMAT}“.`);
+    } else if (doc.format !== PROJECT_FORMAT) {
+      errors.push(`Ungültiges Format „${String(doc.format)}“ – erwartet wird „${PROJECT_FORMAT}“.`);
+    }
+
+    if (doc.version === undefined || doc.version === null) {
+      errors.push(`Pflichtfeld „version“ fehlt – erwartet wird eine positive ganze Zahl (aktuell ${PROJECT_VERSION}).`);
+    } else if (typeof doc.version !== 'number' || !Number.isInteger(doc.version) || doc.version < 1) {
+      errors.push('Ungültige Format-Version im Feld „version“ – erwartet wird eine ganze Zahl ab 1.');
+    } else if (doc.version > PROJECT_VERSION) {
+      warnings.push(`Die Datei nutzt Format-Version ${doc.version}; diese Tracery-Fassung kennt Version ${PROJECT_VERSION} – neuere Felder könnten nicht unterstützt werden.`);
+    }
+
+    if (!isNonEmptyStr(doc.id)) {
+      errors.push('Pflichtfeld „id“ fehlt oder ist kein nicht-leerer Text.');
+    }
+    if (!isNonEmptyStr(doc.name)) {
+      errors.push('Pflichtfeld „name“ fehlt oder ist kein nicht-leerer Text.');
+    }
+    if (!('items' in doc) || doc.items === undefined) {
+      errors.push('Pflichtfeld „items“ fehlt – erwartet wird eine Liste von Schritten.');
+    } else if (!Array.isArray(doc.items)) {
+      errors.push('Feld „items“ muss eine Liste (Array) sein.');
+    }
+
+    // Optionale Felder auf oberster Ebene
+    if (doc.docType !== undefined && doc.docType !== null && !VALID_DOC_TYPES.has(doc.docType)) {
+      errors.push(`Ungültige Dokument-Art in „docType“ („${String(doc.docType)}“) – erlaubt sind „part“ oder „assembly“.`);
+    }
+    for (const tk of ['created', 'modified']) {
+      const tv = doc[tk];
+      if (tv !== undefined && tv !== null && (typeof tv !== 'number' || !Number.isFinite(tv))) {
+        errors.push(`Feld „${tk}“ muss eine gültige Zeitangabe (Zahl in Millisekunden) sein.`);
+      }
+    }
+    if (doc.noHistory !== undefined && doc.noHistory !== null && typeof doc.noHistory !== 'boolean') {
+      errors.push('Feld „noHistory“ muss ein Wahrheitswert (true/false) sein.');
+    }
+    if (doc.rollback !== undefined && doc.rollback !== null) {
+      if (typeof doc.rollback !== 'number' || !Number.isInteger(doc.rollback) || doc.rollback < 0) {
+        errors.push('Feld „rollback“ muss eine ganze Zahl ab 0 oder null sein.');
+      } else if (Array.isArray(doc.items) && doc.rollback >= doc.items.length) {
+        warnings.push('Zeitleisten-Marker „rollback“ liegt hinter dem letzten Schritt.');
+      }
+    }
+    if (doc.settings !== undefined && doc.settings !== null) {
+      if (!isPlainObj(doc.settings)) {
+        errors.push('Feld „settings“ muss ein Objekt sein.');
+      } else if (doc.settings.unit !== undefined && doc.settings.unit !== null && !VALID_UNITS.has(doc.settings.unit)) {
+        errors.push(`Ungültige Projekteinheit „${String(doc.settings.unit)}“ in „settings.unit“ – erlaubt sind mm, cm, m oder in.`);
+      }
+    }
+    if (doc.drawing !== undefined && doc.drawing !== null && !isPlainObj(doc.drawing)) {
+      errors.push('Feld „drawing“ muss ein Objekt oder null sein.');
+    }
+    if (doc.params !== undefined && doc.params !== null) {
+      if (!Array.isArray(doc.params)) {
+        errors.push('Feld „params“ muss eine Liste (Array) sein.');
+      } else {
+        doc.params.forEach((pr, idx) => {
+          if (!isPlainObj(pr)) {
+            errors.push(`Maß #${idx + 1} in „params“ muss ein Objekt sein.`);
+            return;
+          }
+          if (!isNonEmptyStr(pr.name)) {
+            errors.push(`Maß #${idx + 1} in „params“ braucht ein nicht-leeres Feld „name“.`);
+          }
+          if (pr.expr === undefined || !isNumOrExpr(pr.expr)) {
+            errors.push(`Maß „${isNonEmptyStr(pr.name) ? pr.name : '#' + (idx + 1)}“ in „params“ braucht eine Zahl oder Formel in „expr“.`);
+          }
+        });
+      }
+    }
+    if (doc.tables !== undefined && doc.tables !== null) {
+      if (!Array.isArray(doc.tables)) {
+        errors.push('Feld „tables“ muss eine Liste (Array) sein.');
+      } else {
+        doc.tables.forEach((tb, idx) => {
+          if (!isPlainObj(tb)) {
+            errors.push(`Tabelle #${idx + 1} in „tables“ muss ein Objekt sein.`);
+            return;
+          }
+          if (typeof tb.name !== 'string') {
+            errors.push(`Tabelle #${idx + 1} in „tables“ braucht ein Textfeld „name“.`);
+          }
+          if (!Array.isArray(tb.rows)) {
+            errors.push(`Tabelle „${typeof tb.name === 'string' && tb.name ? tb.name : '#' + (idx + 1)}“ in „tables“ braucht eine Liste „rows“.`);
+          }
+        });
+      }
+    }
+    for (const k of OPTIONAL_ARRAY_FIELDS) {
+      if (doc[k] !== undefined && doc[k] !== null && !Array.isArray(doc[k])) {
+        errors.push(`Feld „${k}“ muss eine Liste (Array) sein.`);
+      }
+    }
+    if (doc.versions !== undefined && doc.versions !== null) {
+      if (!Array.isArray(doc.versions)) {
+        errors.push('Feld „versions“ muss eine Liste (Array) sein.');
+      } else if ((opts._depth || 0) < 1) {
+        doc.versions.forEach((ver, idx) => {
+          if (!isPlainObj(ver)) {
+            errors.push(`Eintrag #${idx + 1} in „versions“ muss ein Objekt sein.`);
+            return;
+          }
+          const vName = isNonEmptyStr(ver.name) ? ver.name : '#' + (idx + 1);
+          if (ver.doc !== undefined) {
+            const sub = validateProject(ver.doc, { ...opts, _depth: (opts._depth || 0) + 1 });
+            for (const err of sub.errors) errors.push(`Version „${vName}“: ${err}`);
+            for (const wrn of sub.warnings) warnings.push(`Version „${vName}“: ${wrn}`);
+          }
+        });
+      }
+    }
+
+    // Schritte und Gruppen in items prüfen
+    const seenIds = new Set();
+    const checkItems = (list, pathPrefix, depth) => {
+      if (depth > 64) {
+        errors.push('Die Verschachtelung der Gruppen in „items“ ist zu tief (höchstens 64 Ebenen).');
+        return;
+      }
+      list.forEach((it, idx) => {
+        const tag = `${pathPrefix}#${idx + 1}`;
+        if (!isPlainObj(it)) {
+          errors.push(`Schritt ${tag} muss ein Objekt sein.`);
+          return;
+        }
+        itemCount++;
+        const lbl = isNonEmptyStr(it.name) ? `„${it.name}“` : (isNonEmptyStr(it.id) ? `„${it.id}“` : tag);
+        if (!isNonEmptyStr(it.id)) {
+          errors.push(`Schritt ${lbl}: Pflichtfeld „id“ fehlt oder ist leer.`);
+        } else if (seenIds.has(it.id)) {
+          errors.push(`Doppelte Schritt-Kennung „${it.id}“ gefunden.`);
+        } else {
+          seenIds.add(it.id);
+        }
+        if (!isNonEmptyStr(it.kind)) {
+          errors.push(`Schritt ${lbl}: Pflichtfeld „kind“ fehlt oder ist leer.`);
+        } else if (!knownKinds.has(it.kind)) {
+          warnings.push(`Schritt ${lbl}: unbekannte Schritt-Art „${it.kind}“ (eventuell aus einer neueren Tracery-Fassung).`);
+        }
+        if (it.role !== undefined && !VALID_ROLES.has(it.role)) {
+          errors.push(`Schritt ${lbl}: ungültige Rolle „${String(it.role)}“ – erlaubt sind „solid“ oder „hole“.`);
+        }
+        if (it.t !== undefined && it.t !== null) {
+          if (!isPlainObj(it.t)) {
+            errors.push(`Schritt ${lbl}: Feld „t“ (Lage) muss ein Objekt sein.`);
+          } else {
+            for (const tk of VALID_T_KEYS) {
+              if (it.t[tk] !== undefined && it.t[tk] !== null && !isNumOrExpr(it.t[tk])) {
+                errors.push(`Schritt ${lbl}: Lagewert „t.${tk}“ muss eine Zahl oder Formel sein.`);
+              }
+            }
+          }
+        }
+        if (it.p !== undefined && it.p !== null && !isPlainObj(it.p)) {
+          errors.push(`Schritt ${lbl}: Feld „p“ (Parameter) muss ein Objekt sein.`);
+        }
+        if (it.op !== undefined && it.op !== null) {
+          if (!isPlainObj(it.op) || !VALID_OP_TYPES.has(it.op.type)) {
+            errors.push(`Schritt ${lbl}: Feld „op“ braucht eine gültige Art („join“, „cut“ oder „common“).`);
+          }
+        }
+        if (it.finishes !== undefined && it.finishes !== null) {
+          if (!Array.isArray(it.finishes)) {
+            errors.push(`Schritt ${lbl}: Feld „finishes“ muss eine Liste sein.`);
+          } else {
+            it.finishes.forEach((fin, fi) => {
+              if (!isPlainObj(fin) || !isNonEmptyStr(fin.type)) {
+                errors.push(`Schritt ${lbl}: Nachbearbeitung #${fi + 1} in „finishes“ braucht ein Feld „type“.`);
+              }
+            });
+          }
+        }
+        if (it.kind === 'ref' && (!isPlainObj(it.p) || !isNonEmptyStr(it.p.docId))) {
+          errors.push(`Verweis-Schritt ${lbl}: Pflichtfeld „p.docId“ fehlt.`);
+        }
+        if (it.kind === 'import' && (!isPlainObj(it.p) || (!isNonEmptyStr(it.p.data) && !isNonEmptyStr(it.p.blobId) && !it.p.bytes))) {
+          warnings.push(`Import-Schritt ${lbl}: enthält keine Geometriedaten („p.data“ oder „p.blobId“).`);
+        }
+        if ((it.kind === 'extrude' || it.kind === 'revolve') && isPlainObj(it.p) && it.p.sketch !== undefined && it.p.sketch !== null) {
+          if (!isPlainObj(it.p.sketch) || !Array.isArray(it.p.sketch.ents)) {
+            errors.push(`Schritt ${lbl}: „p.sketch“ muss ein Objekt mit einer Element-Liste „ents“ sein.`);
+          }
+        }
+        if (it.kind === 'loft' && isPlainObj(it.p) && it.p.sketches !== undefined && it.p.sketches !== null && !Array.isArray(it.p.sketches)) {
+          errors.push(`Schritt ${lbl}: „p.sketches“ muss eine Liste sein.`);
+        }
+        if (it.kind === 'sketch3d' && isPlainObj(it.p) && it.p.sketch3d !== undefined && it.p.sketch3d !== null) {
+          if (!isPlainObj(it.p.sketch3d) || !Array.isArray(it.p.sketch3d.ents)) {
+            errors.push(`Schritt ${lbl}: „p.sketch3d“ muss ein Objekt mit einer Element-Liste „ents“ sein.`);
+          }
+        }
+        if (it.children !== undefined && it.children !== null) {
+          if (!Array.isArray(it.children)) {
+            errors.push(`Schritt ${lbl}: Feld „children“ muss eine Liste sein.`);
+          } else {
+            checkItems(it.children, `${pathPrefix}${idx + 1}.`, depth + 1);
+          }
+        }
+      });
+    };
+    if (Array.isArray(doc.items)) checkItems(doc.items, '', 0);
+
+    return {
+      ok: errors.length === 0,
+      errors,
+      warnings,
+      message: errors.length ? errors[0] : '',
+      version: Number.isInteger(doc.version) ? doc.version : null,
+      docType: VALID_DOC_TYPES.has(doc.docType) ? doc.docType : (doc.docType == null ? 'part' : null),
+      itemCount,
+    };
+  }
+
   return {
     init, ensureDB, whenIdle,
-    LIMITS, formatBytes, checkFileSize, stripXmlDoctype, sanitizeSVG, sanitizeImageDataUrl, safeParseJSON,
+    LIMITS, PROJECT_FORMAT, PROJECT_VERSION, formatBytes, checkFileSize, stripXmlDoctype, sanitizeSVG, sanitizeImageDataUrl, safeParseJSON, validateProject,
     bytesToBase64, base64ToBytes,
     registerBlob, putBlob, getBlobSync, getBlob, flushBlobs,
     extractBlobs, collectBlobIds, hydrateDoc, inlineBlobs,

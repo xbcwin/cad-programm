@@ -29086,6 +29086,92 @@ def t_verlauf_abschalten(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8]
 
 
+def t_a150_dateiformat(p):
+    import re
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    doc_path = os.path.join(repo_root, 'docs', 'DATEIFORMAT.md')
+    if not os.path.isfile(doc_path):
+        return [False, False, False, False, False]
+    doc_txt = open(doc_path, encoding='utf-8').read()
+    examples = re.findall(r'```json\r?\n(.*?)\r?\n```', doc_txt, re.S)
+    ok1 = (
+        all(w in doc_txt for w in ('masswerk', 'version', 'items', 'params', 'settings', 'sketch', 'docType', 'validateProject', 'Version'))
+        and len(examples) >= 3
+    )
+
+    p.empty()
+
+    # 2. Alle Beispiel-Projekte aus DATEIFORMAT.md werden als gültig erkannt, Beispiel 1 öffnet & rechnet fehlerfrei
+    ex_res = p.ev("""
+      return arg.map(raw => {
+        const a = Store.validateProject(raw);
+        let b = null;
+        try { b = Store.validateProject(JSON.parse(raw)); } catch (_) {}
+        return { a, b };
+      });
+    """, examples)
+    ok2_val = len(ex_res) >= 3 and all(
+        r['a']['ok'] is True and len(r['a']['errors']) == 0 and len(r['a']['warnings']) == 0 and r['a']['version'] == 1
+        and r['b'] and r['b']['ok'] is True and len(r['b']['errors']) == 0
+        for r in ex_res
+    )
+    p.ev("Start.openBlob(new File([arg], 'beispiel.tracery.json', { type: 'application/json' }))", examples[0])
+    warte_rechnen(p, 40)
+    opened = p.ev("return { items: App.doc.items.length, errs: App.errors.length, res: App.results.size, name: App.doc.name };")
+    ok2 = ok2_val and opened['items'] >= 1 and opened['errs'] == 0 and opened['res'] >= 1
+
+    # 3. Echte erzeugte Projekte (Vorlage & Export-Payload) bestehen Store.validateProject
+    real_res = p.ev("""return (async () => {
+      const tpl = Templates.LIST[0].build();
+      const vTpl = Store.validateProject(tpl);
+      const payload = await Start.projectPayload();
+      const vPay = Store.validateProject(payload);
+      return { vTpl, vPay };
+    })();""")
+    ok3 = (
+        real_res['vTpl']['ok'] is True and len(real_res['vTpl']['errors']) == 0 and real_res['vTpl']['itemCount'] > 0
+        and real_res['vPay']['ok'] is True and len(real_res['vPay']['errors']) == 0 and real_res['vPay']['itemCount'] > 0
+    )
+
+    # 4. Kaputte Dateien geben deutsche Meldungen; neuere Version / unbekannte Schritt-Art nur Warnungen
+    bad_res = p.ev("""
+      const noFmt = Store.validateProject({ version: 1, id: 'p1', name: 'Test', items: [] });
+      const badFmt = Store.validateProject({ format: 'andere-app', version: 1, id: 'p1', name: 'Test', items: [] });
+      const noVer = Store.validateProject({ format: 'masswerk', id: 'p1', name: 'Test', items: [] });
+      const noItems = Store.validateProject({ format: 'masswerk', version: 1, id: 'p1', name: 'Test' });
+      const noIdName = Store.validateProject({ format: 'masswerk', version: 1, items: [] });
+      const badItem = Store.validateProject({
+        format: 'masswerk', version: 1, id: 'p1', name: 'Test',
+        items: [
+          { id: 'i1', name: 'OhneArt' },
+          { id: 'i1', kind: 'box', name: 'Doppelt' },
+        ],
+      });
+      const badJson = Store.validateProject('{kaputt');
+      const future = Store.validateProject({
+        format: 'masswerk', version: 99, id: 'p2', name: 'Zukunft',
+        items: [{ id: 'i_z', kind: 'zukunft', name: 'Neu' }],
+      });
+      return { noFmt, badFmt, noVer, noItems, noIdName, badItem, badJson, future };
+    """)
+    ok4 = (
+        bad_res['noFmt']['ok'] is False and 'Pflichtfeld' in bad_res['noFmt']['message'] and 'format' in bad_res['noFmt']['message']
+        and bad_res['badFmt']['ok'] is False and 'Ungültiges Format' in bad_res['badFmt']['message']
+        and bad_res['noVer']['ok'] is False and 'Pflichtfeld' in bad_res['noVer']['message'] and 'version' in bad_res['noVer']['message']
+        and bad_res['noItems']['ok'] is False and 'Pflichtfeld' in bad_res['noItems']['message'] and 'items' in bad_res['noItems']['message']
+        and bad_res['noIdName']['ok'] is False
+        and any('id' in e for e in bad_res['noIdName']['errors'])
+        and any('name' in e for e in bad_res['noIdName']['errors'])
+        and bad_res['badItem']['ok'] is False
+        and any('kind' in e for e in bad_res['badItem']['errors'])
+        and any('Doppelte' in e for e in bad_res['badItem']['errors'])
+        and bad_res['badJson']['ok'] is False and 'JSON' in bad_res['badJson']['message']
+        and bad_res['future']['ok'] is True and len(bad_res['future']['errors']) == 0 and len(bad_res['future']['warnings']) >= 2
+    )
+    ok5 = len(p.errs) == 0
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -29344,6 +29430,7 @@ TESTS = [
     ('[A-143] Alles als Paket (ZIP) und Sicherheit beim Einlesen', t_paket_und_sicherheit),
     ('[A-148] Trackpad-, Touch- und Stift-Gesten: Zoom, langes Drücken, Stift in Skizze & Einstellung aus (BE-21)', t_a148_gesten),
     ('[A-147] Verlauf abschalten: freies Bearbeiten, Schritt 1', t_verlauf_abschalten),
+    ('[A-150] Dateiformat offen beschreiben: DATEIFORMAT.md, Beispiel-Projekt gültig & kaputte Datei deutsch gemeldet (PL-12)', t_a150_dateiformat),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
