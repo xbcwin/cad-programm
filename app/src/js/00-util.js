@@ -711,6 +711,7 @@ const IC = {
   editHole: '<circle cx="12" cy="12" r="4" stroke-dasharray="2.2 1.6" opacity=".55"/><circle cx="12" cy="12" r="7.5" fill="currentColor" opacity=".14"/><circle cx="12" cy="12" r="7.5"/><path d="M5.5 12h13M8 9.8 5.5 12 8 14.2M16 9.8 18.5 12 16 14.2" />',
   editFillet: '<path d="M5 19V9a6 6 0 0 1 6-6h8" stroke-dasharray="2.2 1.8" opacity=".45"/><path d="M5 19v-4a10 10 0 0 1 10-10h4"/><path d="M14.5 14.5 9 9M9 12.5V9h3.5" />',
   simplify: '<rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="currentColor" opacity=".14"/><path d="M3.5 9.5a5 5 0 0 1 5-5H19a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z" opacity=".45" stroke-dasharray="2.2 1.6"/><path d="M3.5 4.5h17v15h-17z"/><circle cx="14.5" cy="12" r="2.6" stroke-dasharray="1.8 1.4" opacity=".6"/><path d="M12.7 10.2l3.6 3.6M16.3 10.2l-3.6 3.6" />',
+  recognizeFeatures: '<rect x="3" y="4" width="15" height="15" rx="2.5" fill="currentColor" opacity=".14"/><path d="M3 8.5A4.5 4.5 0 0 1 7.5 4H16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="9" cy="10" r="2.2"/><circle cx="16.5" cy="15.5" r="3.6" fill="var(--bg,#fff)"/><circle cx="16.5" cy="15.5" r="3.6"/><path d="M19.2 18.2l2.3 2.3" stroke-width="2.1"/>',
   alignFaces: '<rect x="3" y="5" width="7" height="14" rx="1.2" fill="currentColor" opacity=".18"/><rect x="3" y="5" width="7" height="14" rx="1.2"/><rect x="14" y="5" width="7" height="14" rx="1.2" fill="currentColor" opacity=".28"/><rect x="14" y="5" width="7" height="14" rx="1.2"/><path d="M10 5v14M14 5v14" stroke-width="2.1"/><path d="M13 12h-2.5M12 10.2 10.2 12l1.8 1.8" />',
   helix: '<path d="M6 6.5c0-1.9 2.7-3 6-3s6 1.1 6 3-2.7 3-6 3-6 1.1-6 3 2.7 3 6 3 6 1.1 6 3-2.7 3-6 3-6-1.1-6-3" /><path d="M6 6.5c0 1.4 1.6 2.3 4 2.8 M18 12.5c0 1.4-1.6 2.3-4 2.8" opacity=".45"/>',
   stretch: '<path d="M3 7h11v10H3z" opacity=".45"/><path d="M10 4h8v16h-8z" stroke-dasharray="2.5 2"/><path d="M14 12h7M18 9l3 3-3 3"/>',
@@ -3051,6 +3052,11 @@ const HELP = {
   "tip": "Abdeckkappe mit Haltezapfen für Alu-Nutprofile (20×20 bis 45×90)",
   "hilfe": "Erzeugt eine Kunststoff-Endkappe mit abgeschrägten Ecken und passenden Press-Zapfen für die Stirnseite der Alu-Nutprofile. Mit „Endkappe aufs Profil setzen“ sitzt sie bündig auf dem Profilende.",
   "tipp": "Die Zapfen greifen genau in die Kernbohrung(en) des gewählten Profils und schließen die Schnittkante sauber ab."
+ },
+ "recognizeFeatures": {
+  "tip": "Bohrungen, Rundungen und Taschen in einem importierten Teil erkennen und bearbeitbar machen (Profi)",
+  "hilfe": "Durchsucht im Profi-Modus ein importiertes STEP-, IGES- oder BREP-Teil nach Bohrungen, Kantenrundungen und Taschen und legt für jede erkannte Form einen eigenen Schritt im Verlauf an. Dort lassen sich Durchmesser, Tiefe, Durchgang oder Rundungsradius direkt ändern – auch mit Formeln.",
+  "tipp": "Ideal, wenn ein fremdes STEP-Teil z. B. etwas größere Schraubenlöcher oder einen größeren Kantenradius bekommen soll, ohne es neu zu zeichnen."
  }
 };
 

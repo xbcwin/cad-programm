@@ -3106,6 +3106,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] 3D-Skizze mit 3 Linien (100, 80, 60 mm) → `#sk3-to-frame` erzeugt 3 Profilkörper (`34560 mm³`, `GeomCheck` = 0 Fehler); Rückgängig/Wiederherstellen, Projekt-Validierung, `Explain.local()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-209]`)
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine gemischte Skizze aus Linien und Bögen sowie eine 3D-Skizze zeichnen, als Gestell mit L- oder U-Profil erzeugen, Drehung/Versatz rechts testen und einzelne Stäbe im Verlauf links ein- und ausblenden.
 
+## Direkt bearbeiten: Formen in Importteilen erkennen (Auto [A-205], DB-08)
+- [x] Profi-Sichtbarkeit (`recognize-features` und `#tm-recognize-features` nur im Profi-Modus), `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-205]`)
+- [x] Importiertes STEP-Teil mit 2 Durchgangsbohrungen (`Ø 6 mm`, `Ø 8 mm`) und 1 Rundung (`R 3 mm`): Rechtsklick → „Formen erkennen“ listet 2 Bohrungen und 1 Rundung mit exakten Maßen als bearbeitbare Schritte im Verlauf und in der Zeitleiste (Klicktest `[A-205]`)
+- [x] Ändern der `Ø 6 mm`-Bohrung über `#rec-dia` auf `Ø 10 mm` und `Ø 4 mm` sowie der `R 3 mm`-Rundung über `#rec-radius` auf `R 5 mm` wirkt exakt am Körper (`GeomCheck` = 0 Fehler); auch Sackloch (`Ø 5 mm`, `T 6 mm`) und Tasche (`16 × 10 mm`, `T 4 mm` → `7 mm`) werden erkannt und bearbeitet (Klicktest `[A-205]`)
+- [x] Unterdrücken/Aktivieren, Zurücksetzen und Rückgängig stellen den Ausgangskörper sauber wieder her (Klicktest `[A-205]`)
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine fremde STEP-Datei mit Bohrungen, Rundungen und Taschen importieren, über Rechtsklick auf den Körper in der 3D-Ansicht „Formen erkennen“ starten und Maße über die neuen Verlaufsschritte anpassen.
+
 ## Profile, Schritt 2: Alu-Nutprofile mit Zubehör (Auto [A-208], PR-02)
 - [x] Unter „Bibliothek → Profile“ sind „Alu-Nutprofile & Zubehör“ (Alu-Nutprofil, Profil-Winkel, Nutenstein, Profil-Endkappe) in **Einfach** und **Profi** sichtbar sowie über die Befehlssuche einfügbar (Klicktest `[A-208]`)
 - [x] Nutprofil 20×20, Länge 300 mm einfügen ergibt geschlossenen B-Rep-Körper (`20 × 20 × 300 mm`, exaktes Volumen < 1 % Abweichung) mit 4 echten T-Nuten (4 Nutböden, 8 Lippenflanken) und 1 Mittelbohrung Ø 5 mm (Klicktest `[A-208]`)

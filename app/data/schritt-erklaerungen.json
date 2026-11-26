@@ -575,6 +575,11 @@
     "wozu": "Baut komplette Rahmen, Maschinengestelle, Tische oder Fachwerke aus Normprofilen oder eigenen Sonderquerschnitten auf einen Schlag.",
     "achtung": "Für ein eigenes Profil brauchst du zuerst eine geschlossene 2D-Skizze (z. B. Kreis oder eigenes Profil); danach lassen sich Querschnitt, Drehung und Versatz rechts jederzeit ändern."
   },
+  "recognizedFeature": {
+    "was": "Macht eine automatisch erkannte Bohrung, Rundung oder Tasche in einem importierten Bauteil als eigenen Verlaufsschritt direkt bearbeitbar.",
+    "wozu": "Erlaubt das nachträgliche Ändern von Lochdurchmesser, Bohrungstiefe, Taschentiefe oder Rundungsradius an fremden STEP-, IGES- oder BREP-Teilen.",
+    "achtung": "Jeder erkannte Schritt bleibt im Verlauf unterdrückbar, rückgängig machbar und lässt sich jederzeit auf sein ursprüngliches Maß zurücksetzen."
+  },
   "tSlotProfile": {
     "was": "Erzeugt ein Alu-Nutprofil der Baureihe 20, 30, 40 oder 45 (Nut 6, 8 oder 10) mit echten T-Nuten und Kernbohrungen.",
     "wozu": "Grundbaustein für verwindungssteife Aluminium-Gestelle, 3D-Drucker-Rahmen, Einhausungen und Vorrichtungen.",

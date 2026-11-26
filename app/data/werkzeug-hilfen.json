@@ -2243,5 +2243,10 @@
     "tip": "Abdeckkappe mit Haltezapfen für Alu-Nutprofile (20×20 bis 45×90)",
     "hilfe": "Erzeugt eine Kunststoff-Endkappe mit abgeschrägten Ecken und passenden Press-Zapfen für die Stirnseite der Alu-Nutprofile. Mit „Endkappe aufs Profil setzen“ sitzt sie bündig auf dem Profilende.",
     "tipp": "Die Zapfen greifen genau in die Kernbohrung(en) des gewählten Profils und schließen die Schnittkante sauber ab."
+  },
+  "recognizeFeatures": {
+    "tip": "Bohrungen, Rundungen und Taschen in einem importierten Teil erkennen und bearbeitbar machen (Profi)",
+    "hilfe": "Durchsucht im Profi-Modus ein importiertes STEP-, IGES- oder BREP-Teil nach Bohrungen, Kantenrundungen und Taschen und legt für jede erkannte Form einen eigenen Schritt im Verlauf an. Dort lassen sich Durchmesser, Tiefe, Durchgang oder Rundungsradius direkt ändern – auch mit Formeln.",
+    "tipp": "Ideal, wenn ein fremdes STEP-Teil z. B. etwas größere Schraubenlöcher oder einen größeren Kantenradius bekommen soll, ohne es neu zu zeichnen."
   }
 }

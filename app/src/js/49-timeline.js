@@ -43,7 +43,11 @@ const Timeline = (() => {
   }
   function iconFor(it) {
     if (it.kind === 'part') { const d = LIBMAP[(it.p || {}).lib]; return d && d.icon ? d.icon : 'bolt'; }
-    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', helix: 'helix', frame: 'frame', import: 'folder', group: 'group', ref: 'parts', transform: 'moveStep', scale: 'scaleBody', deform: 'deform', thicken: 'thicken', directFace: 'directFace', rib: 'rib', vent: 'vent', fins: 'fins', fillPattern: 'patternFill', mountPattern: 'mountPattern', portCutout: 'portCutout', magnetPocket: 'magnetPocket', web: 'web', wrap: 'wrap', emboss: 'emboss', splitFace: 'splitFace', dome: 'dome', deleteFace: 'deleteFace', replaceFace: 'replaceFace', moveEdge: 'moveEdge', editHole: 'editHole', editFillet: 'editFillet', simplify: 'simplify', mirrorStep: 'mirror', deleteBody: 'deleteBody', boss: 'boss', lipGroove: 'lipGroove', undercut: 'undercut', circlipGroove: 'circlipGroove', keyway: 'keyway', splineProfile: 'splineShaft', knurl: 'knurl', gripPattern: 'gripPattern', sketch3d: 'sketch3d', stackHole: 'holeWizard', asmCut: 'boolSubtract' })[it.kind] || 'cube';
+    if (it.kind === 'recognizedFeature') {
+      const ft = it.p && it.p.featType;
+      return ft === 'hole' ? 'holeWizard' : ft === 'fillet' ? 'fillet' : 'recognizeFeatures';
+    }
+    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', helix: 'helix', frame: 'frame', import: 'folder', group: 'group', ref: 'parts', transform: 'moveStep', scale: 'scaleBody', deform: 'deform', thicken: 'thicken', directFace: 'directFace', rib: 'rib', vent: 'vent', fins: 'fins', fillPattern: 'patternFill', mountPattern: 'mountPattern', portCutout: 'portCutout', magnetPocket: 'magnetPocket', web: 'web', wrap: 'wrap', emboss: 'emboss', splitFace: 'splitFace', dome: 'dome', deleteFace: 'deleteFace', replaceFace: 'replaceFace', moveEdge: 'moveEdge', editHole: 'editHole', editFillet: 'editFillet', simplify: 'simplify', recognizedFeature: 'recognizeFeatures', mirrorStep: 'mirror', deleteBody: 'deleteBody', boss: 'boss', lipGroove: 'lipGroove', undercut: 'undercut', circlipGroove: 'circlipGroove', keyway: 'keyway', splineProfile: 'splineShaft', knurl: 'knurl', gripPattern: 'gripPattern', sketch3d: 'sketch3d', stackHole: 'holeWizard', asmCut: 'boolSubtract' })[it.kind] || 'cube';
   }
   // Zeitleiste des Projekts – oder des Bauteils, das gerade bearbeitet wird
   function owner(doc = App.doc) { const c = App.ctx ? doc.items.find((x) => x.id === App.ctx) : null; return c || doc; }
@@ -79,6 +83,7 @@ const Timeline = (() => {
     c.dataset.idx = i;
     c.dataset.id = it.id;
     c.dataset.kind = it.kind;
+    c.dataset.feat = (it.p && it.p.featType) || '';
     c.dataset.lib = (it.p && it.p.lib) || '';
     c.dataset.ai = it.ai ? '1' : '';
     if (cs && cs.fp) c.dataset.fp = cs.fp; else delete c.dataset.fp;
@@ -100,6 +105,7 @@ const Timeline = (() => {
       const it = items[i];
       if (!ch || !ch.classList.contains('tl-chip')) return false;
       if (ch.dataset.id !== it.id || ch.dataset.kind !== it.kind) return false;
+      if ((ch.dataset.feat || '') !== ((it.p && it.p.featType) || '')) return false;
       if ((ch.dataset.lib || '') !== ((it.p && it.p.lib) || '')) return false;
       if ((ch.dataset.ai || '') !== (it.ai ? '1' : '')) return false;
     }
@@ -194,6 +200,12 @@ const Timeline = (() => {
       if (!ViewPrefs.simple) add('frame', T('kind.frame'), () => Features.frameFromSketch3d(it.id));
     } else {
       add('edit', T('common.edit'), () => App.select([it.id]));
+    }
+    if ((typeof ViewPrefs === 'undefined' || !ViewPrefs.simple) && it.kind === 'import' && it.role !== 'hole' && !(it.p && it.p.fmt === 'stl') && !App.ctx) {
+      const rb = h('button', { type: 'button', class: 'btn ghost', id: 'tl-recognize-features', 'data-help': 'recognizeFeatures', style: { justifyContent: 'flex-start' } });
+      rb.innerHTML = icon('recognizeFeatures') + esc(T('ctx.recognizeFeatures'));
+      rb.onclick = () => { UI.closePop(); Features.recognizeFeatures(it.id); };
+      box.append(rb);
     }
     add('help', T('common.explainStep'), () => Explain.dialog(it.id));
     add('copy', T('common.duplicate'), () => Actions.duplicate([it.id]));
