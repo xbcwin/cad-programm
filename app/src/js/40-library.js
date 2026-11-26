@@ -1894,6 +1894,403 @@ const LabelCodes = {
   barcodeMetrics,
   barcodeSpec,
 };
+
+// SVG-Logo als erhabener 3D-Körper, auf Platte oder als Prägung (BI-24)
+const DEFAULT_SVG_LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><polygon points="50,6 63,35 95,38 71,59 78,90 50,74 22,90 29,59 5,38 37,35"/></svg>';
+const SVG_LOGO_PRESETS = [
+  { id: 'star', label: 'Stern', svg: DEFAULT_SVG_LOGO },
+  { id: 'hexagon', label: 'Sechseck-Ring', svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><polygon points="50,6 88,28 88,72 50,94 12,72 12,28"/><circle cx="50" cy="50" r="22"/></svg>' },
+  { id: 'bolt', label: 'Blitz', svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><polygon points="58,6 22,55 47,55 39,94 78,44 52,44"/></svg>' },
+  { id: 'heart', label: 'Herz', svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><path d="M50 86C50 86 12 61 12 34C12 20 23 11 35 11C43 11 48 16 50 20C52 16 57 11 65 11C77 11 88 20 88 34C88 61 50 86 50 86Z"/></svg>' },
+];
+const _svgParseCache = new Map();
+function parseSvgLogoCached(rawSvg) {
+  const src = typeof rawSvg === 'string' && rawSvg.trim() ? rawSvg.trim() : DEFAULT_SVG_LOGO;
+  if (typeof Start === 'undefined' || typeof Start.parseSVG !== 'function') {
+    return { ok: false, ents: [], w: 0, h: 0, texts: 0, sanitized: null, cleanSvg: src };
+  }
+  if (_svgParseCache.has(src)) return _svgParseCache.get(src);
+  let parsed = null;
+  try { parsed = Start.parseSVG(src); } catch (_) { parsed = null; }
+  const res = parsed && Array.isArray(parsed.ents) && parsed.ents.length
+    ? { ok: true, ...parsed }
+    : { ok: false, ents: [], w: 0, h: 0, texts: (parsed && parsed.texts) || 0, sanitized: (parsed && parsed.sanitized) || null, cleanSvg: (parsed && parsed.cleanSvg) || src };
+  if (_svgParseCache.size >= 16) _svgParseCache.delete(_svgParseCache.keys().next().value);
+  _svgParseCache.set(src, res);
+  return res;
+}
+function transformSvgEnts(ents, scale, rotDeg = 0, mirrorX = false) {
+  const rad = ((Number(rotDeg) || 0) * Math.PI) / 180;
+  const hasRot = Math.abs(rad) > 1e-9;
+  const cosA = hasRot ? Math.cos(rad) : 1;
+  const sinA = hasRot ? Math.sin(rad) : 0;
+  const xf = (q) => {
+    let x = q[0] * scale;
+    let y = q[1] * scale;
+    if (mirrorX) x = -x;
+    if (hasRot) {
+      const rx = x * cosA - y * sinA;
+      y = x * sinA + y * cosA;
+      x = rx;
+    }
+    return [round(x, 5), round(y, 5)];
+  };
+  return (ents || []).map((e) => {
+    const o = { ...e };
+    if (o.a) o.a = xf(o.a);
+    if (o.b) o.b = xf(o.b);
+    if (o.m) o.m = xf(o.m);
+    if (o.c) o.c = xf(o.c);
+    if (Array.isArray(o.pts)) o.pts = o.pts.map(xf);
+    if (o.r != null) o.r = round(o.r * scale, 5);
+    if (o.rx != null) {
+      o.rx = round(o.rx * scale, 5);
+      o.ry = round(o.ry * scale, 5);
+      o.rot = (mirrorX ? -(Number(o.rot) || 0) : (Number(o.rot) || 0)) + rad;
+    }
+    return o;
+  });
+}
+function svgLogoMetrics(p = {}) {
+  const numV = (v, def) => {
+    const n = Number(v);
+    return isFinite(n) ? n : def;
+  };
+  const mode = p.mode === 'emboss' || p.mode === 'deboss' ? p.mode : 'relief';
+  const width = round(Math.max(2, Math.min(500, numV(p.width, 30))), 3);
+  const depthRaw = round(Math.max(0.2, Math.min(100, numV(p.depth, 2))), 3);
+  const baseH = round(Math.max(0.6, Math.min(40, numV(p.baseH, 2))), 3);
+  const margin = round(Math.max(0, Math.min(50, numV(p.margin, 4))), 3);
+  const cornerR = round(Math.max(0, Math.min(50, numV(p.cornerR, 2))), 3);
+  const rot = round(numV(p.rot, 0), 3);
+  const mirror = p.mirror === 'ja' || p.mirror === true;
+  const svg = typeof p.svg === 'string' && p.svg.trim() ? p.svg.trim() : DEFAULT_SVG_LOGO;
+  const fileName = typeof p.fileName === 'string' && p.fileName.trim() ? p.fileName.trim() : '';
+
+  const parsed = parseSvgLogoCached(svg);
+  const rawW = Math.max(parsed.w || 0, 1e-4);
+  const rawH = Math.max(parsed.h || 0, 1e-4);
+  const scale = width / rawW;
+  const scaledEnts = parsed.ok ? transformSvgEnts(parsed.ents, scale, rot, mirror) : [];
+  const bb = scaledEnts.length && typeof SK !== 'undefined' && SK.bounds ? SK.bounds(scaledEnts) : null;
+  const logoW = bb ? round(Math.max(0.1, bb[2] - bb[0]), 3) : width;
+  const logoH = bb ? round(Math.max(0.1, bb[3] - bb[1]), 3) : round(rawH * scale, 3);
+  const effDepth = mode === 'deboss' ? round(Math.min(depthRaw, Math.max(0.2, baseH - 0.4)), 3) : depthRaw;
+  const outerW = mode === 'relief' ? logoW : round(logoW + 2 * margin, 3);
+  const outerH = mode === 'relief' ? logoH : round(logoH + 2 * margin, 3);
+  const totalH = mode === 'emboss' ? round(baseH + effDepth, 3) : mode === 'deboss' ? baseH : effDepth;
+  const regions = scaledEnts.length && typeof SK !== 'undefined' && SK.regions ? SK.regions(scaledEnts) : [];
+
+  return {
+    ok: !!(parsed.ok && regions.length),
+    hasTexts: !!(parsed.texts > 0),
+    fileName,
+    sourceLabel: fileName || 'Standard-Symbol',
+    mode, width, depth: depthRaw, effDepth, baseH, margin, cornerR, rot, mirror,
+    logoW, logoH, outerW, outerH, totalH,
+    entityCount: scaledEnts.length,
+    regionsCount: regions.length,
+    scaledEnts,
+    _regions: regions,
+  };
+}
+function svgLogoSpec(p = {}, opts = {}) {
+  const m = svgLogoMetrics(p);
+  const regions = (m._regions || []).map((r) => ({ outer: r.outer.k, holes: r.holes.map((hl) => hl.k) }));
+  return {
+    mode: m.mode,
+    width: m.width,
+    depth: m.depth,
+    effDepth: m.effDepth,
+    baseH: m.baseH,
+    margin: m.margin,
+    cornerR: m.cornerR,
+    logoW: m.logoW,
+    logoH: m.logoH,
+    outerW: m.outerW,
+    outerH: m.outerH,
+    totalH: m.totalH,
+    asHole: !!opts.asHole,
+    regions,
+    contourCount: regions.length,
+  };
+}
+const SvgLogo = (() => {
+  let pickingEmboss = null;
+  function stopEmbossPick() {
+    if (!pickingEmboss) return;
+    if (typeof Viewer !== 'undefined' && Viewer.canvas) {
+      Viewer.canvas.style.cursor = '';
+      Viewer.canvas.removeEventListener('pointerdown', pickingEmboss.down, true);
+      Viewer.canvas.removeEventListener('pointermove', pickingEmboss.move);
+      Viewer.highlightFace('hover', null, null);
+    }
+    window.removeEventListener('keydown', pickingEmboss.key, true);
+    pickingEmboss = null;
+    if (typeof UI !== 'undefined' && UI.renderHint) UI.renderHint();
+  }
+  function parseAndValidate(svgText) {
+    if (typeof svgText !== 'string' || !svgText.trim()) {
+      return { ok: false, error: T('svgLogo.errEmpty') };
+    }
+    if (typeof Start === 'undefined' || typeof Start.parseSVG !== 'function') {
+      return { ok: false, error: T('svgLogo.errNotReady') };
+    }
+    let parsed = null;
+    try { parsed = Start.parseSVG(svgText); } catch (_) { parsed = null; }
+    if (!parsed) return { ok: false, error: T('svgLogo.errInvalid') };
+    if (!parsed.ents || !parsed.ents.length) {
+      return {
+        ok: false,
+        error: parsed.texts ? T('svgLogo.errNoShapesText') : T('svgLogo.errNoShapes'),
+      };
+    }
+    if (parsed.ents.length > 4000) {
+      return { ok: false, error: T('svgLogo.errTooMany', { n: parsed.ents.length }) };
+    }
+    const regs = typeof SK !== 'undefined' && SK.regions ? SK.regions(parsed.ents) : [];
+    if (!regs.length) {
+      return { ok: false, error: T('svgLogo.errOpenContour') };
+    }
+    return {
+      ok: true,
+      ents: parsed.ents,
+      regions: regs,
+      w: parsed.w,
+      h: parsed.h,
+      texts: parsed.texts || 0,
+      sanitized: parsed.sanitized || null,
+      cleanSvg: parsed.cleanSvg || svgText.trim(),
+    };
+  }
+  function loadTextIntoItem(itemId, svgText, fileName = '') {
+    const res = parseAndValidate(svgText);
+    if (!res.ok) {
+      UI.toast(res.error, { icon: 'warn', kind: 'bad', ms: 7000 });
+      return res;
+    }
+    const cleanName = String(fileName || '').trim();
+    const shortName = cleanName.replace(/\.svg$/i, '').trim();
+    App.change(T('svgLogo.undoLoaded'), (doc) => {
+      const f = Model.find(doc, itemId);
+      if (!f || !f.item || !f.item.p) return false;
+      f.item.p.svg = res.cleanSvg;
+      if (cleanName) f.item.p.fileName = cleanName;
+      else delete f.item.p.fileName;
+      if (shortName && (!f.item.name || f.item.name === 'SVG-Logo' || f.item.name === 'SVG Logo')) {
+        f.item.name = shortName;
+      }
+    });
+    if (res.sanitized && res.sanitized.stripped > 0) {
+      UI.toast(T('import.svgSanitized'), { icon: 'warn', ms: 5000 });
+    }
+    if (res.texts > 0) {
+      UI.toast(T('svgLogo.warnTextIgnored'), { icon: 'warn', ms: 6000 });
+    }
+    UI.toast(T('svgLogo.loadedToast', { name: cleanName || 'SVG-Logo', n: res.regions.length }), { icon: 'check', ms: 3200 });
+    return res;
+  }
+  async function loadFileIntoItem(itemId, file) {
+    if (!file) return { ok: false, error: T('svgLogo.errEmpty') };
+    if (typeof Store !== 'undefined' && Store.checkFileSize) {
+      const sz = Store.checkFileSize(file, 'svg');
+      if (!sz.ok) {
+        UI.toast(sz.message, { icon: 'warn', kind: 'bad', ms: 7000 });
+        return { ok: false, error: sz.message };
+      }
+    }
+    try {
+      const txt = await file.text();
+      return loadTextIntoItem(itemId, txt, file.name || '');
+    } catch (_) {
+      UI.toast(T('svgLogo.errInvalid'), { icon: 'warn', kind: 'bad' });
+      return { ok: false, error: T('svgLogo.errInvalid') };
+    }
+  }
+  function createFromText(svgText, opts = {}) {
+    const res = parseAndValidate(svgText);
+    if (!res.ok) {
+      UI.toast(res.error, { icon: 'warn', kind: 'bad', ms: 7000 });
+      return null;
+    }
+    const def = LIBMAP.svgLogo;
+    const p = { ...libDefaults(def), ...opts, svg: res.cleanSvg };
+    delete p.name; delete p.role;
+    if (opts.fileName) p.fileName = String(opts.fileName);
+    const shortName = opts.name || (opts.fileName ? String(opts.fileName).replace(/\.svg$/i, '').trim() : '') || 'SVG-Logo';
+    let created = null;
+    App.change(T('svgLogo.undoAdded'), (doc) => {
+      created = Model.newItem('part', p, { name: shortName, role: opts.role === 'hole' ? 'hole' : 'solid' });
+      doc.items.push(created);
+    });
+    if (created) App.select([created.id]);
+    return created;
+  }
+  function embossOnFace(itemIdOrSvg, face, opts = {}) {
+    if (typeof App !== 'undefined' && App.ctx) {
+      UI.toast(T('svgLogo.embossMainOnly'), { icon: 'info' });
+      return null;
+    }
+    face = face || (typeof Actions !== 'undefined' ? Actions.selectedFace() : null);
+    if (!face || !face.id || !face.info) {
+      UI.toast(T('svgLogo.embossPickHintToast'), { icon: 'info' });
+      return null;
+    }
+    let srcParams = {};
+    let sourceName = '';
+    let srcItem = null;
+    if (typeof itemIdOrSvg === 'string' && typeof App !== 'undefined' && App.doc) {
+      const f = Model.find(App.doc, itemIdOrSvg);
+      if (f && f.item) {
+        srcItem = f.item;
+        const V = Model.vars(App.doc).v;
+        srcParams = { ...Model.resolveP(srcItem.p, V), svg: srcItem.p.svg, fileName: srcItem.p.fileName };
+        sourceName = Model.label(srcItem);
+      } else {
+        srcParams = { svg: itemIdOrSvg };
+      }
+    } else if (itemIdOrSvg && typeof itemIdOrSvg === 'object') {
+      srcParams = { ...itemIdOrSvg };
+    }
+    if (srcItem && face.id === srcItem.id) {
+      UI.toast(T('svgLogo.embossOtherBody'), { icon: 'info' });
+      return null;
+    }
+    const merged = { ...srcParams, ...opts };
+    const m = svgLogoMetrics(merged);
+    if (!m.ok || !m.scaledEnts.length) {
+      UI.toast(T('svgLogo.errOpenContour'), { icon: 'warn', kind: 'bad' });
+      return null;
+    }
+    const topTarget = Model.topOf(App.doc, face.id) || (Model.find(App.doc, face.id) || {}).item;
+    if (!topTarget || topTarget.role === 'hole') {
+      UI.toast(T('svgLogo.embossPickHintToast'), { icon: 'info' });
+      return null;
+    }
+    const plane = Features.embossPlaneForFace(face, topTarget);
+    const sketch = { plane, ents: m.scaledEnts, dims: [], cons: [] };
+    const effMode = opts.mode === 'deboss' || opts.mode === 'emboss'
+      ? opts.mode
+      : (srcParams.mode === 'deboss' || (srcItem && srcItem.role === 'hole') ? 'deboss' : 'emboss');
+    return Features.emboss(face, sketch, {
+      mode: effMode,
+      height: opts.height ?? m.effDepth,
+      flip: !!opts.flip,
+      name: opts.name || (sourceName ? `${sourceName} (Prägung)` : 'SVG-Logo Prägung'),
+    });
+  }
+  function startEmbossFromItem(itemId, opts = {}) {
+    if (typeof App !== 'undefined' && App.ctx) {
+      UI.toast(T('svgLogo.embossMainOnly'), { icon: 'info' });
+      return false;
+    }
+    const f = Model.find(App.doc, itemId);
+    if (!f || !f.item) return false;
+    const selFace = typeof Actions !== 'undefined' ? Actions.selectedFace() : null;
+    if (selFace && selFace.id && selFace.id !== itemId) {
+      const tgt = Model.topOf(App.doc, selFace.id) || (Model.find(App.doc, selFace.id) || {}).item;
+      if (tgt && tgt.role !== 'hole' && tgt.id !== itemId) {
+        return !!embossOnFace(itemId, selFace, opts);
+      }
+    }
+    stopEmbossPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const tgt = hit ? (Model.topOf(App.doc, hit.id) || (Model.find(App.doc, hit.id) || {}).item) : null;
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      if (tgt && tgt.role !== 'hole' && tgt.id !== itemId && fi && Array.isArray(fi.c)) {
+        stopEmbossPick();
+        embossOnFace(itemId, { id: tgt.id, idx: hit.faceIdx, info: fi }, opts);
+        return;
+      }
+      UI.toast(T('svgLogo.embossPickHintToast'), { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const tgt = hit ? (Model.topOf(App.doc, hit.id) || (Model.find(App.doc, hit.id) || {}).item) : null;
+      const fi = tgt && tgt.id !== itemId && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      Viewer.highlightFace('hover', fi ? hit.id : null, fi ? hit.faceIdx : null);
+    };
+    const key = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault(); e.stopPropagation();
+        stopEmbossPick();
+      }
+    };
+    pickingEmboss = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(T('svgLogo.embossPickHint'));
+    return true;
+  }
+  function openPasteDialog(itemId) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || !f.item) return null;
+    const curSvg = (f.item.p && typeof f.item.p.svg === 'string' && f.item.p.svg.trim()) ? f.item.p.svg : DEFAULT_SVG_LOGO;
+    const wrap = h('div', { id: 'svglogo-paste-dlg', class: 'svglogo-dlg' });
+    wrap.append(h('div', { class: 'section-h' }, T('svgLogo.presetsTitle')));
+    const presetsRow = h('div', { class: 'svglogo-presets' });
+    for (const pr of SVG_LOGO_PRESETS) {
+      const b = h('button', { type: 'button', class: 'btn small', dataset: { svgPreset: pr.id } }, pr.label);
+      b.onclick = () => {
+        ta.value = pr.svg;
+        const r = loadTextIntoItem(itemId, pr.svg, '');
+        if (r.ok) dlg.close(true);
+      };
+      presetsRow.append(b);
+    }
+    wrap.append(presetsRow);
+    wrap.append(h('label', { for: 'svglogo-textarea', class: 'section-h' }, T('svgLogo.codeLabel')));
+    const ta = h('textarea', { id: 'svglogo-textarea', class: 'svglogo-ta mono', rows: 6, spellcheck: 'false' }, curSvg);
+    ta.addEventListener('keydown', (e) => { if (e.key !== 'Escape') e.stopPropagation(); });
+    wrap.append(ta);
+    const fileInp = h('input', { type: 'file', id: 'svglogo-dlg-file', accept: '.svg,image/svg+xml', style: { display: 'none' } });
+    fileInp.onchange = async () => {
+      const file = fileInp.files && fileInp.files[0];
+      if (!file) return;
+      const r = await loadFileIntoItem(itemId, file);
+      if (r.ok) dlg.close(true);
+    };
+    wrap.append(fileInp);
+    wrap.append(h('div', { class: 'hint-box' }, T('svgLogo.dlgHint')));
+    const dlg = UI.modal({
+      title: T('svgLogo.dlgTitle'),
+      body: wrap,
+      actions: [
+        { id: 'svglogo-dlg-pick', label: T('svgLogo.loadBtn'), run: () => { fileInp.click(); return false; } },
+        { id: 'svglogo-dlg-cancel', label: T('common.cancel'), value: false },
+        {
+          id: 'svglogo-dlg-apply',
+          label: T('common.apply'),
+          primary: true,
+          run: () => {
+            const r = loadTextIntoItem(itemId, ta.value, '');
+            return r.ok;
+          },
+        },
+      ],
+    });
+    return dlg;
+  }
+  return {
+    DEFAULT_SVG: DEFAULT_SVG_LOGO,
+    PRESETS: SVG_LOGO_PRESETS,
+    metrics: svgLogoMetrics,
+    spec: svgLogoSpec,
+    parseAndValidate,
+    loadTextIntoItem,
+    loadFileIntoItem,
+    createFromText,
+    embossOnFace,
+    startEmbossFromItem,
+    stopEmbossPick,
+    openPasteDialog,
+  };
+})();
 const LIB = [
   { lib: 'screwHole', label: 'Schraubenloch', role: 'hole', icon: 'bolt', desc: 'Durchgangsloch mit Senkung für Schrauben', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: THREAD_GROUPED_OPTIONS, def: 'M3' },
@@ -2153,6 +2550,18 @@ const LIB = [
       { k: 'baseH', label: 'Plattendicke', type: 'num', def: 2 },
       { k: 'reliefH', label: 'Code-Höhe/-Tiefe', type: 'num', def: 0.8 },
     ] },
+  { lib: 'svgLogo', label: 'SVG-Logo', role: 'solid', icon: 'svgLogo',
+    kw: 'svg logo vektor grafik emblem praegung prägung schild bild marke bi-24',
+    desc: 'SVG-Logo als erhabener 3D-Körper, auf einer Platte oder als Prägung auf einer Fläche', params: [
+      { k: 'mode', label: 'Ausführung', type: 'select', options: [['relief', 'Erhabener Körper (nur Logo)'], ['emboss', 'Platte + erhaben'], ['deboss', 'Platte + vertieft']], def: 'relief' },
+      { k: 'width', label: 'Breite', type: 'num', def: 30, min: 2, max: 500 },
+      { k: 'depth', label: 'Höhe / Tiefe', type: 'num', def: 2, min: 0.2, max: 100 },
+      { k: 'baseH', label: 'Plattendicke', type: 'num', def: 2, min: 0.6, max: 40 },
+      { k: 'margin', label: 'Rand (Platte)', type: 'num', def: 4, min: 0, max: 50 },
+      { k: 'cornerR', label: 'Eckenradius', type: 'num', def: 2, min: 0, max: 50 },
+      { k: 'rot', label: 'Drehung', type: 'num', def: 0, min: -360, max: 360, unit: '°' },
+      { k: 'mirror', label: 'Spiegeln', type: 'select', options: [['nein', 'Nein'], ['ja', 'Ja']], def: 'nein' },
+    ] },
   { lib: 'barcode', label: 'Barcode', role: 'solid', icon: 'barcode',
     kw: 'barcode strichcode ean ean13 ean-13 ean8 code128 code-128 etikett praegung prägung bi-23',
     desc: 'Lokal erzeugter Strichcode (Code 128, EAN-13, EAN-8) als Platte oder Präge-Balken', params: [
@@ -2164,6 +2573,18 @@ const LIB = [
       { k: 'margin', label: 'Rand', type: 'num', def: 4 },
       { k: 'baseH', label: 'Plattendicke', type: 'num', def: 2 },
       { k: 'reliefH', label: 'Code-Höhe/-Tiefe', type: 'num', def: 0.8 },
+    ] },
+  { lib: 'svgLogo', label: 'SVG-Logo', role: 'solid', icon: 'svgLogo',
+    kw: 'svg logo vektor grafik emblem praegung prägung schild bild marke bi-24',
+    desc: 'SVG-Logo als erhabener 3D-Körper, auf einer Platte oder als Prägung auf einer Fläche', params: [
+      { k: 'mode', label: 'Ausführung', type: 'select', options: [['relief', 'Erhabener Körper (nur Logo)'], ['emboss', 'Platte + erhaben'], ['deboss', 'Platte + vertieft']], def: 'relief' },
+      { k: 'width', label: 'Breite', type: 'num', def: 30, min: 2, max: 500 },
+      { k: 'depth', label: 'Höhe / Tiefe', type: 'num', def: 2, min: 0.2, max: 100 },
+      { k: 'baseH', label: 'Plattendicke', type: 'num', def: 2, min: 0.6, max: 40 },
+      { k: 'margin', label: 'Rand (Platte)', type: 'num', def: 4, min: 0, max: 50 },
+      { k: 'cornerR', label: 'Eckenradius', type: 'num', def: 2, min: 0, max: 50 },
+      { k: 'rot', label: 'Drehung', type: 'num', def: 0, min: -360, max: 360, unit: '°' },
+      { k: 'mirror', label: 'Spiegeln', type: 'select', options: [['nein', 'Nein'], ['ja', 'Ja']], def: 'nein' },
     ] },
   { lib: 'goproMount', label: 'GoPro-Halterung', role: 'solid', icon: 'actionMount', drone: true, desc: 'Finger mit M5-Loch für Action-Kameras, auf einer Grundplatte – mit Mutter-Nabe', params: [
     { k: 'n', label: 'Finger', type: 'select', options: ['3', '2'], def: '3' }, { k: 't', label: 'Fingerdicke', type: 'num', def: 3 }, { k: 'gap', label: 'Spalt', type: 'num', def: 3.2 }, { k: 'hole', label: 'Loch Ø', type: 'num', def: 5.2 },
@@ -4579,6 +5000,183 @@ const Iso286 = (() => {
     formatTolShort,
     collectTargets,
     applyToTarget,
+    openDialog,
+  };
+})();
+
+// RAL-Classic-Farbtafel (BI-25, Quelle: app/data/ral-farben.json)
+const RalColors = (() => {
+  const DATA = /*JSON:ral-farben.json*/null;
+  const GROUPS = Array.isArray(DATA && DATA.gruppen) ? DATA.gruppen : [];
+  const LIST = ((DATA && DATA.farben) || []).map((f) => ({
+    code: String(f.code),
+    ral: 'RAL ' + String(f.code),
+    name: f.de,
+    de: f.de,
+    en: f.en || f.de,
+    hex: String(f.hex || '#888888').toLowerCase(),
+    group: String(f.g || (String(f.code).slice(0, 1) + '000')),
+  }));
+  const BY_CODE = new Map(LIST.map((x) => [x.code, x]));
+  const BY_HEX = new Map();
+  for (const x of LIST) {
+    if (!BY_HEX.has(x.hex)) BY_HEX.set(x.hex, x);
+  }
+  function labelOf(entry) {
+    if (!entry) return '';
+    return typeof I18n !== 'undefined' && I18n.lang === 'en' ? entry.en : entry.de;
+  }
+  function groupLabel(g) {
+    if (!g) return '';
+    return typeof I18n !== 'undefined' && I18n.lang === 'en' ? (g.en || g.de) : g.de;
+  }
+  function byCode(raw) {
+    if (raw == null) return null;
+    const m = String(raw).trim().match(/(\d{4})/);
+    return m ? (BY_CODE.get(m[1]) || null) : null;
+  }
+  function byHex(hex) {
+    if (typeof hex !== 'string') return null;
+    return BY_HEX.get(hex.trim().toLowerCase()) || null;
+  }
+  function search(query = '', group = 'all') {
+    const q = String(query || '').trim().toLowerCase();
+    const g = String(group || 'all');
+    return LIST.filter((x) => {
+      if (g !== 'all' && x.group !== g) return false;
+      if (!q) return true;
+      return x.code.includes(q)
+        || x.ral.toLowerCase().includes(q)
+        || x.de.toLowerCase().includes(q)
+        || x.en.toLowerCase().includes(q)
+        || x.hex.includes(q);
+    });
+  }
+  function openDialog(opts = {}) {
+    let activeGroup = 'all';
+    let query = '';
+    const curHex = typeof opts.currentColor === 'string' ? opts.currentColor.trim().toLowerCase() : '';
+    const curCode = opts.currentRal ? String(opts.currentRal) : null;
+
+    const wrap = h('div', { id: 'ral-picker-dlg', class: 'ral-dlg' });
+    const top = h('div', { class: 'ral-top' });
+    const searchInp = h('input', {
+      type: 'search',
+      id: 'ral-search',
+      placeholder: T('ral.searchPh'),
+      'aria-label': T('ral.searchPh'),
+      autocomplete: 'off',
+      spellcheck: 'false',
+    });
+    const countEl = h('span', { id: 'ral-count', class: 'ral-count muted' }, '');
+    top.append(searchInp, countEl);
+    wrap.append(top);
+
+    const groupsEl = h('div', { class: 'ral-groups', role: 'group', 'aria-label': T('ral.groupsAria') });
+    const groupBtns = [];
+    const makeGroupBtn = (id, label, dotHex) => {
+      const b = h('button', {
+        type: 'button',
+        class: 'btn small ral-group-btn' + (activeGroup === id ? ' active' : ''),
+        dataset: { ralGroup: id },
+        'aria-pressed': activeGroup === id ? 'true' : 'false',
+      });
+      if (dotHex) b.append(h('span', { class: 'ral-gdot', style: { background: dotHex } }));
+      b.append(document.createTextNode(label));
+      b.onclick = () => {
+        activeGroup = id;
+        for (const gb of groupBtns) {
+          const act = gb.dataset.ralGroup === activeGroup;
+          gb.classList.toggle('active', act);
+          gb.setAttribute('aria-pressed', act ? 'true' : 'false');
+        }
+        renderGrid();
+      };
+      groupBtns.push(b);
+      groupsEl.append(b);
+    };
+    makeGroupBtn('all', T('ral.allGroups'), null);
+    for (const g of GROUPS) makeGroupBtn(String(g.id), `${g.id} ${groupLabel(g)}`, g.hex);
+    wrap.append(groupsEl);
+
+    const grid = h('div', { id: 'ral-grid', class: 'ral-grid' });
+    wrap.append(grid);
+    wrap.append(h('div', { class: 'hint-box' }, T('ral.approxHint')));
+
+    let dlg = null;
+    const pick = (entry) => {
+      if (!entry) return;
+      if (typeof opts.onPick === 'function') opts.onPick(entry);
+      if (dlg) dlg.close(entry);
+      if (!opts.silent) {
+        UI.toast(T('ral.pickedToast', { code: entry.ral, name: labelOf(entry) }), { icon: 'check', ms: 1800 });
+      }
+    };
+
+    const renderGrid = () => {
+      grid.innerHTML = '';
+      const hits = search(query, activeGroup);
+      countEl.textContent = hits.length === 1 ? T('ral.countOne') : T('ral.countMany', { n: hits.length });
+      if (!hits.length) {
+        grid.append(h('div', { class: 'hint-box', style: { gridColumn: '1 / -1' } }, T('ral.empty')));
+        return;
+      }
+      for (const entry of hits) {
+        const isSel = (curCode && curCode === entry.code) || (!curCode && curHex && curHex === entry.hex);
+        const btn = h('button', {
+          type: 'button',
+          class: 'ral-swatch' + (isSel ? ' active' : ''),
+          dataset: { ral: entry.code, hex: entry.hex },
+          'aria-label': `${entry.ral} ${labelOf(entry)}`,
+          'aria-pressed': isSel ? 'true' : 'false',
+          'data-tip': `${entry.ral} · ${labelOf(entry)} (${entry.hex.toUpperCase()})`,
+        });
+        btn.append(
+          h('span', { class: 'ral-chip', style: { background: entry.hex } }),
+          h('span', { class: 'ral-meta' },
+            h('b', null, entry.ral),
+            h('span', { class: 'ral-nm' }, labelOf(entry)),
+            h('small', { class: 'mono' }, entry.hex.toUpperCase()))
+        );
+        btn.onclick = () => pick(entry);
+        grid.append(btn);
+      }
+    };
+
+    searchInp.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') e.stopPropagation();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const hits = search(searchInp.value, activeGroup);
+        const exact = byCode(searchInp.value);
+        if (exact && hits.some((x) => x.code === exact.code)) pick(exact);
+        else if (hits.length === 1) pick(hits[0]);
+      }
+    });
+    searchInp.addEventListener('input', () => {
+      query = searchInp.value;
+      renderGrid();
+    });
+
+    renderGrid();
+    dlg = UI.modal({
+      title: opts.title || T('ral.dlgTitle'),
+      body: wrap,
+      wide: true,
+      actions: [{ id: 'ral-close', label: T('common.close'), value: null }],
+    });
+    setTimeout(() => { try { searchInp.focus(); } catch (_) {} }, 20);
+    return dlg;
+  }
+
+  return {
+    DATA,
+    GROUPS,
+    LIST,
+    byCode,
+    byHex,
+    labelOf,
+    search,
     openDialog,
   };
 })();

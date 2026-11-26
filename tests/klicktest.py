@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Motion,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,Refine,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI,Enclosure,LabelCodes,Iso286}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Motion,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,Refine,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI,Enclosure,LabelCodes,Iso286,SvgLogo,RalColors}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -40951,6 +40951,262 @@ def t_a197_step_katalog_bibliothek(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a194_svg_logo_ral_farben(p):
+    """[A-194] Bibliothek: Logo aus SVG (BI-24) und RAL-Farbtafel (BI-25)."""
+    import math
+    p.empty()
+
+    # 1. Einfach-Modus: Flyout zeigt #add-svg-logo (5 Kacheln bleiben), Standard-Symbol baut sofort Körper
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(300)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    fly_st = p.ev("""return {
+      tiles: [...document.querySelectorAll('.flyout .tile')].filter(t => t.offsetParent).length,
+      svgBtn: !!document.querySelector('#add-svg-logo')?.offsetParent,
+    }""")
+    p.pg.locator('#add-svg-logo').click()
+    warte_rechnen(p, 45)
+    st1 = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = it ? App.results.get(it.id) : null;
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      const exp = it ? Explain.local(it.id) : null;
+      return {
+        errs: App.errors.length,
+        kind: it?.kind,
+        lib: it?.p?.lib,
+        faces: r?.data?.faces?.length || 0,
+        vol: ms?.parts?.[0]?.volume || 0,
+        gcIssues: gc.issues.length,
+        hint: document.querySelector('#p-svglogo-hint')?.textContent || '',
+        hasExplain: !!(exp && exp.title && Array.isArray(exp.lines) && exp.lines.some(l => l.t && l.t.includes('SVG'))),
+      };
+    })()""")
+    ok1 = bool(
+        fly_st['tiles'] == 5 and fly_st['svgBtn']
+        and st1['errs'] == 0 and st1['kind'] == 'part' and st1['lib'] == 'svgLogo'
+        and st1['faces'] >= 12 and st1['vol'] > 100.0 and st1['gcIssues'] == 0
+        and 'Standard-Symbol' in st1['hint'] and st1['hasExplain']
+    )
+
+    # 2. Kleines SVG mit Quadrat + rundem Loch per Datei laden -> Körper entsteht; Platte+erhaben, Platte+vertieft & Speichern/Laden
+    svg_bytes = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">'
+        '<rect x="10" y="10" width="80" height="80"/>'
+        '<circle cx="50" cy="50" r="15"/>'
+        '</svg>'
+    ).encode('utf-8')
+    p.pg.locator('#lp-svglogo-file').set_input_files([{'name': 'test-emblem.svg', 'mimeType': 'image/svg+xml', 'buffer': svg_bytes}])
+    warte_rechnen(p, 45)
+    p.pg.locator('#lp-width').fill('40')
+    p.pg.locator('#lp-width').press('Enter')
+    warte_rechnen(p, 45)
+    p.pg.locator('#lp-depth').fill('2.5')
+    p.pg.locator('#lp-depth').press('Enter')
+    warte_rechnen(p, 45)
+    exp_hole_r = 40.0 * (15.0 / 80.0)
+    exp_vol_rel = (40.0 * 40.0 - math.pi * exp_hole_r * exp_hole_r) * 2.5
+    rel_st = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bb = r.data.bbox;
+      const cyls = (r.data.faces || []).filter(f => f.t === 'CYLINDRE');
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        name: it.name,
+        fileName: it.p.fileName,
+        dx: bb[3] - bb[0], dy: bb[4] - bb[1], dz: bb[5] - bb[2],
+        cyls: cyls.length,
+        vol: ms.parts[0].volume,
+        gcIssues: gc.issues.length,
+        hint: document.querySelector('#p-svglogo-hint')?.textContent || '',
+      };
+    })()""")
+
+    p.pg.locator('#lp-mode').select_option('emboss')
+    warte_rechnen(p, 45)
+    emb_st = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bb = r.data.bbox;
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        dx: bb[3] - bb[0], dy: bb[4] - bb[1], dz: bb[5] - bb[2],
+        vol: ms.parts[0].volume,
+        faces: r.data.faces.length,
+        gcIssues: gc.issues.length,
+        payload: await Start.projectPayload(),
+      };
+    })()""")
+
+    p.pg.locator('#lp-mode').select_option('deboss')
+    warte_rechnen(p, 45)
+    deb_st = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bb = r.data.bbox;
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        dz: bb[5] - bb[2],
+        vol: ms.parts[0].volume,
+        gcIssues: gc.issues.length,
+      };
+    })()""")
+
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("App.setDoc(Model.migrate(JSON.parse(arg)))", emb_st['payload'])
+    warte_rechnen(p, 45)
+    rel_load = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const ms = await Mass.measure();
+      return { errs: App.errors.length, faces: r.data.faces.length, vol: ms.parts[0].volume, fileName: it.p.fileName };
+    })()""")
+    ok2 = bool(
+        rel_st['errs'] == 0 and rel_st['fileName'] == 'test-emblem.svg' and rel_st['name'] == 'test-emblem'
+        and abs(rel_st['dx'] - 40.0) < 0.05 and abs(rel_st['dy'] - 40.0) < 0.05 and abs(rel_st['dz'] - 2.5) < 0.05
+        and rel_st['cyls'] >= 1 and abs(rel_st['vol'] - exp_vol_rel) < 5.0 and rel_st['gcIssues'] == 0
+        and 'test-emblem.svg' in rel_st['hint']
+        and emb_st['errs'] == 0 and abs(emb_st['dx'] - 48.0) < 0.05 and abs(emb_st['dy'] - 48.0) < 0.05
+        and abs(emb_st['dz'] - 4.5) < 0.05 and emb_st['vol'] > 4000.0 and emb_st['gcIssues'] == 0
+        and deb_st['errs'] == 0 and abs(deb_st['dz'] - 2.0) < 0.05 and deb_st['vol'] < emb_st['vol'] and deb_st['gcIssues'] == 0
+        and rel_load['errs'] == 0 and rel_load['fileName'] == 'test-emblem.svg'
+        and rel_load['faces'] == emb_st['faces'] and abs(rel_load['vol'] - emb_st['vol']) < 0.05
+    )
+
+    # 3. SVG-Logo als erhabene Prägung auf eine Quader-Fläche setzen
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("""App.change('Quader anlegen', (doc) => {
+      doc.items.push(Model.newItem('box', { w: 60, d: 60, h: 8 }, { name: 'Gehäuse' }));
+    })""")
+    warte_rechnen(p, 45)
+    p.ev("""(() => {
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const topIdx = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      const face = { id: box.id, idx: topIdx, info: r.data.faces[topIdx] };
+      const starSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,6 63,35 95,38 71,59 78,90 50,74 22,90 29,59 5,38 37,35"/></svg>';
+      SvgLogo.embossOnFace(starSvg, face, { width: 24, depth: 1.5, mode: 'emboss', name: 'Stern-Prägung' });
+    })()""")
+    warte_rechnen(p, 45)
+    emb_face = p.ev("""return (async () => {
+      const box = App.doc.items[0];
+      const step = App.doc.items.find(x => x.kind === 'emboss');
+      const r = box ? App.results.get(box.id) : null;
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        hasStep: !!(step && App.mergedInto(step.id) === box.id),
+        dz: r ? (r.data.bbox[5] - r.data.bbox[2]) : 0,
+        vol: ms?.parts?.[0]?.volume || 0,
+        gcIssues: gc.issues.length,
+      };
+    })()""")
+    ok3 = bool(
+        emb_face['errs'] == 0 and emb_face['hasStep']
+        and abs(emb_face['dz'] - 9.5) < 0.05 and emb_face['vol'] > 28800.0 and emb_face['gcIssues'] == 0
+    )
+
+    # 4. RAL-Farbtafel: RAL 3020 wählen -> Farbe ist Verkehrsrot (#bb1e10), Badge, Undo/Redo, Profi-Kachel & Flächenfarbe
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("""App.change('Testkörper', (doc) => {
+      const b = Model.newItem('box', { w: 30, d: 30, h: 15 }, { name: 'Blech' });
+      doc.items.push(b);
+    })""")
+    warte_rechnen(p, 45)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(200)
+    old_color = p.ev("return App.doc.items[0].color")
+    p.pg.locator('#btn-ral-picker').click(); p.wait(250)
+    p.pg.locator('#ral-search').fill('3020'); p.wait(200)
+    ral_item_txt = p.pg.locator('#ral-grid [data-ral="3020"]').text_content()
+    p.pg.locator('#ral-grid [data-ral="3020"]').click()
+    warte_rechnen(p, 45); p.wait(100)
+    after_ral = p.ev("""return {
+      color: App.doc.items[0].color,
+      colorSet: App.doc.items[0].colorSet,
+      ral: App.doc.items[0].ral,
+      badge: document.querySelector('#item-ral-badge')?.textContent || '',
+      nodeColor: Viewer.nodes.get(App.doc.items[0].id)?.color || null,
+      meshHex: '#' + Viewer.nodes.get(App.doc.items[0].id).mesh.material.color.getHexString(),
+    }""")
+    p.ev("App.undo();"); warte_rechnen(p, 45); p.wait(100)
+    undo_col = p.ev("return { color: App.doc.items[0].color, ral: App.doc.items[0].ral || null }")
+    p.ev("App.redo();"); warte_rechnen(p, 45); p.wait(100)
+    redo_col = p.ev("return { color: App.doc.items[0].color, ral: App.doc.items[0].ral || null }")
+
+    # Profi-Modus: Kachel im Flyout + Flächenfarbe über RAL-Tafel (RAL 7016 Anthrazitgrau)
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(300)
+    p.pg.locator('#t-parts').click(); p.wait(250)
+    pro_tile = p.ev("return !!document.querySelector('.flyout .tile[data-lib=\"svgLogo\"]')?.offsetParent")
+    p.pg.locator('#t-parts').click(); p.wait(150)
+    p.ev("""(() => {
+      const b = App.doc.items[0];
+      const r = App.results.get(b.id);
+      const topIdx = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      App.select([b.id], { face: { id: b.id, faceIdx: topIdx } });
+    })()"""); p.wait(250)
+    p.pg.locator('#btn-face-ral-picker').click(); p.wait(250)
+    p.pg.locator('#ral-search').fill('Anthrazitgrau'); p.wait(200)
+    p.pg.locator('#ral-grid [data-ral="7016"]').click()
+    warte_rechnen(p, 45); p.wait(100)
+    face_ral = p.ev("""return {
+      faceCol: App.doc.items[0].faceColors?.[0]?.col || null,
+      faceBadge: document.querySelector('#face-ral-badge')?.textContent || '',
+    }""")
+    ok4 = bool(
+        'RAL 3020' in ral_item_txt and 'Verkehrsrot' in ral_item_txt
+        and after_ral['color'] == '#bb1e10' and after_ral['colorSet'] is True and after_ral['ral'] == '3020'
+        and 'RAL 3020' in after_ral['badge'] and 'Verkehrsrot' in after_ral['badge']
+        and after_ral['nodeColor'] == '#bb1e10'
+        and undo_col['color'] == old_color and undo_col['ral'] is None
+        and redo_col['color'] == '#bb1e10' and redo_col['ral'] == '3020'
+        and pro_tile and face_ral['faceCol'] == '#383e42' and 'RAL 7016' in face_ral['faceBadge']
+    )
+
+    # 5. Hilfetexte, Befehle, Erklärungen und DE/EN-Übersetzungen
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en, ralJson] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+        fetch('data/ral-farben.json').then(r => r.json()),
+      ]);
+      const hOk = ['svgLogo', 'ralColors'].every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const sOk = !!(se.svgLogo && se.svgLogo.was && se.svgLogo.wozu && se.svgLogo.achtung);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmdSvg = Commands.search('svg').some(c => c.id === 'lib-svgLogo');
+      const cmdRal = Commands.search('verkehrsrot').some(c => c.id === 'ral-colors');
+      const r3020 = RalColors.byCode('RAL 3020');
+      const exp = Explain.local(App.doc.items[0].id);
+      return {
+        errs: App.errors.length,
+        hOk, sOk, i18nOk, cmdSvg, cmdRal,
+        ralCount: (ralJson.farben || []).length,
+        r3020Hex: r3020 ? r3020.hex : null,
+        r3020Name: r3020 ? r3020.de : null,
+        hasExplain: !!(exp && exp.title),
+      };
+    })()""")
+    ok5 = bool(
+        meta['errs'] == 0 and meta['hOk'] and meta['sOk'] and meta['i18nOk']
+        and meta['cmdSvg'] and meta['cmdRal']
+        and meta['ralCount'] >= 100
+        and meta['r3020Hex'] == '#bb1e10' and meta['r3020Name'] == 'Verkehrsrot'
+        and meta['hasExplain']
+    )
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -41263,6 +41519,7 @@ TESTS = [
     ('[F-11252354] Volltest-Reparatur: Mass.measure wartet auf App-Neubau / Zeichnung-PDF-Menü eindeutig / Einstellungen-Dialog ohne Geister-Reopen', t_f11252354),
     ('[A-196] Rohre, Fittings, Flansche, Riemen und Ketten (BI-27, BI-28)', t_a196_rohre_fittings_flansche_riemen_ketten),
     ('[A-197] STEP-Teile aus Hersteller-Katalogen einsortieren (BI-29)', t_a197_step_katalog_bibliothek),
+    ('[A-194] Bibliothek: Logo aus SVG und RAL-Farben (BI-24, BI-25)', t_a194_svg_logo_ral_farben),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
