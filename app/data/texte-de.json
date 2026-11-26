@@ -5370,5 +5370,6 @@
   "ral.empty": "Keine passende RAL-Farbe gefunden.",
   "ral.pickedToast": "{code} ({name}) gewählt",
   "ral.selectBodyFirst": "Wähl zuerst mindestens einen Körper aus, um ihm eine RAL-Farbe zu geben.",
-  "ral.approxHint": "Hinweis: Digitale sRGB-Näherungswerte nach RAL Classic (D65); Monitore zeigen Töne leicht unterschiedlich."
+  "ral.approxHint": "Hinweis: Digitale sRGB-Näherungswerte nach RAL Classic (D65); Monitore zeigen Töne leicht unterschiedlich.",
+  "sk.panel.fontSingle": "Einlinig (Gravur)"
 }

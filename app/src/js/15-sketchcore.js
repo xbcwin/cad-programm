@@ -436,10 +436,15 @@ const SK = (() => {
     return o;
   };
   // ---------- Text: Umrisse aus eingebauten und geladenen Schriften ----------
-  const BUILTIN_FONT_URLS = { inter: 'data/schrift-inter.json', fett: 'data/schrift-inter-fett.json' };
-  const BUILTIN_FONTNAMES = { inter: 'Inter', fett: 'Inter Fett' };
+  const BUILTIN_FONT_URLS = { inter: 'data/schrift-inter.json', fett: 'data/schrift-inter-fett.json', gravur: 'data/schrift-einlinig.json' };
+  const BUILTIN_FONTNAMES = { inter: 'Inter', fett: 'Inter Fett', gravur: 'Einlinig (Gravur)' };
+  const BUILTIN_SINGLELINE = new Set(['gravur']);
   const FONTS = {};
-  const FONTNAMES = { ...BUILTIN_FONTNAMES };
+  const FONTNAMES = {
+    inter: BUILTIN_FONTNAMES.inter,
+    fett: BUILTIN_FONTNAMES.fett,
+    get gravur() { return typeof T === 'function' ? T('sk.panel.fontSingle') : BUILTIN_FONTNAMES.gravur; },
+  };
   const fontLoads = new Map();
   const fontEv = makeEmitter();
   const parsedFonts = new Map();
@@ -448,6 +453,14 @@ const SK = (() => {
   const textCache = new Map();
   function isFontLoaded(id) {
     return !!FONTS[id];
+  }
+  function isSingleLineFont(fontOrId) {
+    if (!fontOrId) return false;
+    if (typeof fontOrId === 'string') {
+      if (FONTS[fontOrId]) return !!FONTS[fontOrId].singleLine;
+      return BUILTIN_SINGLELINE.has(fontOrId);
+    }
+    return !!fontOrId.singleLine;
   }
   async function loadFont(id = 'inter') {
     const key = BUILTIN_FONT_URLS[id] ? id : (FONTS[id] ? id : 'inter');
@@ -465,7 +478,7 @@ const SK = (() => {
       const ms = Math.max(1, Math.round(performance.now() - t0));
       const atMs = Math.round(performance.now());
       fontLoads.delete(key);
-      fontEv.emit('loaded', { id: key, name: BUILTIN_FONTNAMES[key] || key, ms, atMs });
+      fontEv.emit('loaded', { id: key, name: FONTNAMES[key] || BUILTIN_FONTNAMES[key] || key, ms, atMs });
       return data;
     })().catch((e) => {
       fontLoads.delete(key);
@@ -600,7 +613,7 @@ const SK = (() => {
   // Konturen eines Text-Elements in Skizzen-Koordinaten: [[seg, …], …]
   function textContours(e) {
     const want = e.font && FONTS[e.font] ? e.font : (e.font && BUILTIN_FONT_URLS[e.font] ? e.font : 'inter');
-    const font = FONTS[want] || FONTS.inter;
+    const font = FONTS[want] || (BUILTIN_SINGLELINE.has(want) ? null : FONTS.inter);
     if (!font) {
       if (BUILTIN_FONT_URLS[want]) loadFont(want).catch(() => {});
       return [];
@@ -645,7 +658,11 @@ const SK = (() => {
         const T = along ? (p) => along((p[0] + ox) * k, p[1] * k * my) : (p) => { const [u, v] = B((p[0] + ox) * k, p[1] * k * my); return [e.a[0] + cs * u - sn * v, e.a[1] + sn * u + cs * v]; };
         // gerade Stücke werden im Bogen zu Kurven (Stützpunkte bei einem und zwei Dritteln)
         const L3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-        for (const c of g.contours) out.push(c.map((s) => (s.t === 'bez' ? { t: 'bez', a: T(s.a), c1: T(s.c1), c2: T(s.c2), b: T(s.b) } : R || along ? { t: 'bez', a: T(s.a), c1: T(L3(s.a, s.b, 1 / 3)), c2: T(L3(s.a, s.b, 2 / 3)), b: T(s.b) } : { t: 'line', a: T(s.a), b: T(s.b) })));
+        for (const c of g.contours) {
+          const mapped = c.map((s) => (s.t === 'bez' ? { t: 'bez', a: T(s.a), c1: T(s.c1), c2: T(s.c2), b: T(s.b) } : R || along ? { t: 'bez', a: T(s.a), c1: T(L3(s.a, s.b, 1 / 3)), c2: T(L3(s.a, s.b, 2 / 3)), b: T(s.b) } : { t: 'line', a: T(s.a), b: T(s.b) }));
+          if (font.singleLine) mapped.open = true;
+          out.push(mapped);
+        }
         x += g.w;
       } else x += font.em / 2;
       if (i + 1 < chars.length) x += getKern(font, ch, chars[i + 1]) + sp;
@@ -737,7 +754,15 @@ const SK = (() => {
     const open = [];
     for (const e of ents || []) {
       if (e.con) continue;
-      if (e.type === 'text') { textContours(e).forEach((c, i) => { const L = loopFromSegs(c.map((s, si) => ({ ...s, sid: e.id + ':' + i + ':' + si })), e.id + ':' + i, [e.id]); if (L.poly.length >= 3 && L.area > 1e-6) out.push(L); }); continue; }
+      if (e.type === 'text') {
+        if (isSingleLineFont(e.font)) continue;
+        textContours(e).forEach((c, i) => {
+          if (c.open) return;
+          const L = loopFromSegs(c.map((s, si) => ({ ...s, sid: e.id + ':' + i + ':' + si })), e.id + ':' + i, [e.id]);
+          if (L.poly.length >= 3 && L.area > 1e-6) out.push(L);
+        });
+        continue;
+      }
       if (e.type === 'circle') { out.push({ key: e.id, ents: [e.id], k: { circle: { c: e.c, r: e.r, sid: e.id } }, poly: circlePoints(e.c, e.r), area: Math.PI * e.r * e.r }); continue; }
       if (e.type === 'ellipse') { if (e.rx > 1e-6 && e.ry > 1e-6) out.push({ key: e.id, ents: [e.id], k: { ellipse: { c: e.c, rx: e.rx, ry: e.ry, rot: e.rot || 0, sid: e.id } }, poly: ellipsePoints(e.c, e.rx, e.ry, e.rot || 0), area: Math.PI * e.rx * e.ry }); continue; }
       if (e.type === 'ellarc') {
@@ -834,6 +859,15 @@ const SK = (() => {
       }
       let len = 0; for (const s of segs) { const pts = segPoints(s); for (let i = 1; i < pts.length; i++) len += d2(pts[i - 1], pts[i]); }
       out.push({ segs, ents: ids, len });
+    }
+    for (const e of ents || []) {
+      if (!e || e.con || e.revAxis || e.type !== 'text' || !isSingleLineFont(e.font)) continue;
+      for (const c of textContours(e)) {
+        if (!c.length) continue;
+        let len = 0;
+        for (const s of c) { const pts = segPoints(s); for (let i = 1; i < pts.length; i++) len += d2(pts[i - 1], pts[i]); }
+        if (len > 1e-6) out.push({ segs: c, ents: [e.id], len });
+      }
     }
     return out.sort((a, b) => b.len - a.len);
   }
@@ -1133,6 +1167,6 @@ const SK = (() => {
     const r = Solver.solve({ ents: ents || [], dims: dims || [], cons: cons || [] }, V, { inPlace });
     return r.ents;
   }
-  return { textPathPts, chains, webPaths, ellipsePoints, ellArcSweep, ellArcPt, ellArcPoints, ellArcBez, conicPt, conicPoints, conicBez, bezEval, bezDerivInfo, curveEnd, bridgeControlPoints, bridgePoints, bridgeBez, syncBridges, splineBez, splineHandle, splineTangentAt, bezPoints, textContours, textBox, FONTS, FONTNAMES, isFontLoaded, loadFont, needsEntsFonts, ensureEntsFonts, ensureDocFonts, onFont: fontEv.on, syncFonts, ensureFonts, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
+  return { textPathPts, chains, webPaths, ellipsePoints, ellArcSweep, ellArcPt, ellArcPoints, ellArcBez, conicPt, conicPoints, conicBez, bezEval, bezDerivInfo, curveEnd, bridgeControlPoints, bridgePoints, bridgeBez, syncBridges, splineBez, splineHandle, splineTangentAt, bezPoints, textContours, textBox, FONTS, FONTNAMES, isFontLoaded, isSingleLineFont, loadFont, needsEntsFonts, ensureEntsFonts, ensureDocFonts, onFont: fontEv.on, syncFonts, ensureFonts, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
 })();
 

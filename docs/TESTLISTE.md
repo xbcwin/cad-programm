@@ -3052,6 +3052,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Befehlssuche (`svgLogo`, `ral-colors`), Speichern/Laden, Hilfetexte (`HELP.svgLogo`, `HELP.ralColors`), Erklärungen und DE/EN-Texte geprüft (Klicktest `[A-194]`)
 - [ ] **Von Hand**: Im Browser ein eigenes Vereins- oder Firmen-Logo als `.svg` laden, einmal auf einer Platte vertieft und einmal als Prägung auf einen Quader setzen sowie im 3D-Bild mit RAL 3020 Verkehrsrot und RAL 7016 Anthrazitgrau einfärben.
 
+## Einlinien-Schrift im Text-Werkzeug (Auto [A-202], SK-49)
+- [x] Schriftart „Einlinig (Gravur)“ (`gravur`) wird in Einfach und Profi aus `app/data/schrift-einlinig.json` lokal ohne Netzzugriff geladen (`SK.isSingleLineFont('gravur')`) (Klicktest `[A-202]`)
+- [x] Text „AB“ in „Einlinig (Gravur)“ erzeugt ausschließlich offene Kurven (`SK.textContours` mit `open: true`, `SK.chains`) und keine geschlossenen Umrisse (`SK.loops` und `SK.regions` leer) (Klicktest `[A-202]`)
+- [x] Rückgängig (`Strg+Z`) entfernt den gesetzten Einlinien-Text vollständig; „In Kurven umwandeln“ behält offene Linien ohne geschlossene Flächen (Klicktest `[A-202]`)
+- [ ] **Von Hand**: Im Browser eine Skizze starten, im Text-Werkzeug „Einlinig (Gravur)“ wählen, einen Satz mit Umlauten und Ziffern setzen und das Linienbild im 2D-Fenster prüfen.
+
 ## Fehler melden
 
 ```
