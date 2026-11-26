@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'replaceFace' || x.kind === 'moveEdge' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -217,6 +217,7 @@ const Features = (() => {
     if (picking.move) cv.removeEventListener('pointermove', picking.move);
     window.removeEventListener('keydown', picking.key, true);
     Viewer.highlightFace('hover', null, null);
+    Viewer.highlightEdge(null, null);
     if (picking.ghost) Viewer.clearRefGhost();
     cv.style.cursor = ''; UI.hint(null); picking = null;
   }
@@ -2113,7 +2114,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'replaceFace' || x.kind === 'moveEdge' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -4171,6 +4172,486 @@ const Features = (() => {
     }
     sec.append(row);
     sec.append(h('div', { class: 'hint-box', html: T('panel.deleteFace.hint') }));
+  }
+  // ---------- Fläche ersetzen (DB-04) ----------
+  function normalizeReplaceTarget(rep) {
+    if (!rep) return null;
+    if (rep.datumId) {
+      const dm = typeof Datums !== 'undefined' ? Datums.find(rep.datumId) : null;
+      if (!dm || !dm.plane) return null;
+      return { kind: 'datum', datumId: dm.id, label: dm.name || rep.label || 'Bezugsebene' };
+    }
+    if (rep.plane && Array.isArray(rep.plane.o) && Array.isArray(rep.plane.n)) {
+      return {
+        kind: 'plane',
+        plane: { o: rep.plane.o.slice(0, 3).map((v) => round(v, 6)), n: rep.plane.n.slice(0, 3).map((v) => round(v, 6)) },
+        label: rep.label || 'Ebene',
+      };
+    }
+    if (rep.id) {
+      const fidx = rep.idx != null ? rep.idx : rep.faceIdx;
+      const rId = App.mergedInto(rep.id) || rep.id;
+      const fi = rep.info || (fidx != null ? App.results.get(rId)?.data?.faces?.[fidx] : null);
+      if (!fi || !Array.isArray(fi.c)) return null;
+      const topTgt = resolveTopTarget(rep.id);
+      const tgtId = topTgt ? topTgt.id : rId;
+      const resData = App.results.get(tgtId)?.data || App.results.get(rId)?.data || {};
+      const bb = resData.bbox;
+      const rel = bb && fi.c ? [0, 1, 2].map((k) => { const sp = bb[k + 3] - bb[k]; return sp > 1e-6 ? round((fi.c[k] - bb[k]) / sp, 6) : 0.5; }) : null;
+      const W = Model.worldMatrix(App.doc, tgtId);
+      const wc = new THREE.Vector3(...fi.c).applyMatrix4(W).toArray().map((v) => round(v, 6));
+      const wn = Array.isArray(fi.n) ? new THREE.Vector3(...fi.n).transformDirection(W).normalize().toArray().map((v) => round(v, 6)) : null;
+      return {
+        kind: 'face',
+        id: tgtId,
+        idx: fidx != null ? fidx : 0,
+        t: fi.t || null,
+        c: fi.c.map((v) => round(v, 6)),
+        n: Array.isArray(fi.n) ? fi.n.map((v) => round(v, 6)) : null,
+        rel,
+        wc,
+        wn,
+        ...(fi.tid ? { tid: fi.tid } : {}),
+        label: rep.label || (topTgt ? Model.label(topTgt) : 'Fläche'),
+      };
+    }
+    return null;
+  }
+  function pickReplaceRefAt(cx, cy, srcTgtId = null, srcSig = null) {
+    const rc = Viewer.setRay(cx, cy);
+    let datumCand = null;
+    const g = Viewer.groups && Viewer.groups.datums;
+    if (g && g.children.length && typeof Datums !== 'undefined') {
+      const dh = rc.intersectObjects(g.children, true);
+      for (const h of dh) {
+        let o = h.object;
+        while (o && !o.userData.datum && o !== g) o = o.parent;
+        if (o && o.userData.datum) {
+          const d = Datums.find(o.userData.datum);
+          if (d && d.plane) {
+            datumCand = { ref: { kind: 'datum', datumId: d.id, label: d.name }, dist: h.distance };
+            break;
+          }
+        }
+      }
+    }
+    let faceCand = null;
+    const hit = Viewer.pick(cx, cy, { solidsOnly: true, noEdges: true });
+    if (hit && hit.faceIdx >= 0) {
+      const tgt = resolveTopTarget(hit.id);
+      const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+      if (tgt && tgt.role !== 'hole' && fi && Array.isArray(fi.c)) {
+        const hitSig = deleteFaceSig({ id: hit.id, idx: hit.faceIdx, info: fi });
+        const isSameSrc = srcTgtId && tgt.id === srcTgtId && srcSig && hitSig && sameDeleteFaceSig(srcSig, hitSig);
+        if (!isSameSrc) {
+          const ref = normalizeReplaceTarget({ id: hit.id, idx: hit.faceIdx, info: fi });
+          if (ref) {
+            const dist = hit.point ? rc.ray.origin.distanceTo(hit.point) : Infinity;
+            faceCand = { ref, dist, hit };
+          }
+        }
+      }
+    }
+    if (datumCand && (!faceCand || datumCand.dist <= faceCand.dist + 1e-3)) return datumCand.ref;
+    return faceCand ? faceCand.ref : null;
+  }
+  function replaceFace(face = null, replaceTarget = null, opts = {}) {
+    if (App.ctx) { UI.toast('Fläche ersetzen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = deleteFaceSig(face);
+    if (!tgt || tgt.role === 'hole' || !sig) {
+      startReplaceFace(null, opts);
+      return null;
+    }
+    const rep = normalizeReplaceTarget(replaceTarget);
+    if (!rep) {
+      startReplaceFace(face, opts);
+      return null;
+    }
+    if (rep.kind === 'face' && rep.id === tgt.id && sameDeleteFaceSig(sig, rep)) {
+      UI.toast('Bitte wähle eine andere Fläche oder eine Bezugsebene als Ziel.', { icon: 'info' });
+      return null;
+    }
+    let step;
+    App.change(T('undo.replaceFace'), (doc) => {
+      step = Model.newItem('replaceFace', { target: tgt.id, face: sig, replace: rep, flip: !!opts.flip }, { name: opts.name || T('kind.replaceFace'), color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('toast.replaceFaceAdded'), { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startReplaceFace(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Fläche ersetzen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für „Fläche ersetzen“ braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    let srcFace = face || Actions.selectedFace();
+    let srcTgt = srcFace ? resolveTopTarget(srcFace.id) : null;
+    let srcSig = srcFace ? deleteFaceSig(srcFace) : null;
+    if (!srcTgt || srcTgt.role === 'hole' || !srcSig) {
+      srcFace = null; srcTgt = null; srcSig = null;
+    }
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      if (!srcFace) {
+        const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+        if (hit && hit.faceIdx >= 0) {
+          const tgt = resolveTopTarget(hit.id);
+          const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+          const sig = tgt && tgt.role !== 'hole' && fi ? deleteFaceSig({ id: hit.id, idx: hit.faceIdx, info: fi }) : null;
+          if (sig) {
+            srcFace = { id: hit.id, idx: hit.faceIdx, info: fi };
+            srcTgt = tgt;
+            srcSig = sig;
+            Viewer.highlightFace('hover', hit.id, hit.faceIdx);
+            UI.hint('<b>Zielfläche oder Bezugsebene wählen:</b> Klick auf die neue Fläche oder eine Bezugsebene. <b>Esc</b> bricht ab.');
+            return;
+          }
+        }
+        UI.toast('Klick zuerst auf die Körperfläche, die ersetzt werden soll.', { icon: 'info' });
+        return;
+      }
+      const ref = pickReplaceRefAt(e.clientX, e.clientY, srcTgt.id, srcSig);
+      if (ref) {
+        stopPick();
+        replaceFace(srcFace, ref, opts);
+        return;
+      }
+      UI.toast('Klick auf eine andere Körperfläche oder eine Bezugsebene als Ziel.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      Viewer.highlightFace('hover', hit && hit.faceIdx >= 0 ? hit.id : null, hit && hit.faceIdx >= 0 ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(srcFace
+      ? '<b>Zielfläche oder Bezugsebene wählen:</b> Klick auf die neue Fläche oder eine Bezugsebene. <b>Esc</b> bricht ab.'
+      : '<b>Fläche ersetzen:</b> Klick zuerst auf die Fläche, die ersetzt werden soll. <b>Esc</b> bricht ab.');
+    return true;
+  }
+  function pickReplaceTarget(stepId) {
+    stopPick();
+    const fStep = Model.find(App.doc, stepId);
+    if (!fStep || fStep.item.kind !== 'replaceFace') return false;
+    const sp = fStep.item.p || {};
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const ref = pickReplaceRefAt(e.clientX, e.clientY, sp.target, sp.face);
+      if (ref) {
+        stopPick();
+        App.change(T('undo.replaceFaceTarget'), (doc) => {
+          const fn = Model.find(doc, stepId); if (!fn) return false;
+          fn.item.p = fn.item.p || {};
+          fn.item.p.replace = ref;
+        });
+        UI.toast('Ziel für „Fläche ersetzen“ aktualisiert.', { icon: 'check' });
+        return;
+      }
+      UI.toast('Klick auf eine andere Körperfläche oder eine Bezugsebene.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      Viewer.highlightFace('hover', hit && hit.faceIdx >= 0 ? hit.id : null, hit && hit.faceIdx >= 0 ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Zielfläche oder Bezugsebene wählen:</b> Klick auf eine Fläche oder Bezugsebene. <b>Esc</b> bricht ab.');
+    return true;
+  }
+  function pickReplaceSourceFace(stepId) {
+    stopPick();
+    const fStep = Model.find(App.doc, stepId);
+    if (!fStep || fStep.item.kind !== 'replaceFace') return false;
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        const sig = tgt && tgt.role !== 'hole' && fi ? deleteFaceSig({ id: hit.id, idx: hit.faceIdx, info: fi }) : null;
+        if (sig) {
+          stopPick();
+          App.change(T('undo.replaceFaceSource'), (doc) => {
+            const fn = Model.find(doc, stepId); if (!fn) return false;
+            fn.item.p = fn.item.p || {};
+            fn.item.p.target = tgt.id;
+            fn.item.p.face = sig;
+          });
+          UI.toast('Ausgangsfläche aktualisiert.', { icon: 'check' });
+          return;
+        }
+      }
+      UI.toast('Bitte klick auf eine Fläche des Körpers.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      Viewer.highlightFace('hover', hit && hit.faceIdx >= 0 ? hit.id : null, hit && hit.faceIdx >= 0 ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Fläche neu wählen:</b> Klick auf die zu ersetzende Fläche. <b>Esc</b> bricht ab.');
+    return true;
+  }
+  function setReplaceDatum(stepId, datumId) {
+    const dm = typeof Datums !== 'undefined' && datumId ? Datums.find(datumId) : null;
+    if (!dm || !dm.plane) return false;
+    App.change(T('undo.replaceFaceTarget'), (doc) => {
+      const fn = Model.find(doc, stepId); if (!fn) return false;
+      fn.item.p = fn.item.p || {};
+      fn.item.p.replace = { kind: 'datum', datumId: dm.id, label: dm.name };
+    });
+    return true;
+  }
+  function renderReplaceFace(it, sec, setP) {
+    const p = it.p || {};
+    const rep = p.replace || {};
+    const infoBox = h('div', { style: { display: 'grid', gap: '4px', marginBottom: '8px' } });
+    infoBox.append(
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('panel.replaceFace.sourceTitle')), h('b', null, faceTypeLabelDE(p.face && p.face.t))),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('panel.replaceFace.targetTitle')), h('b', { id: 'rf-target-lbl' }, rep.datumId ? ((typeof Datums !== 'undefined' && Datums.find(rep.datumId)?.name) || rep.label || 'Ebene') : (rep.label || '—')))
+    );
+    sec.append(infoBox);
+    const fl = h('div', { class: 'fields' });
+    const dms = (App.doc.datums || []).filter((d) => d && d.plane);
+    if (dms.length) {
+      const opts = [['', T('panel.replaceFace.datumNone')], ...dms.map((d) => [d.id, d.name || d.id])];
+      fl.append(UI.selectField({
+        id: 'rf-datum',
+        label: T('panel.replaceFace.datum'),
+        value: rep.datumId || '',
+        options: opts,
+        onChange: (v) => { if (v) setReplaceDatum(it.id, v); },
+      }));
+    }
+    const flipWrap = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'rf-flip', checked: !!p.flip }), T('panel.replaceFace.flip'));
+    flipWrap.querySelector('input').onchange = (e) => App.change(T('undo.replaceFaceFlip'), (doc) => {
+      const fn = Model.find(doc, it.id); if (fn && fn.item.p) fn.item.p.flip = e.target.checked;
+    });
+    fl.append(flipWrap);
+    sec.append(fl);
+    const row = h('div', { class: 'btn-row' });
+    const tb = h('button', { type: 'button', class: 'btn small primary', id: 'rf-pick-target' });
+    tb.innerHTML = icon('replaceFace') + esc(T('panel.replaceFace.pickTarget'));
+    tb.onclick = () => pickReplaceTarget(it.id);
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'rf-pick-face' });
+    pb.innerHTML = icon('cursor') + esc(T('panel.replaceFace.pickFace'));
+    pb.onclick = () => pickReplaceSourceFace(it.id);
+    row.append(tb, pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'rf-goto' });
+      gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: T('panel.replaceFace.hint') }));
+  }
+
+  // ---------- Kante verschieben (DB-07) ----------
+  function moveEdgeSig(edge) {
+    if (!edge) return null;
+    if (Array.isArray(edge.a) && Array.isArray(edge.b)) {
+      const m = Array.isArray(edge.m) ? edge.m : [(edge.a[0] + edge.b[0]) / 2, (edge.a[1] + edge.b[1]) / 2, (edge.a[2] + edge.b[2]) / 2];
+      const l = edge.l != null ? edge.l : Math.hypot(edge.b[0] - edge.a[0], edge.b[1] - edge.a[1], edge.b[2] - edge.a[2]);
+      return {
+        t: edge.t || 'LINE',
+        a: edge.a.slice(0, 3).map((v) => round(v, 5)),
+        b: edge.b.slice(0, 3).map((v) => round(v, 5)),
+        m: m.slice(0, 3).map((v) => round(v, 5)),
+        l: round(l, 5),
+        ...(edge.tid ? { tid: edge.tid } : {}),
+      };
+    }
+    const eidx = edge.edgeIdx != null ? edge.edgeIdx : edge.idx;
+    if (!edge.id || eidx == null) return null;
+    const rId = App.mergedInto(edge.id) || edge.id;
+    const eg = edge.info || App.results.get(rId)?.data?.edges?.[eidx];
+    if (!eg || !Array.isArray(eg.a) || !Array.isArray(eg.b)) return null;
+    const m = Array.isArray(eg.m) ? eg.m : [(eg.a[0] + eg.b[0]) / 2, (eg.a[1] + eg.b[1]) / 2, (eg.a[2] + eg.b[2]) / 2];
+    const l = eg.l != null ? eg.l : Math.hypot(eg.b[0] - eg.a[0], eg.b[1] - eg.a[1], eg.b[2] - eg.a[2]);
+    return {
+      t: eg.t || 'LINE',
+      a: eg.a.slice(0, 3).map((v) => round(v, 5)),
+      b: eg.b.slice(0, 3).map((v) => round(v, 5)),
+      m: m.slice(0, 3).map((v) => round(v, 5)),
+      l: round(l, 5),
+      ...(eg.tid ? { tid: eg.tid } : {}),
+    };
+  }
+  function moveEdge(edge = null, opts = {}) {
+    if (App.ctx) { UI.toast('Kante verschieben gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    edge = edge || (App.edges && App.edges.length === 1 ? App.edges[0] : null);
+    const tgt = edge ? resolveTopTarget(edge.id) : null;
+    const sig = moveEdgeSig(edge);
+    if (!tgt || tgt.role === 'hole' || !sig) {
+      startMoveEdge(opts);
+      return null;
+    }
+    if (sig.t && sig.t !== 'LINE') {
+      UI.toast('Kante verschieben unterstützt gerade Kanten zwischen ebenen Flächen.', { icon: 'info' });
+      return null;
+    }
+    const axis = ['bisector', 'x', 'y', 'z', 'n1', 'n2', 'free'].includes(opts.axis) ? opts.axis : 'bisector';
+    const p = {
+      target: tgt.id,
+      edge: sig,
+      axis,
+      dist: opts.dist ?? 5,
+      dx: opts.dx ?? 0,
+      dy: opts.dy ?? 0,
+      dz: opts.dz ?? 0,
+    };
+    let step;
+    App.change(T('undo.moveEdge'), (doc) => {
+      step = Model.newItem('moveEdge', p, { name: opts.name || T('kind.moveEdge'), color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('toast.moveEdgeAdded'), { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startMoveEdge(opts = {}) {
+    if (App.ctx) { UI.toast('Kante verschieben gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für „Kante verschieben“ braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    if (App.edges && App.edges.length === 1) {
+      const ok = moveEdge(App.edges[0], opts);
+      if (ok) return true;
+    }
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 10 });
+      if (hit && hit.edgeIdx != null) {
+        const tgt = resolveTopTarget(hit.id);
+        const eg = App.results.get(hit.id)?.data?.edges?.[hit.edgeIdx];
+        if (tgt && tgt.role !== 'hole' && eg && eg.t === 'LINE') {
+          stopPick();
+          moveEdge({ id: hit.id, edgeIdx: hit.edgeIdx, info: eg }, opts);
+          return;
+        }
+      }
+      UI.toast('Bitte klick auf eine gerade Kante eines Körpers.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 10 });
+      const ok = !!(hit && hit.edgeIdx != null && App.results.get(hit.id)?.data?.edges?.[hit.edgeIdx]?.t === 'LINE');
+      Viewer.highlightEdge(ok ? hit.id : null, ok ? hit.edgeIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Kante verschieben:</b> Klick auf eine gerade Körperkante. <b>Esc</b> bricht ab.');
+    return true;
+  }
+  function pickMoveEdge(stepId) {
+    stopPick();
+    const fStep = Model.find(App.doc, stepId);
+    if (!fStep || fStep.item.kind !== 'moveEdge') return false;
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 10 });
+      if (hit && hit.edgeIdx != null) {
+        const tgt = resolveTopTarget(hit.id);
+        const eg = App.results.get(hit.id)?.data?.edges?.[hit.edgeIdx];
+        const sig = tgt && tgt.role !== 'hole' && eg && eg.t === 'LINE' ? moveEdgeSig({ id: hit.id, edgeIdx: hit.edgeIdx, info: eg }) : null;
+        if (sig) {
+          stopPick();
+          App.change(T('undo.moveEdgePick'), (doc) => {
+            const fn = Model.find(doc, stepId); if (!fn) return false;
+            fn.item.p = fn.item.p || {};
+            fn.item.p.target = tgt.id;
+            fn.item.p.edge = sig;
+          });
+          UI.toast('Kante aktualisiert.', { icon: 'check' });
+          return;
+        }
+      }
+      UI.toast('Bitte klick auf eine gerade Körperkante.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 10 });
+      const ok = !!(hit && hit.edgeIdx != null && App.results.get(hit.id)?.data?.edges?.[hit.edgeIdx]?.t === 'LINE');
+      Viewer.highlightEdge(ok ? hit.id : null, ok ? hit.edgeIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Kante neu wählen:</b> Klick auf eine gerade Körperkante. <b>Esc</b> bricht ab.');
+    return true;
+  }
+  function renderMoveEdge(it, sec, setP) {
+    const p = it.p || {};
+    const axis = ['bisector', 'x', 'y', 'z', 'n1', 'n2', 'free'].includes(p.axis) ? p.axis : 'bisector';
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'me-axis',
+      label: T('panel.moveEdge.axis'),
+      value: axis,
+      options: [
+        ['bisector', T('panel.moveEdge.axisBisector')],
+        ['x', 'X'],
+        ['y', 'Y'],
+        ['z', 'Z'],
+        ['n1', T('panel.moveEdge.axisN1')],
+        ['n2', T('panel.moveEdge.axisN2')],
+        ['free', T('panel.moveEdge.axisFree')],
+      ],
+      onChange: (v) => App.change(T('undo.moveEdgeAxis'), (doc) => {
+        const fn = Model.find(doc, it.id); if (fn && fn.item.p) fn.item.p.axis = v;
+      }),
+    }));
+    if (axis === 'free') {
+      fl.append(
+        UI.numField({ id: 'me-dx', label: 'X', value: p.dx ?? 0, unit: 'mm', onCommit: (v) => setP('dx', v) }),
+        UI.numField({ id: 'me-dy', label: 'Y', value: p.dy ?? 0, unit: 'mm', onCommit: (v) => setP('dy', v) }),
+        UI.numField({ id: 'me-dz', label: 'Z', value: p.dz ?? 0, unit: 'mm', onCommit: (v) => setP('dz', v) })
+      );
+    } else {
+      fl.append(UI.numField({ id: 'me-dist', label: T('panel.moveEdge.dist'), value: p.dist ?? 5, unit: 'mm', onCommit: (v) => setP('dist', v) }));
+    }
+    sec.append(fl);
+    const row = h('div', { class: 'btn-row' });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'me-pick' });
+    pb.innerHTML = icon('cursor') + esc(T('panel.moveEdge.pickEdge'));
+    pb.onclick = () => pickMoveEdge(it.id);
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'me-goto' });
+      gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: T('panel.moveEdge.hint') }));
   }
   // ---------- Schritt spiegeln (KP-14) ----------
   function canMirrorStep(it, parent) {
@@ -7249,5 +7730,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, portCutout, startPortCutout, pickPortCutoutFace, renderPortCutout, magnetPocket, startMagnetPocket, pickMagnetPocketFace, renderMagnetPocket, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, deleteFace, startDeleteFace, pickDeleteFace, removeDeleteFaceEntry, renderDeleteFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, directFace, startDirectFace, pickDirectFace, pickDirectFaceRotAxis, directFaceFrame, renderDirectFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, portCutout, startPortCutout, pickPortCutoutFace, renderPortCutout, magnetPocket, startMagnetPocket, pickMagnetPocketFace, renderMagnetPocket, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, deleteFace, startDeleteFace, pickDeleteFace, removeDeleteFaceEntry, renderDeleteFace, replaceFace, startReplaceFace, pickReplaceTarget, pickReplaceSourceFace, setReplaceDatum, renderReplaceFace, moveEdge, startMoveEdge, pickMoveEdge, renderMoveEdge, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, directFace, startDirectFace, pickDirectFace, pickDirectFaceRotAxis, directFaceFrame, renderDirectFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut };
 })();

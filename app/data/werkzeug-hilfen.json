@@ -2178,5 +2178,15 @@
     "tip": "Fläche (z. B. Loch, Rundung oder Fase) löschen und Lücke durch Verlängern der Nachbarflächen schließen (Profi)",
     "hilfe": "Entfernt eine oder mehrere gewählte Flächen direkt aus einem Körper (auch an importierten STEP-/BREP-Teilen) und heilt die Lücke, indem Nachbarflächen verlängert oder Innenkonturen geschlossen werden. So verschwinden Bohrungen, Sacklöcher, Zapfen, Rundungen oder Fasen mit einem Klick als unterdrückbarer Schritt im Verlauf.",
     "tipp": "Halte Umschalt beim Klicken, um mehrere Flächen (z. B. alle vier Rundungen einer Kante) auf einmal zu wählen, oder füge rechts im Eigenschaften-Panel weitere Flächen hinzu."
+  },
+  "replaceFace": {
+    "tip": "Gewählte Fläche auf eine andere Körperfläche oder Bezugsebene legen (Profi)",
+    "hilfe": "Ersetzt im Profi-Modus eine Fläche eines Körpers (auch an importierten STEP-/BREP-Teilen) durch eine andere ebene oder gekrümmte Fläche oder durch eine Bezugsebene. Die Nachbarflächen werden dabei automatisch passend verlängert oder gekürzt.",
+    "tipp": "Lege zuerst eine Bezugsebene (z. B. bei Z = 30 mm) an oder wähle rechts im Eigenschaften-Panel eine vorhandene Bezugsebene direkt aus der Liste."
+  },
+  "moveEdge": {
+    "tip": "Gerade Kante verschieben – die beiden Nachbarflächen kippen mit (Profi)",
+    "hilfe": "Verschiebt im Profi-Modus eine gerade Kante zwischen zwei ebenen Flächen entlang der Winkelhalbierenden, einer Achse (X/Y/Z), einer Flächen-Normalen oder frei in X/Y/Z. Beide Nachbarflächen kippen um ihre gegenüberliegende Kante automatisch mit – auch an importierten Teilen.",
+    "tipp": "Du kannst im Feld „Abstand“ auch Formeln wie „breite/4“ eingeben; mit „Richtung“ legst du fest, ob die Kante schräg oder nur in Z bzw. X/Y wandert."
   }
 }

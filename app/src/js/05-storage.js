@@ -932,8 +932,8 @@ const Store = (() => {
   const KNOWN_ITEM_KINDS = new Set([
     'box', 'cylinder', 'tube', 'sphere', 'hemisphere', 'cone', 'pyramid', 'torus', 'prism', 'wedge',
     'extrude', 'revolve', 'loft', 'sweep', 'helix', 'import', 'group', 'part',
-    'transform', 'scale', 'deform', 'thicken', 'rib', 'vent', 'fins', 'fillPattern', 'mountPattern', 'portCutout', 'magnetPocket', 'web', 'wrap',
-    'emboss', 'splitFace', 'dome', 'deleteFace', 'mirrorStep', 'deleteBody', 'boss', 'lipGroove',
+    'transform', 'scale', 'deform', 'thicken', 'directFace', 'rib', 'vent', 'fins', 'fillPattern', 'mountPattern', 'portCutout', 'magnetPocket', 'web', 'wrap',
+    'emboss', 'splitFace', 'dome', 'deleteFace', 'replaceFace', 'moveEdge', 'mirrorStep', 'deleteBody', 'boss', 'lipGroove',
     'undercut', 'circlipGroove', 'keyway', 'splineProfile', 'knurl', 'gripPattern', 'sketch3d', 'ref',
     'stackHole', 'asmCut',
   ]);

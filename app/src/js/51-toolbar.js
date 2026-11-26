@@ -46,6 +46,8 @@ const Toolbar = (() => {
       { id: 'splitFace', group: T('dlg.tb.grpEdit'), domId: 't-splitFace', icon: 'splitFace', label: T('kind.splitFace'), tip: T('dlg.tb.splitFaceTip'), cls: 'minor pro', help: 'splitFace', run: () => Features.startSplitFace() },
       { id: 'dome', group: T('dlg.tb.grpEdit'), domId: 't-dome', icon: 'dome', label: T('kind.dome'), tip: T('dlg.tb.domeTip'), cls: 'minor pro', help: 'dome', run: () => Features.startDome() },
       { id: 'deleteFace', group: T('dlg.tb.grpEdit'), domId: 't-deleteFace', icon: 'deleteFace', label: T('kind.deleteFace'), tip: T('dlg.tb.deleteFaceTip'), cls: 'minor pro', help: 'deleteFace', run: () => Features.startDeleteFace() },
+      { id: 'replaceFace', group: T('dlg.tb.grpEdit'), domId: 't-replaceFace', icon: 'replaceFace', label: T('kind.replaceFace'), tip: T('dlg.tb.replaceFaceTip'), cls: 'minor pro', help: 'replaceFace', run: () => Features.startReplaceFace() },
+      { id: 'moveEdge', group: T('dlg.tb.grpEdit'), domId: 't-moveEdge', icon: 'moveEdge', label: T('kind.moveEdge'), tip: T('dlg.tb.moveEdgeTip'), cls: 'minor pro', help: 'moveEdge', run: () => Features.startMoveEdge() },
       { id: 'route3d', group: T('dlg.tb.grpEdit'), domId: 't-route3d', icon: 'sweep', label: T('tool.fly.route3d'), tip: T('dlg.tb.route3dTip'), cls: 'minor', help: 'route3d', run: () => Features.route3d() },
       { id: 'helix', group: T('dlg.tb.grpEdit'), domId: 't-helix', icon: 'helix', label: T('kind.helix'), tip: T('dlg.tb.helixTip'), cls: 'minor', help: 'helix', run: () => Features.helix() },
       { id: 'deform', group: T('dlg.tb.grpEdit'), domId: 't-deform', icon: 'deform', label: T('kind.deform'), tip: T('dlg.tb.deformTip'), cls: 'minor pro', help: 'deform', run: () => Features.deform() },

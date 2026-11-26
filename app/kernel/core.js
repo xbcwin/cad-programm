@@ -10167,7 +10167,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'directFace' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'deleteFace' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'directFace' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -13663,6 +13663,601 @@ export function createKernel(R, oc) {
     return comp;
   }
 
+  // ---------- Fläche ersetzen (DB-04) & Kante verschieben (DB-07) ----------
+  function makeOrientedPlaneFace(o, n, span) {
+    const nn = norm(n);
+    const gpO = R.asPnt(o);
+    const gpD = R.asDir(nn);
+    const gpPln = new oc.gp_Pln(gpO, gpD);
+    const mf = new oc.BRepBuilderAPI_MakeFace(gpPln, -span, span, -span, span);
+    let fw = mf.Face();
+    mf.delete();
+    gpPln.delete();
+    gpO.delete();
+    gpD.delete();
+    let fObj = R.cast(fw);
+    const fn = fObj.normalAt();
+    if (fn.x * nn[0] + fn.y * nn[1] + fn.z * nn[2] < 0) {
+      const rev = oc.TopoDS.Face(fw.Reversed());
+      safeDelete(fObj);
+      fObj = R.cast(rev);
+    }
+    return fObj;
+  }
+  function makeOrientedQuadFace(pts, n) {
+    const nn = norm(n);
+    const poly = R.makePolygon(pts);
+    let fw = oc.TopoDS.Face(poly.wrapped);
+    try {
+      const fn = poly.normalAt();
+      if (fn.x * nn[0] + fn.y * nn[1] + fn.z * nn[2] < 0) {
+        fw = oc.TopoDS.Face(fw.Reversed());
+      }
+    } catch (_) {}
+    const out = R.cast(fw);
+    safeDelete(poly);
+    return out;
+  }
+  function rebuildSolidWithReplacedFaces(solidShape, replaceMap, extFaceSet, workPad, errPrefix) {
+    const fObjs = solidShape.faces;
+    const allFaces = fObjs.map((f) => oc.TopoDS.Face(f.wrapped));
+    const faceBBoxes = fObjs.map((f) => bboxOf(f));
+    const nF = allFaces.length;
+    const bb = bboxOf(solidShape);
+    const margin = Math.max(workPad * 2.2, 20);
+    const worldMin = [bb[0] - workPad, bb[1] - workPad, bb[2] - workPad];
+    const worldMax = [bb[3] + workPad, bb[4] + workPad, bb[5] + workPad];
+    const bTol = Math.min(1.0, Math.max(0.05, workPad * 0.05));
+
+    let worldBox = null, args = null, tools = null, spl = null, splitShape = null, res = null, usd = null, uRes = null, chk = null;
+    const extendedTools = [];
+    const origRefs = [];
+    const cleanup = [];
+    const ownedWrappers = [];
+    try {
+      const pMin = new oc.gp_Pnt(worldMin[0], worldMin[1], worldMin[2]);
+      const pMax = new oc.gp_Pnt(worldMax[0], worldMax[1], worldMax[2]);
+      const mkBox = new oc.BRepPrimAPI_MakeBox(pMin, pMax);
+      worldBox = mkBox.Solid();
+      cleanup.push(pMin, pMax, mkBox, worldBox);
+
+      args = new oc.NCollection_List_TopoDS_Shape();
+      args.Append(worldBox);
+      tools = new oc.NCollection_List_TopoDS_Shape();
+
+      for (let fi = 0; fi < nF; fi++) {
+        if (replaceMap.has(fi)) continue;
+        const fw = allFaces[fi];
+        origRefs.push({ fObj: fObjs[fi], fw, bb: faceBBoxes[fi] });
+        if (extFaceSet.has(fi)) {
+          const tf = extendFaceForHeal(fw, margin);
+          tools.Append(tf);
+          const tfObj = R.cast(tf);
+          ownedWrappers.push(tfObj);
+          extendedTools.push({ fObj: tfObj, fw: tf, bb: bboxOf(tfObj) });
+        } else {
+          tools.Append(fw);
+          extendedTools.push({ fObj: fObjs[fi], fw, bb: faceBBoxes[fi] });
+        }
+      }
+      for (const rep of replaceMap.values()) {
+        tools.Append(rep.fw);
+        const ref = { fObj: rep.fObj, fw: rep.fw, bb: rep.bb };
+        origRefs.push(ref);
+        extendedTools.push(ref);
+      }
+
+      spl = new oc.BRepAlgoAPI_Splitter();
+      spl.SetArguments(args);
+      spl.SetTools(tools);
+      spl.Build();
+      splitShape = R.cast(spl.Shape());
+      const cells = splitShape ? splitShape.solids : [];
+      const keptCells = [];
+
+      const classifyCellAgainst = (cell, refList) => {
+        let solidHits = 0, airHits = 0;
+        for (const cf of cell.faces) {
+          const cw = oc.TopoDS.Face(cf.wrapped);
+          const pt = sampleFaceInterior(cf, cw);
+          if (!pt) continue;
+          const cn = cf.normalAt(pt);
+          const gpP = new oc.gp_Pnt(pt[0], pt[1], pt[2]);
+          const mv = new oc.BRepBuilderAPI_MakeVertex(gpP);
+          const cv = mv.Vertex();
+          gpP.delete(); mv.delete();
+          for (const ref of refList) {
+            const rb = ref.bb;
+            if (pt[0] < rb[0] - 0.1 || pt[0] > rb[3] + 0.1 || pt[1] < rb[1] - 0.1 || pt[1] > rb[4] + 0.1 || pt[2] < rb[2] - 0.1 || pt[2] > rb[5] + 0.1) continue;
+            const ext = new oc.BRepExtrema_DistShapeShape(cv, ref.fw);
+            ext.Perform();
+            if (ext.IsDone() && ext.Value() < 1e-3) {
+              const fn = ref.fObj.normalAt(pt);
+              const d = cn.x * fn.x + cn.y * fn.y + cn.z * fn.z;
+              if (d > 0.85) solidHits++;
+              else if (d < -0.85) airHits++;
+              ext.delete();
+              if (airHits > 0) break;
+              continue;
+            }
+            ext.delete();
+          }
+          cv.delete();
+          if (airHits > 0) break;
+        }
+        return { solidHits, airHits };
+      };
+
+      for (const cell of cells) {
+        const cb = bboxOf(cell);
+        if (cb[0] <= worldMin[0] + bTol || cb[1] <= worldMin[1] + bTol || cb[2] <= worldMin[2] + bTol ||
+            cb[3] >= worldMax[0] - bTol || cb[4] >= worldMax[1] - bTol || cb[5] >= worldMax[2] - bTol) {
+          continue;
+        }
+        const cOrig = classifyCellAgainst(cell, origRefs);
+        if (cOrig.airHits > 0) continue;
+        if (cOrig.solidHits > 0) { keptCells.push(cell); continue; }
+        const cExt = classifyCellAgainst(cell, extendedTools);
+        if (cExt.solidHits > 0 && cExt.airHits === 0) keptCells.push(cell);
+      }
+
+      if (!keptCells.length) throw new Error(errPrefix + ': Die Nachbarflächen schließen keinen gültigen Körper.');
+      res = keptCells[0].clone();
+      for (let k = 1; k < keptCells.length; k++) {
+        const fused = res.fuse(keptCells[k]);
+        safeDelete(res);
+        res = fused;
+      }
+      if (R.measureVolume(res) < 0) {
+        const rev = R.cast(res.wrapped.Reversed());
+        safeDelete(res);
+        res = rev;
+      }
+      const vol0 = R.measureVolume(res);
+      if (!(vol0 > 1e-6)) throw new Error(errPrefix + ': Die entstehende Form ist kein gültiger Körper.');
+      usd = new oc.ShapeUpgrade_UnifySameDomain(res.wrapped, true, true, false);
+      usd.Build();
+      uRes = R.cast(usd.Shape());
+      chk = new oc.BRepCheck_Analyzer(uRes.wrapped);
+      const uValid = uRes && R.isShape3D(uRes) && chk.IsValid() && Math.abs(R.measureVolume(uRes) - vol0) < Math.max(1e-2, vol0 * 1e-4);
+      chk.delete(); chk = null;
+      if (uValid) {
+        const out = uRes; uRes = null;
+        return out;
+      }
+      chk = new oc.BRepCheck_Analyzer(res.wrapped);
+      const rValid = chk.IsValid();
+      chk.delete(); chk = null;
+      if (!rValid) throw new Error(errPrefix + ': Die neue Form ist geometrisch ungültig.');
+      const out = res; res = null;
+      return out;
+    } finally {
+      for (const w of ownedWrappers) safeDelete(w);
+      safeDelete(uRes); safeDelete(res); safeDelete(splitShape);
+      if (chk) try { chk.delete(); } catch (_) {}
+      if (usd) try { usd.delete(); } catch (_) {}
+      if (spl) try { spl.delete(); } catch (_) {}
+      if (args) try { args.delete(); } catch (_) {}
+      if (tools) try { tools.delete(); } catch (_) {}
+      for (const c of cleanup) try { if (c && c.delete) c.delete(); } catch (_) {}
+    }
+  }
+  function replaceFacePlaneFallback(solidShape, fOrig, o, nUse) {
+    const b = bboxOf(solidShape);
+    const diag = Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+    const nOrig = norm(vec(fOrig.normalAt()));
+    const fbb = bboxOf(fOrig);
+    let maxDist = 0;
+    for (const x of [fbb[0], fbb[3]]) for (const y of [fbb[1], fbb[4]]) for (const z of [fbb[2], fbb[5]]) {
+      maxDist = Math.max(maxDist, Math.abs(dot(sub([x, y, z], o), nUse)));
+    }
+    const span = Math.max(30, diag * 2, maxDist * 3 + 10);
+    const H = Math.max(20, maxDist * 2 + diag);
+    const eps = 0.05;
+    let gpPln = null, mf = null, hsBelow = null, hsAbove = null;
+    let fUp = null, prUp = null, vUp = null, prismUp = null, addWedge = null;
+    let fDn = null, prDn = null, vDn = null, prismDn = null, cutWedge = null;
+    let cur = solidShape.clone(), curOwned = true, usd = null, chk = null;
+    try {
+      gpPln = new oc.gp_Pln(R.asPnt(o), R.asDir(nUse));
+      mf = new oc.BRepBuilderAPI_MakeFace(gpPln, -span * 2, span * 2, -span * 2, span * 2);
+      const plnFace = mf.Face();
+      const mkB = new oc.BRepPrimAPI_MakeHalfSpace(plnFace, R.asPnt(sub(o, mul(nUse, 1))));
+      hsBelow = R.cast(mkB.Solid()); mkB.delete();
+      const mkA = new oc.BRepPrimAPI_MakeHalfSpace(plnFace, R.asPnt(add(o, mul(nUse, 1))));
+      hsAbove = R.cast(mkA.Solid()); mkA.delete();
+
+      fUp = fOrig.clone().translate(mul(nOrig, -eps));
+      vUp = new oc.gp_Vec(nOrig[0] * (H + eps), nOrig[1] * (H + eps), nOrig[2] * (H + eps));
+      prUp = new oc.BRepPrimAPI_MakePrism(fUp.wrapped, vUp, false, true);
+      prismUp = R.cast(prUp.Shape());
+      if (prismUp && R.isShape3D(prismUp)) {
+        if (R.measureVolume(prismUp) < 0) prismUp = R.cast(prismUp.wrapped.Reversed());
+        addWedge = prismUp.intersect(hsBelow);
+        if (addWedge && R.isShape3D(addWedge) && R.measureVolume(addWedge) > 1e-6) {
+          const nxt = cur.fuse(addWedge);
+          safeDelete(cur); cur = nxt;
+        }
+      }
+
+      fDn = fOrig.clone().translate(mul(nOrig, eps));
+      vDn = new oc.gp_Vec(-nOrig[0] * (H + eps), -nOrig[1] * (H + eps), -nOrig[2] * (H + eps));
+      prDn = new oc.BRepPrimAPI_MakePrism(fDn.wrapped, vDn, false, true);
+      prismDn = R.cast(prDn.Shape());
+      if (prismDn && R.isShape3D(prismDn)) {
+        if (R.measureVolume(prismDn) < 0) prismDn = R.cast(prismDn.wrapped.Reversed());
+        cutWedge = prismDn.intersect(hsAbove);
+        if (cutWedge && R.isShape3D(cutWedge) && R.measureVolume(cutWedge) > 1e-6) {
+          const nxt = cur.cut(cutWedge);
+          safeDelete(cur); cur = nxt;
+        }
+      }
+
+      usd = new oc.ShapeUpgrade_UnifySameDomain(cur.wrapped, true, true, false);
+      usd.Build();
+      const out = R.cast(usd.Shape());
+      if (out && R.isShape3D(out) && R.measureVolume(out) > 1e-6) {
+        chk = new oc.BRepCheck_Analyzer(out.wrapped);
+        const ok = chk.IsValid();
+        chk.delete(); chk = null;
+        if (ok) { safeDelete(cur); curOwned = false; return out; }
+      }
+      safeDelete(out);
+      throw new Error('Fläche ersetzen: Die Fläche ließ sich nicht auf diese Ebene legen.');
+    } finally {
+      if (curOwned) safeDelete(cur);
+      if (chk) try { chk.delete(); } catch (_) {}
+      if (usd) try { usd.delete(); } catch (_) {}
+      safeDelete(addWedge); safeDelete(prismUp); safeDelete(fUp);
+      if (prUp && prUp.delete) try { prUp.delete(); } catch (_) {}
+      if (vUp && vUp.delete) try { vUp.delete(); } catch (_) {}
+      safeDelete(cutWedge); safeDelete(prismDn); safeDelete(fDn);
+      if (prDn && prDn.delete) try { prDn.delete(); } catch (_) {}
+      if (vDn && vDn.delete) try { vDn.delete(); } catch (_) {}
+      safeDelete(hsBelow); safeDelete(hsAbove);
+      if (mf && mf.delete) try { mf.delete(); } catch (_) {}
+      if (gpPln && gpPln.delete) try { gpPln.delete(); } catch (_) {}
+    }
+  }
+  function replaceFaceOnSolid(solidShape, origIdx, refFaceLocal, flip) {
+    const fObjs = solidShape.faces;
+    const fOrig = fObjs[origIdx];
+    const allFaces = fObjs.map((f) => oc.TopoDS.Face(f.wrapped));
+    const nF = allFaces.length;
+    const origEdges = collectEdges(allFaces[origIdx]).filter((e) => !oc.BRep_Tool.Degenerated(e));
+    const neighborSet = new Set();
+    for (let fi = 0; fi < nF; fi++) {
+      if (fi === origIdx) continue;
+      const fes = collectEdges(allFaces[fi]);
+      if (fes.some((e) => !oc.BRep_Tool.Degenerated(e) && origEdges.some((oe) => oe.IsSame(e)))) {
+        neighborSet.add(fi);
+      }
+    }
+    if (!neighborSet.size) throw new Error('Fläche ersetzen: Die gewählte Fläche hat keine Nachbarflächen.');
+
+    const nOrig = norm(vec(fOrig.normalAt()));
+    const cOrig = vec(fOrig.center);
+    const bb = bboxOf(solidShape);
+    const diag = Math.hypot(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]);
+    let maxShift = 0;
+    let repFw = null;
+    let repObj = null;
+
+    try {
+      if (refFaceLocal.kind === 'plane') {
+        const o = refFaceLocal.o;
+        let nUse = norm(refFaceLocal.n);
+        if (dot(nUse, nOrig) < 0) nUse = mul(nUse, -1);
+        if (flip) nUse = mul(nUse, -1);
+        const fbb = bboxOf(fOrig);
+        const denom = Math.max(0.25, Math.abs(dot(nUse, nOrig)));
+        for (const x of [fbb[0], fbb[3]]) for (const y of [fbb[1], fbb[4]]) for (const z of [fbb[2], fbb[5]]) {
+          const d = Math.abs(dot(sub([x, y, z], o), nUse)) / denom;
+          if (d > maxShift) maxShift = d;
+        }
+        const workPad = Math.max(diag * 0.8, maxShift * 1.6 + diag * 0.4, 15);
+        const repSpan = workPad * 2.5;
+        repObj = makeOrientedPlaneFace(o, nUse, repSpan);
+        repFw = oc.TopoDS.Face(repObj.wrapped);
+        try {
+          return rebuildSolidWithReplacedFaces(solidShape, new Map([[origIdx, { fw: repFw, fObj: repObj, bb: bboxOf(repObj) }]]), neighborSet, workPad, 'Fläche ersetzen');
+        } catch (err) {
+          if (fOrig.geomType === 'PLANE') {
+            return replaceFacePlaneFallback(solidShape, fOrig, o, nUse);
+          }
+          throw err;
+        }
+      } else {
+        const tgtFace = refFaceLocal.shape;
+        const tbb = bboxOf(tgtFace);
+        for (const x of [tbb[0], tbb[3]]) for (const y of [tbb[1], tbb[4]]) for (const z of [tbb[2], tbb[5]]) {
+          maxShift = Math.max(maxShift, len(sub([x, y, z], cOrig)));
+        }
+        const workPad = Math.max(diag * 0.8, maxShift * 1.6 + diag * 0.4, 15);
+        const repSpan = workPad * 2.5;
+        repFw = extendFaceForHeal(oc.TopoDS.Face(tgtFace.wrapped), repSpan);
+        let testObj = R.cast(repFw);
+        let flipNeeded = false;
+        let vtx = null, ext = null;
+        try {
+          const gpC = R.asPnt(cOrig);
+          const mv = new oc.BRepBuilderAPI_MakeVertex(gpC);
+          vtx = mv.Vertex(); gpC.delete(); mv.delete();
+          ext = new oc.BRepExtrema_DistShapeShape(vtx, repFw);
+          ext.Perform();
+          let pTest = cOrig;
+          if (ext.IsDone() && ext.NbSolution() > 0) {
+            const p2 = ext.PointOnShape2(1);
+            pTest = [p2.X(), p2.Y(), p2.Z()];
+            p2.delete();
+          }
+          const rn = testObj.normalAt(pTest);
+          flipNeeded = (rn.x * nOrig[0] + rn.y * nOrig[1] + rn.z * nOrig[2]) < 0;
+        } catch (_) {
+        } finally {
+          if (ext) try { ext.delete(); } catch (_) {}
+          if (vtx) try { vtx.delete(); } catch (_) {}
+        }
+        if (flip) flipNeeded = !flipNeeded;
+        if (flipNeeded) {
+          safeDelete(testObj);
+          repFw = oc.TopoDS.Face(repFw.Reversed());
+          testObj = R.cast(repFw);
+        }
+        repObj = testObj;
+        return rebuildSolidWithReplacedFaces(solidShape, new Map([[origIdx, { fw: repFw, fObj: repObj, bb: bboxOf(repObj) }]]), neighborSet, workPad, 'Fläche ersetzen');
+      }
+    } finally {
+      safeDelete(repObj);
+    }
+  }
+  function buildReplaceFaceOn(baseShape, p, refFaceLocal, topo = null, tid = null) {
+    if (!p || !p.face || !Array.isArray(p.face.c)) throw new Error('Fläche ersetzen: Es ist keine Fläche gewählt.');
+    const solids = baseShape.solids;
+    if (solids.length <= 1) {
+      const { fArr, indices } = resolveDeleteFaceMatch(baseShape, [p.face], topo, tid);
+      try {
+        if (!indices.size) {
+          const err = new Error('Fläche ersetzen: Die gewählte Fläche gibt es nicht mehr.');
+          err.code = 'edges';
+          throw err;
+        }
+        const origIdx = [...indices][0];
+        return replaceFaceOnSolid(baseShape, origIdx, refFaceLocal, !!p.flip);
+      } finally {
+        for (const fx of fArr) safeDelete(fx);
+      }
+    }
+    const outSolids = [];
+    let anyReplaced = false;
+    for (const sol of solids) {
+      const { fArr, indices } = resolveDeleteFaceMatch(sol, [p.face], topo, tid);
+      try {
+        if (indices.size && !anyReplaced) {
+          anyReplaced = true;
+          outSolids.push(replaceFaceOnSolid(sol, [...indices][0], refFaceLocal, !!p.flip));
+        } else {
+          outSolids.push(sol.clone());
+        }
+      } finally {
+        for (const fx of fArr) safeDelete(fx);
+      }
+    }
+    if (!anyReplaced) {
+      for (const s of outSolids) safeDelete(s);
+      const err = new Error('Fläche ersetzen: Die gewählte Fläche gibt es nicht mehr.');
+      err.code = 'edges';
+      throw err;
+    }
+    if (outSolids.length === 1) return outSolids[0];
+    const comp = R.makeCompound(outSolids);
+    for (const s of outSolids) safeDelete(s);
+    return comp;
+  }
+
+  function resolveMoveEdgeMatch(solidShape, edgeSpec, topo = null, tid = null) {
+    const eArr = [];
+    try { for (const ex of solidShape.edges) eArr.push(ex); } catch (_) {}
+    if (!edgeSpec) return { eArr, hit: null };
+    let hit = resolveEdgeRef(edgeSpec, eArr, topo, tid, true)[0] || null;
+    if (!hit && Array.isArray(edgeSpec.m)) {
+      const tol = 0.05 + 0.005 * num(edgeSpec.l, 10);
+      let bestD = Infinity;
+      for (const e of eArr) {
+        try {
+          const m = vec(e.pointAt(0.5));
+          const dm = len(sub(m, edgeSpec.m));
+          if (dm < tol && dm < bestD) { bestD = dm; hit = e; }
+        } catch (_) {}
+      }
+    }
+    if (!hit && Array.isArray(edgeSpec.a) && Array.isArray(edgeSpec.b)) {
+      const tol = 0.05 + 0.005 * num(edgeSpec.l, 10);
+      let bestD = Infinity;
+      for (const e of eArr) {
+        try {
+          const a = vec(e.startPoint), b = vec(e.endPoint);
+          const d1 = len(sub(a, edgeSpec.a)) + len(sub(b, edgeSpec.b));
+          const d2 = len(sub(a, edgeSpec.b)) + len(sub(b, edgeSpec.a));
+          const d = Math.min(d1, d2);
+          if (d < tol * 2 && d < bestD) { bestD = d; hit = e; }
+        } catch (_) {}
+      }
+    }
+    return { eArr, hit };
+  }
+  function collectFaceVertices(fw) {
+    const pts = [];
+    const exp = new oc.TopExp_Explorer(fw, oc.TopAbs_ShapeEnum.TopAbs_VERTEX, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+    while (exp.More()) {
+      const vx = oc.TopoDS.Vertex(exp.Current());
+      const gp = oc.BRep_Tool.Pnt(vx);
+      pts.push([gp.X(), gp.Y(), gp.Z()]);
+      gp.delete();
+      exp.Next();
+    }
+    exp.delete();
+    return pts;
+  }
+  function moveEdgeOnSolid(solidShape, eObj, p) {
+    if (eObj.geomType !== 'LINE') throw new Error('Kante verschieben unterstützt gerade Kanten zwischen ebenen Flächen.');
+    const fObjs = solidShape.faces;
+    const allFaces = fObjs.map((f) => oc.TopoDS.Face(f.wrapped));
+    const nF = allFaces.length;
+    const adjIdxs = [];
+    for (let fi = 0; fi < nF; fi++) {
+      if (fObjs[fi].edges.some((x) => x.isSame(eObj))) adjIdxs.push(fi);
+    }
+    if (adjIdxs.length !== 2) throw new Error('Kante verschieben benötigt eine Kante zwischen genau zwei ebenen Flächen.');
+    const [i0, i1] = adjIdxs;
+    const f0 = fObjs[i0], f1 = fObjs[i1];
+    if (f0.geomType !== 'PLANE' || f1.geomType !== 'PLANE') {
+      throw new Error('Kante verschieben unterstützt gerade Kanten zwischen zwei ebenen Flächen.');
+    }
+
+    const A = vec(eObj.startPoint), B = vec(eObj.endPoint);
+    const uE = norm(sub(B, A));
+    const n0 = norm(vec(f0.normalAt())), n1 = norm(vec(f1.normalAt()));
+    const axis = p.axis || 'bisector';
+    const dVal = num(p.dist, 0);
+    let V;
+    if (axis === 'free') V = [num(p.dx, 0), num(p.dy, 0), num(p.dz, 0)];
+    else if (axis === 'x') V = [dVal, 0, 0];
+    else if (axis === 'y') V = [0, dVal, 0];
+    else if (axis === 'z') V = [0, 0, dVal];
+    else if (axis === 'n1') V = mul(n0, dVal);
+    else if (axis === 'n2') V = mul(n1, dVal);
+    else {
+      const bVec = add(n0, n1);
+      const dirB = len(bVec) > 1e-4 ? norm(bVec) : n0;
+      V = mul(dirB, dVal);
+    }
+    const Vp = sub(V, mul(uE, dot(V, uE)));
+    const vpLen = len(Vp);
+    if (vpLen < 1e-6) throw new Error('Die Verschieberichtung liegt entlang der Kante – wähle eine andere Richtung.');
+
+    const Anew = add(A, Vp);
+    const bb = bboxOf(solidShape);
+    const diag = Math.hypot(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]);
+    const workPad = Math.max(diag * 0.8, vpLen * 1.8 + diag * 0.4, 15);
+    const repSpan = workPad * 2.5;
+
+    const specs = [
+      { idx: i0, fObj: f0, fw: allFaces[i0], n: n0 },
+      { idx: i1, fObj: f1, fw: allFaces[i1], n: n1 },
+    ];
+    const inDirs = [];
+    const hinges = [];
+    const newNormals = [];
+    for (const sp of specs) {
+      let inDir = norm(cross(sp.n, uE));
+      if (dot(sub(vec(sp.fObj.center), A), inDir) < 0) inDir = mul(inDir, -1);
+      const verts = collectFaceVertices(sp.fw);
+      let sMax = 0;
+      for (const v of verts) {
+        const pr = dot(sub(v, A), inDir);
+        if (pr > sMax) sMax = pr;
+      }
+      if (!(sMax > 1e-4)) throw new Error('Kante verschieben: Die Nachbarfläche ist zu schmal.');
+      if (sMax - dot(Vp, inDir) <= 1e-3) {
+        throw new Error('Der Versatz ist zu groß für die Nachbarflächen – wähle einen kleineren Wert.');
+      }
+      const pHinge = add(A, mul(inDir, sMax));
+      let nNew;
+      if (Math.abs(dot(Vp, sp.n)) < 1e-6) {
+        nNew = sp.n.slice();
+      } else {
+        const w = sub(Anew, pHinge);
+        const cr = cross(uE, w);
+        if (len(cr) < 1e-6) throw new Error('Kante verschieben: Die Nachbarfläche würde zusammenfallen.');
+        nNew = norm(cr);
+        if (dot(nNew, sp.n) < 0) nNew = mul(nNew, -1);
+      }
+      inDirs.push(inDir);
+      hinges.push(pHinge);
+      newNormals.push(nNew);
+    }
+
+    const isConcave = dot(n0, inDirs[1]) > 1e-4;
+    const replaceMap = new Map();
+    const ownedObjs = [];
+    try {
+      for (let k = 0; k < 2; k++) {
+        const sp = specs[k], nNew = newNormals[k];
+        let repObj;
+        if (isConcave) {
+          const toHinge = norm(sub(hinges[k], Anew));
+          const p0 = sub(Anew, mul(uE, repSpan));
+          const p1 = add(Anew, mul(uE, repSpan));
+          const p2 = add(p1, mul(toHinge, repSpan * 1.5));
+          const p3 = add(p0, mul(toHinge, repSpan * 1.5));
+          repObj = makeOrientedQuadFace([p0, p1, p2, p3], nNew);
+        } else {
+          repObj = makeOrientedPlaneFace(Anew, nNew, repSpan);
+        }
+        ownedObjs.push(repObj);
+        replaceMap.set(sp.idx, { fw: oc.TopoDS.Face(repObj.wrapped), fObj: repObj, bb: bboxOf(repObj) });
+      }
+
+      const adjVerts = [...collectFaceVertices(allFaces[i0]), ...collectFaceVertices(allFaces[i1])];
+      const adjEdges = [...collectEdges(allFaces[i0]), ...collectEdges(allFaces[i1])].filter((e) => !oc.BRep_Tool.Degenerated(e));
+      const extSet = new Set();
+      for (let fi = 0; fi < nF; fi++) {
+        if (fi === i0 || fi === i1) continue;
+        const fes = collectEdges(allFaces[fi]).filter((e) => !oc.BRep_Tool.Degenerated(e));
+        if (fes.some((e) => adjEdges.some((ae) => ae.IsSame(e)))) { extSet.add(fi); continue; }
+        const fvs = collectFaceVertices(allFaces[fi]);
+        if (fvs.some((v) => adjVerts.some((av) => len(sub(v, av)) < 1e-4))) extSet.add(fi);
+      }
+
+      return rebuildSolidWithReplacedFaces(solidShape, replaceMap, extSet, workPad, 'Kante verschieben');
+    } finally {
+      for (const o of ownedObjs) safeDelete(o);
+    }
+  }
+  function buildMoveEdgeOn(baseShape, p, topo = null, tid = null) {
+    if (!p || !p.edge) throw new Error('Kante verschieben: Es ist keine Kante gewählt.');
+    const solids = baseShape.solids;
+    if (solids.length <= 1) {
+      const { eArr, hit } = resolveMoveEdgeMatch(baseShape, p.edge, topo, tid);
+      try {
+        if (!hit) {
+          const err = new Error('Kante verschieben: Die gewählte Kante gibt es nicht mehr.');
+          err.code = 'edges';
+          throw err;
+        }
+        return moveEdgeOnSolid(baseShape, hit, p);
+      } finally {
+        for (const ex of eArr) safeDelete(ex);
+      }
+    }
+    const outSolids = [];
+    let anyMoved = false;
+    for (const sol of solids) {
+      const { eArr, hit } = resolveMoveEdgeMatch(sol, p.edge, topo, tid);
+      try {
+        if (hit && !anyMoved) {
+          anyMoved = true;
+          outSolids.push(moveEdgeOnSolid(sol, hit, p));
+        } else {
+          outSolids.push(sol.clone());
+        }
+      } finally {
+        for (const ex of eArr) safeDelete(ex);
+      }
+    }
+    if (!anyMoved) {
+      for (const s of outSolids) safeDelete(s);
+      const err = new Error('Kante verschieben: Die gewählte Kante gibt es nicht mehr.');
+      err.code = 'edges';
+      throw err;
+    }
+    if (outSolids.length === 1) return outSolids[0];
+    const comp = R.makeCompound(outSolids);
+    for (const s of outSolids) safeDelete(s);
+    return comp;
+  }
+
   function basisFromNormal(fn) {
     const n = norm(fn);
     const ref = Math.abs(n[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
@@ -16135,6 +16730,221 @@ export function createKernel(R, oc) {
           if (track) track.rebuilt.add(it.id);
           try {
             next = buildDeleteFaceOn(src.shape, { faces }, src.topo, src.it.id);
+            nextTopo = ensureTopoComplete(next, createTopoMap(), tid);
+            cachePut(k, next, null, null, null, nextTopo);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: (err && err.code === 'edges') ? 'edges' : 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'replaceFace') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Fläche ersetzen: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        if (!p.face || !Array.isArray(p.face.c)) {
+          consumed.set(it.id, tid);
+          errors.push({ itemId: it.id, code: 'edges', message: 'Fläche ersetzen: Es ist keine Fläche gewählt.' });
+          continue;
+        }
+        const rep = p.replace;
+        if (!rep) {
+          consumed.set(it.id, tid);
+          errors.push({ itemId: it.id, code: 'op', message: 'Fläche ersetzen: Es ist keine Zielfläche oder Bezugsebene gewählt.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        let refKey = null, refSrc = null, refPlaneLocal = null;
+        if (rep.kind === 'datum' || rep.kind === 'plane') {
+          if (rep.missing || !rep.plane || !Array.isArray(rep.plane.o) || !Array.isArray(rep.plane.n)) {
+            errors.push({ itemId: it.id, code: 'op', message: 'Fläche ersetzen: Die gewählte Bezugsebene fehlt.' });
+            continue;
+          }
+          const invSrc = matInvRigid(src.m);
+          const oL = transformPoint(invSrc, rep.plane.o.map(Number));
+          const nL = transformDir(invSrc, rep.plane.n.map(Number));
+          refPlaneLocal = { kind: 'plane', o: oL, n: nL };
+          refKey = ['plane', oL.map(r6), nL.map(r6)];
+        } else if (rep.kind === 'face' && rep.id) {
+          let refTid = rep.id;
+          while (refTid && consumed.has(refTid)) refTid = consumed.get(refTid);
+          refSrc = refTid ? live.get(refTid) : null;
+          if (!refSrc || !refSrc.shape) {
+            errors.push({ itemId: it.id, code: 'op', message: 'Fläche ersetzen: Der Körper der Zielfläche fehlt oder ist ausgeblendet.' });
+            continue;
+          }
+          refKey = ['face', refSrc.key, refSrc.m.map(r6), rep];
+        } else {
+          errors.push({ itemId: it.id, code: 'op', message: 'Fläche ersetzen: Ungültiges Ziel.' });
+          continue;
+        }
+
+        let bakedSet = bakedHoles.get(tid);
+        const priorHoles = [];
+        for (let hi = 0; hi < i; hi++) {
+          const he = evald[hi];
+          if (!he || he.it.role !== 'hole' || !he.shape || consumed.has(he.it.id)) continue;
+          if (bakedSet && bakedSet.has(he.it.id)) continue;
+          if (src.wb && he.wb && bboxHit(he.wb, src.wb)) priorHoles.push(he);
+        }
+        if (priorHoles.length) {
+          const inv = matInvRigid(src.m);
+          const rels = priorHoles.map((h) => matMul(inv, h.it.m));
+          const kHole = keyOf([src.key, 'bakeHoles', priorHoles.map((h, idx) => [h.key, rels[idx].map(r6)])]);
+          const ceH = cacheEntry(kHole);
+          let hShape = ceH ? ceH.shape : null, hTopo = ceH ? ceH.topo : null;
+          if (!hShape) {
+            try {
+              const moved = priorHoles.map((h, idx) => {
+                const tr = applyMatrixWithTopo(h.shape, rels[idx], h.topo || null, h.it.id);
+                return { shape: tr.shape, topo: tr.topo, selfId: h.it.id };
+              });
+              const tool = fuseAllWithTopo(moved, true, 'BH');
+              const br = boolWithTopo('cut', src.shape, src.topo || null, src.it.id, tool.shape, tool.topo, null, 'BHCut');
+              safeDelete(tool.shape); freeTopoMap(tool.topo);
+              hShape = br.shape; hTopo = br.topo;
+              cachePut(kHole, hShape, null, null, null, hTopo);
+            } catch (_) { hShape = null; }
+          }
+          if (hShape) {
+            if (!bakedSet) { bakedSet = new Set(); bakedHoles.set(tid, bakedSet); }
+            for (const h of priorHoles) bakedSet.add(h.it.id);
+            src.shape = hShape; src.topo = hTopo; src.key = kHole; src.wb = bboxTransform(bboxCached(kHole, hShape), src.m);
+            bodies.set(tid, src);
+          }
+        }
+
+        const k = keyOf([src.key, 'replaceFace', p.face, refKey, !!p.flip]);
+        const ceRF = cacheEntry(k);
+        let next = ceRF ? ceRF.shape : null, nextTopo = ceRF ? ceRF.topo : null;
+        if (!next) {
+          if (track) track.rebuilt.add(it.id);
+          let fLocalCleanup = null;
+          const rfArr = [];
+          try {
+            let refLocal = refPlaneLocal;
+            if (!refLocal && refSrc) {
+              try { for (const fx of refSrc.shape.faces) rfArr.push(fx); } catch (_) {}
+              const rb = bboxOf(refSrc.shape);
+              const rTol = 0.05 + 1e-3 * Math.max(rb[3] - rb[0], rb[4] - rb[1], rb[5] - rb[2]);
+              let rf = resolveFaceRef({ ...rep, tol: rTol }, rfArr, refSrc.topo, refSrc.it.id, true)[0] || null;
+              if (!rf && Array.isArray(rep.wc)) {
+                const invRef = matInvRigid(refSrc.m);
+                const locSpec = {
+                  t: rep.t,
+                  c: transformPoint(invRef, rep.wc),
+                  n: Array.isArray(rep.wn) ? transformDir(invRef, rep.wn) : rep.n,
+                };
+                rf = matchFace(refSrc.shape, locSpec);
+              }
+              if (!rf) rf = matchFace(refSrc.shape, rep);
+              if (!rf) {
+                const err = new Error('Fläche ersetzen: Die gewählte Zielfläche gibt es nicht mehr.');
+                err.code = 'edges';
+                throw err;
+              }
+              const relM = matMul(matInvRigid(src.m), refSrc.m);
+              const fLocal = applyMatrix(rf, relM);
+              if (fLocal.geomType === 'PLANE') {
+                refLocal = { kind: 'plane', o: vec(fLocal.center), n: norm(vec(fLocal.normalAt())) };
+                safeDelete(fLocal);
+              } else {
+                fLocalCleanup = fLocal;
+                refLocal = { kind: 'face', shape: fLocal };
+              }
+            }
+            next = buildReplaceFaceOn(src.shape, p, refLocal, src.topo, src.it.id);
+            nextTopo = ensureTopoComplete(next, createTopoMap(), tid);
+            cachePut(k, next, null, null, null, nextTopo);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: (err && err.code === 'edges') ? 'edges' : 'build', message: friendlyError(err) });
+            continue;
+          } finally {
+            for (const fx of rfArr) safeDelete(fx);
+            safeDelete(fLocalCleanup);
+          }
+        }
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'moveEdge') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Kante verschieben: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        if (!p.edge) {
+          errors.push({ itemId: it.id, code: 'edges', message: 'Kante verschieben: Es ist keine Kante gewählt.' });
+          continue;
+        }
+        const axis = p.axis || 'bisector';
+        const dist = num(p.dist, 0);
+        const dx = num(p.dx, 0), dy = num(p.dy, 0), dz = num(p.dz, 0);
+        const isNoop = axis === 'free' ? Math.hypot(dx, dy, dz) < 1e-6 : Math.abs(dist) < 1e-6;
+        if (isNoop) {
+          if (track && track.stepKeys) track.stepKeys.set(it.id, keyOf([src.key, 'moveEdge', 'noop']));
+          continue;
+        }
+
+        let bakedSet = bakedHoles.get(tid);
+        const priorHoles = [];
+        for (let hi = 0; hi < i; hi++) {
+          const he = evald[hi];
+          if (!he || he.it.role !== 'hole' || !he.shape || consumed.has(he.it.id)) continue;
+          if (bakedSet && bakedSet.has(he.it.id)) continue;
+          if (src.wb && he.wb && bboxHit(he.wb, src.wb)) priorHoles.push(he);
+        }
+        if (priorHoles.length) {
+          const inv = matInvRigid(src.m);
+          const rels = priorHoles.map((h) => matMul(inv, h.it.m));
+          const kHole = keyOf([src.key, 'bakeHoles', priorHoles.map((h, idx) => [h.key, rels[idx].map(r6)])]);
+          const ceH = cacheEntry(kHole);
+          let hShape = ceH ? ceH.shape : null, hTopo = ceH ? ceH.topo : null;
+          if (!hShape) {
+            try {
+              const moved = priorHoles.map((h, idx) => {
+                const tr = applyMatrixWithTopo(h.shape, rels[idx], h.topo || null, h.it.id);
+                return { shape: tr.shape, topo: tr.topo, selfId: h.it.id };
+              });
+              const tool = fuseAllWithTopo(moved, true, 'BH');
+              const br = boolWithTopo('cut', src.shape, src.topo || null, src.it.id, tool.shape, tool.topo, null, 'BHCut');
+              safeDelete(tool.shape); freeTopoMap(tool.topo);
+              hShape = br.shape; hTopo = br.topo;
+              cachePut(kHole, hShape, null, null, null, hTopo);
+            } catch (_) { hShape = null; }
+          }
+          if (hShape) {
+            if (!bakedSet) { bakedSet = new Set(); bakedHoles.set(tid, bakedSet); }
+            for (const h of priorHoles) bakedSet.add(h.it.id);
+            src.shape = hShape; src.topo = hTopo; src.key = kHole; src.wb = bboxTransform(bboxCached(kHole, hShape), src.m);
+            bodies.set(tid, src);
+          }
+        }
+
+        const k = keyOf([src.key, 'moveEdge', p.edge, axis, r6(dist), r6(dx), r6(dy), r6(dz)]);
+        const ceME = cacheEntry(k);
+        let next = ceME ? ceME.shape : null, nextTopo = ceME ? ceME.topo : null;
+        if (!next) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            next = buildMoveEdgeOn(src.shape, { edge: p.edge, axis, dist, dx, dy, dz }, src.topo, src.it.id);
             nextTopo = ensureTopoComplete(next, createTopoMap(), tid);
             cachePut(k, next, null, null, null, nextTopo);
           } catch (err) {

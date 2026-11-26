@@ -539,5 +539,15 @@
     "was": "Löscht eine oder mehrere gewählte Flächen (z. B. Bohrung, Tasche, Zapfen, Rundung oder Fase) aus einem Körper und schließt die entstandene Lücke wieder zu einem geschlossenen Volumen.",
     "wozu": "Ideal zum schnellen Entfernen von Löchern, Rundungen oder Fasen – besonders an importierten STEP-/BREP-Teilen ohne eigenen Skizzen-Verlauf.",
     "achtung": "Wenn eine gelöschte Fläche den Körper nicht eindeutig schließen lässt (etwa eine einzelne Außenwand eines Quaders), meldet der Kern einen Fehler; unterdrücke den Schritt oder wähle die passenden Flächen zusammen."
+  },
+  "replaceFace": {
+    "was": "Ersetzt eine gewählte Körperfläche durch eine andere Körperfläche oder eine Bezugsebene und passt die Nachbarflächen automatisch an.",
+    "wozu": "Gleicht Höhen, Absätze oder Schrägen direkt an bestehende Flächen oder Bezugsebenen an – auch an importierten STEP-, IGES- oder BREP-Teilen.",
+    "achtung": "Wenn die neue Fläche den Körper komplett verschwinden lässt oder eine Nachbarfläche nicht bis dorthin verlängert werden kann, wähle eine passendere Bezugsebene oder prüfe „Seite umdrehen“."
+  },
+  "moveEdge": {
+    "was": "Verschiebt eine gerade Körperkante um einen vorgegebenen Abstand oder Vektor und kippt die beiden ebenen Nachbarflächen entsprechend mit.",
+    "wozu": "Ändert Fasenwinkel, schräge Kanten oder Grundformen schnell direkt am fertigen Körper – auch bei importierten Teilen ohne Skizze.",
+    "achtung": "Der Versatz muss kleiner bleiben als die Breite der Nachbarflächen, sonst würden diese zu null schrumpfen."
   }
 }

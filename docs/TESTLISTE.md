@@ -3065,6 +3065,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Rückgängig (`Strg+Z`) entfernt den gesetzten Einlinien-Text vollständig; „In Kurven umwandeln“ behält offene Linien ohne geschlossene Flächen (Klicktest `[A-202]`)
 - [ ] **Von Hand**: Im Browser eine Skizze starten, im Text-Werkzeug „Einlinig (Gravur)“ wählen, einen Satz mit Umlauten und Ziffern setzen und das Linienbild im 2D-Fenster prüfen.
 
+## Direkt bearbeiten: Fläche ersetzen und Kante verschieben (Auto [A-204], DB-04, DB-07)
+- [x] Profi-Sichtbarkeit, Befehlssuche (`replace-face`, `move-edge`) und Rechtsklick-Menü auf Körperflächen (`#cm-replace-face`, `#cm-move-edge` nur im Profi-Modus) (Klicktest `[A-204]`)
+- [x] Quader 20×20×20: Deckfläche durch Bezugsebene bei `Z = 30` ersetzen → Höhe `30,0 mm`, Volumen `12000,0 mm³`, `GeomCheck` = 0 Fehler; Unterdrücken und Rückgängig stellen `20,0 mm` / `8000,0 mm³` her (Klicktest `[A-204]`)
+- [x] Fläche ersetzen durch schräge Fläche eines zweiten Körpers sowie `moveEdge` an gerader Kante um `5 mm` (Nachbarflächen kippen mit, Volumen ändert sich deutlich), `-3 mm` und Richtung `Z` (`9000,0 mm³`) samt Rückgängig auf `8000,0 mm³` und 6 orthogonale Flächen (Klicktest `[A-204]`)
+- [x] Importiertes STEP-Teil: Deckfläche auf Ebene `Z = 30` ersetzen und Kante um `5 mm` verschieben, `Store.validateProject()`, `Explain.local()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-204]`)
+- [ ] **Von Hand**: Im Browser im Profi-Modus an einem Bauteil (oder importierten STEP-Teil) per Rechtsklick auf eine Fläche „Fläche ersetzen“ auf eine Bezugsebene und per Klick auf eine Kante „Kante verschieben“ testen und die mitkippenden Nachbarflächen prüfen.
+
 ## Fehler melden
 
 ```

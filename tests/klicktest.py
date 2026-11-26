@@ -41801,6 +41801,211 @@ def t_a202_einlinien_schrift(p):
         p.ev("try { if (Sketch.active) Sketch.cancel(true); ViewPrefs.setLevel('pro'); } catch (_) {}")
 
 
+def t_a204_flaeche_ersetzen_kante_verschieben(p):
+    """[A-204] Direkt bearbeiten: Fläche ersetzen (DB-04) und Kante verschieben (DB-07)."""
+    try:
+        # 1. Einfach- vs. Profi-Sichtbarkeit, Befehlssuche & Rechtsklick-Menü auf Fläche
+        p.empty()
+        p.ev("ViewPrefs.setLevel('simple')")
+        p.wait(200)
+        simple_cmds = p.ev("return [Commands.search('Fläche ersetzen').length, Commands.search('Kante verschieben').length]")
+        p.ev("ViewPrefs.setLevel('pro')")
+        p.wait(200)
+        pro_cmds = p.ev("return [Commands.search('Fläche ersetzen').length, Commands.search('Kante verschieben').length]")
+        p.ev("Actions.addPrimitive('box')"); warte_rechnen(p, 25)
+        c = p.ev("""
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+          return r.data.faces[fi].c;
+        """)
+        sx, sy = world_screen(p, c[0], c[1], c[2])
+        p.pg.mouse.click(sx, sy, button='right')
+        p.wait(250)
+        cm_has = p.ev("return [!!document.querySelector('#cm-replace-face'), !!document.querySelector('#cm-move-edge')]")
+        p.pg.keyboard.press('Escape'); p.wait(150)
+        ok1 = (
+            simple_cmds == [0, 0]
+            and pro_cmds[0] >= 1 and pro_cmds[1] >= 1
+            and cm_has == [True, True]
+        )
+
+        # 2. Quader 20x20x20: Deckfläche durch Bezugsebene bei Z=30 ersetzen -> Höhe 30, Volumen 12000; Unterdrücken & Rückgängig
+        p.ev("""
+          const dm = Datums.addOrigin('XY', 30);
+          const box = App.doc.items[0], r = App.results.get(box.id);
+          const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+          Features.replaceFace({ id: box.id, idx: fi, info: r.data.faces[fi] }, { datumId: dm.id });
+        """)
+        warte_rechnen(p, 45)
+        rf_st = p.ev("""return (async () => {
+          const box = App.doc.items[0], r = App.results.get(box.id);
+          const bb = r && r.data && r.data.bbox;
+          const ms = await Mass.measure();
+          const gc = await GeomCheck.run({ silent: true });
+          return {
+            errs: App.errors.length,
+            kinds: App.doc.items.map(x => x.kind),
+            h: bb ? (bb[5] - bb[2]) : null,
+            zMax: bb ? bb[5] : null,
+            vol: ms?.parts?.[0]?.volume || 0,
+            gcIssues: (gc.issues || []).length,
+          };
+        })()""")
+        p.ev("Timeline.toggleSuppress(App.doc.items.find(x => x.kind === 'replaceFace').id)")
+        warte_rechnen(p, 45)
+        rf_sup = p.ev("return (async () => { const bb = App.results.get(App.doc.items[0].id)?.data?.bbox; const ms = await Mass.measure(); return { h: bb ? bb[5]-bb[2] : null, vol: ms?.parts?.[0]?.volume || 0 }; })()")
+        p.ev("Timeline.toggleSuppress(App.doc.items.find(x => x.kind === 'replaceFace').id)")
+        warte_rechnen(p, 45)
+        rf_unsup = p.ev("const bb = App.results.get(App.doc.items[0].id)?.data?.bbox; return bb ? bb[5]-bb[2] : null")
+        p.ev("App.undo(); App.undo(); App.undo(); App.undo();"); warte_rechnen(p, 45)
+        rf_undo = p.ev("return (async () => { const bb = App.results.get(App.doc.items[0].id)?.data?.bbox; const ms = await Mass.measure(); return { cnt: App.doc.items.filter(x => x.kind === 'replaceFace').length, h: bb ? bb[5]-bb[2] : null, vol: ms?.parts?.[0]?.volume || 0 }; })()")
+        ok2 = bool(
+            rf_st['errs'] == 0 and rf_st['kinds'] == ['box', 'replaceFace']
+            and rf_st['h'] is not None and abs(rf_st['h'] - 30.0) < 0.05
+            and rf_st['zMax'] is not None and abs(rf_st['zMax'] - 30.0) < 0.05
+            and abs(rf_st['vol'] - 12000.0) < 1.0
+            and rf_st['gcIssues'] == 0
+            and rf_sup['h'] is not None and abs(rf_sup['h'] - 20.0) < 0.05 and abs(rf_sup['vol'] - 8000.0) < 1.0
+            and rf_unsup is not None and abs(rf_unsup - 30.0) < 0.05
+            and rf_undo['cnt'] == 0 and rf_undo['h'] is not None and abs(rf_undo['h'] - 20.0) < 0.05 and abs(rf_undo['vol'] - 8000.0) < 1.0
+        )
+
+        # 3. Fläche ersetzen durch schräge Fläche eines zweiten Körpers
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.ev("""App.change('Zwei Quader', (doc) => {
+          doc.items.push(Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' }));
+          doc.items.push(Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Schraeg', more: { t: { x: 0, y: 0, z: 24, rx: 15, ry: 0, rz: 0 } } }));
+        })""")
+        warte_rechnen(p, 45)
+        p.ev("""(() => {
+          const b1 = App.doc.items[0], b2 = App.doc.items[1];
+          const r1 = App.results.get(b1.id), r2 = App.results.get(b2.id);
+          const f1 = r1.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+          const f2 = r2.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] < -0.99);
+          Features.replaceFace({ id: b1.id, idx: f1, info: r1.data.faces[f1] }, { id: b2.id, idx: f2, info: r2.data.faces[f2] });
+        })()""")
+        warte_rechnen(p, 45)
+        tilt_st = p.ev("""return (async () => {
+          const b1 = App.doc.items[0], r1 = App.results.get(b1.id);
+          const top = r1?.data?.faces?.find(f => f.t === 'PLANE' && f.c[2] > 10 && f.n[2] > 0.5);
+          const gc = await GeomCheck.run({ silent: true });
+          return { errs: App.errors.length, ny: top?.n?.[1] || 0, nz: top?.n?.[2] || 0, gcIssues: (gc.issues || []).length };
+        })()""")
+        ok3 = bool(
+            tilt_st['errs'] == 0 and tilt_st['gcIssues'] == 0
+            and abs(tilt_st['ny']) > 0.2
+            and abs(tilt_st['nz'] - math.cos(math.radians(15))) < 0.01
+        )
+
+        # 4. Kante verschieben (DB-07): Quader 20x20x20 -> Kante um 5 mm verschieben -> Nachbarflächen kippen mit -> Rückgängig
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.ev("Actions.addPrimitive('box')"); warte_rechnen(p, 25)
+        p.ev("""(() => {
+          const box = App.doc.items[0], r = App.results.get(box.id);
+          const ei = r.data.edges.findIndex(e => e.t === 'LINE' && Math.abs(e.m[1] + 10) < 0.05 && Math.abs(e.m[2] - 20) < 0.05);
+          App.select([box.id], { edges: [{ id: box.id, edgeIdx: ei }] });
+        })()""")
+        p.wait(250)
+        p.pg.locator('#ctx-move-edge').click()
+        warte_rechnen(p, 45)
+        me1 = p.ev("""return (async () => {
+          const box = App.doc.items[0], r = App.results.get(box.id);
+          const ms = await Mass.measure();
+          const gc = await GeomCheck.run({ silent: true });
+          const tilted = (r?.data?.faces || []).filter(f => f.t === 'PLANE' && f.n && Math.max(Math.abs(f.n[0]), Math.abs(f.n[1]), Math.abs(f.n[2])) < 0.99);
+          return { errs: App.errors.length, kinds: App.doc.items.map(x => x.kind), vol: ms?.parts?.[0]?.volume || 0, tilted: tilted.length, gcIssues: (gc.issues || []).length };
+        })()""")
+        p.pg.fill('#me-dist', '-3'); p.pg.press('#me-dist', 'Enter')
+        warte_rechnen(p, 45)
+        me_minus = p.ev("return (async () => (await Mass.measure())?.parts?.[0]?.volume || 0)()")
+        p.pg.select_option('#me-axis', 'z'); p.wait(200)
+        p.pg.fill('#me-dist', '5'); p.pg.press('#me-dist', 'Enter')
+        warte_rechnen(p, 45)
+        me_z = p.ev("return (async () => (await Mass.measure())?.parts?.[0]?.volume || 0)()")
+        p.ev("App.undo(); App.undo(); App.undo(); App.undo();"); warte_rechnen(p, 45)
+        me_undo = p.ev("""return (async () => {
+          const box = App.doc.items[0], r = App.results.get(box.id);
+          const ms = await Mass.measure();
+          return { cnt: App.doc.items.filter(x => x.kind === 'moveEdge').length, faces: r?.data?.faces?.length || 0, vol: ms?.parts?.[0]?.volume || 0 };
+        })()""")
+        ok4 = bool(
+            me1['errs'] == 0 and me1['kinds'] == ['box', 'moveEdge']
+            and me1['vol'] > 9200.0 and me1['tilted'] >= 2 and me1['gcIssues'] == 0
+            and me_minus < 7400.0
+            and abs(me_z - 9000.0) < 10.0
+            and me_undo['cnt'] == 0 and me_undo['faces'] == 6 and abs(me_undo['vol'] - 8000.0) < 1.0
+        )
+
+        # 5. Importiertes STEP-Teil + Validierung + Explain + Hilfe + I18n
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.ev("Actions.addPrimitive('box')"); warte_rechnen(p, 25)
+        p.pg.evaluate("""async () => {
+          const {Kernel, Model, App} = window.__M;
+          const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+          window.__a204Step = new File([new Uint8Array(r.data)], 'ImportTeil204.step');
+        }""")
+        p.wait(500)
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.pg.evaluate("() => window.__M.Start.importCAD(window.__a204Step)")
+        warte_rechnen(p, 45)
+        p.ev("""(() => {
+          const dm = Datums.addOrigin('XY', 30);
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+          Features.replaceFace({ id: it.id, idx: fi, info: r.data.faces[fi] }, { datumId: dm.id });
+        })()""")
+        warte_rechnen(p, 45)
+        p.ev("""(() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const ei = r.data.edges.findIndex(e => e.t === 'LINE' && Math.abs(e.m[1] + 10) < 0.05 && Math.abs(e.m[2] - 30) < 0.05);
+          Features.moveEdge({ id: it.id, edgeIdx: ei }, { axis: 'bisector', dist: 5 });
+        })()""")
+        warte_rechnen(p, 45)
+        step_st = p.ev("""return (async () => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const bb = r && r.data && r.data.bbox;
+          const ms = await Mass.measure();
+          const gc = await GeomCheck.run({ silent: true });
+          const rfStep = App.doc.items.find(x => x.kind === 'replaceFace');
+          const meStep = App.doc.items.find(x => x.kind === 'moveEdge');
+          const exRf = Explain.local(rfStep.id);
+          const exMe = Explain.local(meStep.id);
+          const val = Store.validateProject(JSON.parse(await Start.projectPayload()));
+          const [wh, se, de, en] = await Promise.all([
+            fetch('data/werkzeug-hilfen.json').then(x => x.json()),
+            fetch('data/schritt-erklaerungen.json').then(x => x.json()),
+            fetch('data/texte-de.json').then(x => x.json()),
+            fetch('data/texte-en.json').then(x => x.json()),
+          ]);
+          const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+          return {
+            fmt: it.p.fmt,
+            errs: App.errors.length,
+            h: bb ? (bb[5] - bb[2]) : null,
+            vol: ms?.parts?.[0]?.volume || 0,
+            gcIssues: (gc.issues || []).length,
+            valOk: val.ok && val.errors.length === 0,
+            exOk: !!(exRf && exRf.lines.length && exMe && exMe.lines.length),
+            helpOk: !!(wh.replaceFace?.tip && wh.replaceFace?.hilfe && wh.replaceFace?.tipp && wh.moveEdge?.tip && wh.moveEdge?.hilfe && wh.moveEdge?.tipp),
+            seOk: !!(se.replaceFace?.was && se.replaceFace?.wozu && se.replaceFace?.achtung && se.moveEdge?.was && se.moveEdge?.wozu && se.moveEdge?.achtung),
+            i18nOk: deK.length === enK.length && deK.every((k, i) => k === enK[i]),
+          };
+        })()""")
+        p.ev("App.undo(); App.undo();"); warte_rechnen(p, 45)
+        step_undo = p.ev("return (async () => { const bb = App.results.get(App.doc.items[0].id)?.data?.bbox; const ms = await Mass.measure(); return { h: bb ? bb[5]-bb[2] : null, vol: ms?.parts?.[0]?.volume || 0 }; })()")
+        ok5 = bool(
+            step_st['fmt'] == 'step' and step_st['errs'] == 0
+            and step_st['h'] is not None and step_st['h'] > 31.0
+            and step_st['vol'] > 12500.0 and step_st['gcIssues'] == 0
+            and step_st['valOk'] and step_st['exOk'] and step_st['helpOk'] and step_st['seOk'] and step_st['i18nOk']
+            and step_undo['h'] is not None and abs(step_undo['h'] - 20.0) < 0.05 and abs(step_undo['vol'] - 8000.0) < 1.0
+        )
+
+        return [ok1, ok2, ok3, ok4, ok5]
+    finally:
+        p.ev("try { if (Sketch.active) Sketch.cancel(true); ViewPrefs.setLevel('pro'); } catch (_) {}")
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -42117,6 +42322,7 @@ TESTS = [
     ('[A-194] Bibliothek: Logo aus SVG und RAL-Farben (BI-24, BI-25)', t_a194_svg_logo_ral_farben),
     ('[A-199] Direkt bearbeiten: Fläche löschen und Lücke heilen (DB-03)', t_a199_flaeche_loeschen_heilen),
     ('[A-202] Einlinien-Schrift: „AB“ mit Einlinig (Gravur) nur offene Kurven / keine geschlossenen Umrisse / Rückgängig', t_a202_einlinien_schrift),
+    ('[A-204] Direkt bearbeiten: Fläche ersetzen und Kante verschieben (DB-04, DB-07)', t_a204_flaeche_ersetzen_kante_verschieben),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

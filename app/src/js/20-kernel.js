@@ -731,12 +731,13 @@ const Kernel = (() => {
       if (ti != null) union(idx, ti);
     };
 
-    const TARGET_KINDS = new Set(['transform', 'scale', 'deform', 'thicken', 'directFace', 'rib', 'vent', 'fins', 'fillPattern', 'mountPattern', 'portCutout', 'magnetPocket', 'web', 'wrap', 'emboss', 'splitFace', 'dome', 'deleteFace', 'deleteBody', 'boss', 'lipGroove', 'undercut', 'circlipGroove', 'keyway', 'splineProfile', 'knurl', 'gripPattern', 'stackHole', 'asmCut']);
+    const TARGET_KINDS = new Set(['transform', 'scale', 'deform', 'thicken', 'directFace', 'rib', 'vent', 'fins', 'fillPattern', 'mountPattern', 'portCutout', 'magnetPocket', 'web', 'wrap', 'emboss', 'splitFace', 'dome', 'deleteFace', 'replaceFace', 'moveEdge', 'deleteBody', 'boss', 'lipGroove', 'undercut', 'circlipGroove', 'keyway', 'splineProfile', 'knurl', 'gripPattern', 'stackHole', 'asmCut']);
     const walkDeps = (x, topIdx, isTop) => {
       if (!x || x.hidden) return;
       const p = x.p || {};
       if (x.op && x.op.target) unionRef(topIdx, x.op.target);
       if (TARGET_KINDS.has(x.kind) && p.target) unionRef(topIdx, p.target);
+      if (x.kind === 'replaceFace' && p.replace && p.replace.id) unionRef(topIdx, p.replace.id);
       if (x.kind === 'deleteBody' && Array.isArray(p.targets)) for (const tid of p.targets) unionRef(topIdx, tid);
       if (x.kind === 'lipGroove') {
         if (p.lipTarget) unionRef(topIdx, p.lipTarget);

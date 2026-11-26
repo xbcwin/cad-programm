@@ -45,6 +45,8 @@ const KINDS = {
   splitFace: { get label() { return T('kind.splitFace'); }, params: [] },
   dome: { get label() { return T('kind.dome'); }, params: [] },
   deleteFace: { get label() { return T('kind.deleteFace'); }, params: [] },
+  replaceFace: { get label() { return T('kind.replaceFace'); }, params: [] },
+  moveEdge: { get label() { return T('kind.moveEdge'); }, params: [] },
   mirrorStep: { get label() { return T('kind.mirrorStep'); }, params: [] },
   deleteBody: { get label() { return T('kind.deleteBody'); }, params: [] },
   boss: { get label() { return T('kind.boss'); }, params: [] },
@@ -401,6 +403,7 @@ const Model = (() => {
           it.p.sketch.planeRef.id = mapId(it.p.sketch.planeRef.id);
         }
         if (it.p.toFace && it.p.toFace.id) it.p.toFace.id = mapId(it.p.toFace.id);
+        if (it.p.replace && it.p.replace.id) it.p.replace.id = mapId(it.p.replace.id);
         if (it.p.path3d && Array.isArray(it.p.path3d.bind)) {
           for (const b of it.p.path3d.bind) {
             if (b && b.id) b.id = mapId(b.id);
@@ -581,6 +584,12 @@ const Model = (() => {
       if (it.kind === 'splitFace' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'teilt Fläche von' });
       if (it.kind === 'dome' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Kuppel auf' });
       if (it.kind === 'deleteFace' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'löscht Fläche an' });
+      if (it.kind === 'replaceFace' && it.p) {
+        if (it.p.target) out.push({ from: me, to: top(it.p.target), what: 'ersetzt Fläche an' });
+        if (it.p.replace && it.p.replace.id) out.push({ from: me, to: top(it.p.replace.id), what: 'ersetzt durch Fläche von' });
+        if (it.p.replace && it.p.replace.datumId) out.push({ from: me, to: it.p.replace.datumId, what: 'ersetzt durch Bezugsebene', datum: true });
+      }
+      if (it.kind === 'moveEdge' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'verschiebt Kante an' });
       if (it.kind === 'boss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Schraubdom auf' });
       if (it.kind === 'undercut' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Freistich an' });
       if (it.kind === 'circlipGroove' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Einstich an' });
@@ -833,6 +842,32 @@ const Model = (() => {
       else if (it.kind === 'deleteFace') {
         const p = it.p || {};
         o.p = { target: p.target || null, faces: Array.isArray(p.faces) ? p.faces.filter((fc) => fc && Array.isArray(fc.c)) : [] };
+      } else if (it.kind === 'replaceFace') {
+        const p = it.p || {};
+        const rep = p.replace || null;
+        let outRep = null;
+        if (rep && rep.datumId) {
+          const dm = typeof Datums !== 'undefined' ? Datums.find(rep.datumId, curDoc || App.doc) : null;
+          outRep = dm && dm.plane
+            ? { kind: 'datum', datumId: rep.datumId, plane: { o: dm.plane.o, n: dm.plane.n } }
+            : { kind: 'datum', datumId: rep.datumId, missing: true };
+        } else if (rep && rep.plane && Array.isArray(rep.plane.o) && Array.isArray(rep.plane.n)) {
+          outRep = { kind: 'plane', plane: { o: rep.plane.o.map(Number), n: rep.plane.n.map(Number) } };
+        } else if (rep && rep.id) {
+          outRep = { kind: 'face', id: rep.id, idx: rep.idx, t: rep.t, c: rep.c, n: rep.n, rel: rep.rel, wc: rep.wc, wn: rep.wn, ...(rep.tid ? { tid: rep.tid } : {}) };
+        }
+        o.p = { target: p.target || null, face: p.face || null, replace: outRep, flip: !!p.flip };
+      } else if (it.kind === 'moveEdge') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          edge: p.edge || null,
+          axis: ['bisector', 'x', 'y', 'z', 'n1', 'n2', 'free'].includes(p.axis) ? p.axis : 'bisector',
+          dist: num(p.dist, ownV, 0),
+          dx: num(p.dx, ownV, 0),
+          dy: num(p.dy, ownV, 0),
+          dz: num(p.dz, ownV, 0),
+        };
       }
       else if (it.kind === 'sketch3d') o.p = { sketch3d: sketch3dResolve(it.p && it.p.sketch3d, ownV) };
       else if (it.kind === 'import') {
@@ -3020,6 +3055,22 @@ const Model = (() => {
         const n = Array.isArray(it.p && it.p.faces) ? it.p.faces.length : 0;
         return n === 1 ? '1 Fläche' : n > 1 ? `${n} Flächen` : 'keine Fläche';
       }
+      case 'replaceFace': {
+        const rp = it.p && it.p.replace;
+        if (!rp) return 'kein Ziel';
+        if (rp.datumId) {
+          const dm = typeof Datums !== 'undefined' && typeof App !== 'undefined' && App.doc ? Datums.find(rp.datumId, App.doc) : null;
+          return `→ „${dm ? dm.name : (rp.label || 'Ebene')}“`;
+        }
+        return rp.label ? `→ ${rp.label}` : '→ Fläche';
+      }
+      case 'moveEdge': {
+        const mp = it.p || {};
+        if (mp.axis === 'free') return `(${f(mp.dx ?? 0)} / ${f(mp.dy ?? 0)} / ${f(mp.dz ?? 0)})${u}`;
+        const d = mp.dist ?? 0;
+        const axLbl = mp.axis === 'x' ? 'X ' : mp.axis === 'y' ? 'Y ' : mp.axis === 'z' ? 'Z ' : '';
+        return `${axLbl}${d > 0 ? '+' : d < 0 ? '−' : ''}${f(Math.abs(d))}${u}`;
+      }
       case 'boss': {
         const ribs = Math.max(0, Math.min(6, Math.round(p.ribs ?? 4)));
         return `Ø ${f(p.outerD ?? 8)}/${f(p.holeD ?? 3)}${u} · H ${f(p.height ?? 10)}${u}${ribs > 0 ? ` · ${ribs} Rippen` : ''}`;
@@ -3557,7 +3608,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'directFace' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'fillPattern' || s.item.kind === 'mountPattern' || s.item.kind === 'portCutout' || s.item.kind === 'magnetPocket' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteFace' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || s.item.kind === 'knurl' || s.item.kind === 'gripPattern' || s.item.kind === 'stackHole' || s.item.kind === 'asmCut' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'directFace' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'fillPattern' || s.item.kind === 'mountPattern' || s.item.kind === 'portCutout' || s.item.kind === 'magnetPocket' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteFace' || s.item.kind === 'replaceFace' || s.item.kind === 'moveEdge' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || s.item.kind === 'knurl' || s.item.kind === 'gripPattern' || s.item.kind === 'stackHole' || s.item.kind === 'asmCut' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {

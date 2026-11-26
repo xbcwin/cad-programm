@@ -154,6 +154,16 @@ const Explain = (() => {
       const n = Array.isArray(p.faces) ? p.faces.length : 0;
       lines.push({ k: 'op', t: `Löscht ${n === 1 ? '1 gewählte Fläche' : `${n} gewählte Flächen`} an „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“ und schließt die Lücke durch Verlängern der Nachbarflächen.` });
     }
+    if (it.kind === 'replaceFace') {
+      const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
+      const rep = p.replace || {};
+      const tgtTxt = rep.datumId ? `Bezugsebene „${(typeof Datums !== 'undefined' && Datums.find(rep.datumId, doc)?.name) || rep.label || 'Ebene'}“` : rep.label ? `„${rep.label}“` : 'der gewählten Zielfläche';
+      lines.push({ k: 'op', t: `Ersetzt eine Fläche an „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“ durch ${tgtTxt} und verlängert die Nachbarflächen passend.` });
+    }
+    if (it.kind === 'moveEdge') {
+      const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
+      lines.push({ k: 'op', t: `Verschiebt eine Kante an „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“ und kippt die beiden Nachbarflächen entsprechend mit.` });
+    }
     if (it.kind === 'boss') {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
       const ribs = Math.max(0, Math.min(6, Math.round(Model.num(p.ribs, V, 4))));
@@ -274,7 +284,7 @@ const Explain = (() => {
     const used = paramsUsed(it, doc);
     if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
     if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmtFixed(Model.num(it.massG, V, 0), 1)} g.` });
-    else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'vent' && it.kind !== 'fins' && it.kind !== 'fillPattern' && it.kind !== 'mountPattern' && it.kind !== 'portCutout' && it.kind !== 'magnetPocket' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'splitFace' && it.kind !== 'dome' && it.kind !== 'deleteFace' && it.kind !== 'mirrorStep' && it.kind !== 'boss' && it.kind !== 'lipGroove' && it.kind !== 'undercut' && it.kind !== 'circlipGroove' && it.kind !== 'keyway' && it.kind !== 'splineProfile' && it.kind !== 'knurl' && it.kind !== 'gripPattern' && it.kind !== 'stackHole' && it.kind !== 'asmCut' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && it.kind !== 'deform' && it.kind !== 'directFace' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
+    else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'vent' && it.kind !== 'fins' && it.kind !== 'fillPattern' && it.kind !== 'mountPattern' && it.kind !== 'portCutout' && it.kind !== 'magnetPocket' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'splitFace' && it.kind !== 'dome' && it.kind !== 'deleteFace' && it.kind !== 'replaceFace' && it.kind !== 'moveEdge' && it.kind !== 'mirrorStep' && it.kind !== 'boss' && it.kind !== 'lipGroove' && it.kind !== 'undercut' && it.kind !== 'circlipGroove' && it.kind !== 'keyway' && it.kind !== 'splineProfile' && it.kind !== 'knurl' && it.kind !== 'gripPattern' && it.kind !== 'stackHole' && it.kind !== 'asmCut' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && it.kind !== 'deform' && it.kind !== 'directFace' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
     if (it.suppressed) lines.push({ k: 'status', t: 'Dieser Schritt ist unterdrückt und zählt gerade nicht mit.' });
     else if (top >= 0 && doc === App.doc && top >= Timeline.markerPos()) lines.push({ k: 'status', t: 'Dieser Schritt liegt hinter dem Marker der Zeitleiste und wird gerade nicht gerechnet.' });
     if (it.ai) lines.push({ k: 'ki', t: (it.ai.edit ? 'Zuletzt von der KI geändert' : 'Von der KI gebaut') + ` – auf die Bitte „${it.ai.q}“.` });

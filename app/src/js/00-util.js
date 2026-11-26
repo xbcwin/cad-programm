@@ -706,6 +706,8 @@ const IC = {
   replace: '<path d="M16 3l4 4-4 4 M20 7H8a4 4 0 0 0-4 4v1 M8 21l-4-4 4-4 M4 17h12a4 4 0 0 0 4-4v-1"/>',
   deleteBody: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z" stroke-dasharray="2.5 2" opacity=".55"/><path d="M9 9l6 6M15 9l-6 6" />',
   deleteFace: '<rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="currentColor" opacity=".16"/><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="12" cy="12" r="4" stroke-dasharray="2.2 1.6"/><path d="M10 10l4 4M14 10l-4 4" />',
+  replaceFace: '<path d="M4 15l8 4 8-4-8-4z" opacity=".4" stroke-dasharray="2.2 1.8"/><path d="M4 9l8 4 8-4-8-4z" fill="currentColor" opacity=".25"/><path d="M4 9l8 4 8-4-8-4zM12 13v6" /><path d="M9.5 16.5L12 19l2.5-2.5" />',
+  moveEdge: '<path d="M4 17l5-10h11l-5 10z" fill="currentColor" opacity=".15"/><path d="M4 17l5-10h11M4 17h11l5-10" opacity=".5"/><path d="M9 7h11" stroke-width="2.2"/><path d="M12 4.5 9 7l3 2.5" />',
   helix: '<path d="M6 6.5c0-1.9 2.7-3 6-3s6 1.1 6 3-2.7 3-6 3-6 1.1-6 3 2.7 3 6 3 6 1.1 6 3-2.7 3-6 3-6-1.1-6-3" /><path d="M6 6.5c0 1.4 1.6 2.3 4 2.8 M18 12.5c0 1.4-1.6 2.3-4 2.8" opacity=".45"/>',
   stretch: '<path d="M3 7h11v10H3z" opacity=".45"/><path d="M10 4h8v16h-8z" stroke-dasharray="2.5 2"/><path d="M14 12h7M18 9l3 3-3 3"/>',
   patternFill: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="16" r="1.4" fill="currentColor" stroke="none"/>',
@@ -2968,6 +2970,16 @@ const HELP = {
   "tip": "Fläche (z. B. Loch, Rundung oder Fase) löschen und Lücke durch Verlängern der Nachbarflächen schließen (Profi)",
   "hilfe": "Entfernt eine oder mehrere gewählte Flächen direkt aus einem Körper (auch an importierten STEP-/BREP-Teilen) und heilt die Lücke, indem Nachbarflächen verlängert oder Innenkonturen geschlossen werden. So verschwinden Bohrungen, Sacklöcher, Zapfen, Rundungen oder Fasen mit einem Klick als unterdrückbarer Schritt im Verlauf.",
   "tipp": "Halte Umschalt beim Klicken, um mehrere Flächen (z. B. alle vier Rundungen einer Kante) auf einmal zu wählen, oder füge rechts im Eigenschaften-Panel weitere Flächen hinzu."
+ },
+ "replaceFace": {
+  "tip": "Gewählte Fläche auf eine andere Körperfläche oder Bezugsebene legen (Profi)",
+  "hilfe": "Ersetzt im Profi-Modus eine Fläche eines Körpers (auch an importierten STEP-/BREP-Teilen) durch eine andere ebene oder gekrümmte Fläche oder durch eine Bezugsebene. Die Nachbarflächen werden dabei automatisch passend verlängert oder gekürzt.",
+  "tipp": "Lege zuerst eine Bezugsebene (z. B. bei Z = 30 mm) an oder wähle rechts im Eigenschaften-Panel eine vorhandene Bezugsebene direkt aus der Liste."
+ },
+ "moveEdge": {
+  "tip": "Gerade Kante verschieben – die beiden Nachbarflächen kippen mit (Profi)",
+  "hilfe": "Verschiebt im Profi-Modus eine gerade Kante zwischen zwei ebenen Flächen entlang der Winkelhalbierenden, einer Achse (X/Y/Z), einer Flächen-Normalen oder frei in X/Y/Z. Beide Nachbarflächen kippen um ihre gegenüberliegende Kante automatisch mit – auch an importierten Teilen.",
+  "tipp": "Du kannst im Feld „Abstand“ auch Formeln wie „breite/4“ eingeben; mit „Richtung“ legst du fest, ob die Kante schräg oder nur in Z bzw. X/Y wandert."
  }
 };
 
