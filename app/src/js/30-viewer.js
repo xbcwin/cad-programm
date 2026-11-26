@@ -3401,6 +3401,123 @@ const Viewer = (() => {
       needsRender = true;
     }
   }
+  function renderMeshThumb(meshNodes, w = 160, hgt = 120) {
+    if (!renderer || !scene) return null;
+    const list = (Array.isArray(meshNodes) ? meshNodes : [meshNodes]).filter((m) => m && m.data && m.data.vertices && m.data.triangles && m.data.triangles.length >= 3);
+    if (!list.length) return null;
+    const tempGrp = new THREE.Group();
+    const disposables = [];
+    for (const entry of list) {
+      const d = entry.data;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(d.vertices, 3));
+      if (d.normals && d.normals.length === d.vertices.length) {
+        geo.setAttribute('normal', new THREE.BufferAttribute(d.normals, 3));
+      } else {
+        geo.computeVertexNormals();
+      }
+      geo.setIndex(new THREE.BufferAttribute(d.triangles, 1));
+      geo.computeBoundingBox();
+      let useVertexColors = false;
+      const eb = d.bodies;
+      if (eb && eb.length > 1 && d.faceBody && d.faceGroups) {
+        const bodyCols = new Map();
+        for (let bi = 0; bi < eb.length; bi++) {
+          if (eb[bi] && eb[bi].color) bodyCols.set(bi, new THREE.Color(eb[bi].color));
+        }
+        if (bodyCols.size) {
+          const base = new THREE.Color(entry.color || '#2f9e91');
+          const vCount = d.vertices.length / 3;
+          const cols = new Float32Array(vCount * 3);
+          for (let i = 0; i < vCount; i++) { cols[i * 3] = base.r; cols[i * 3 + 1] = base.g; cols[i * 3 + 2] = base.b; }
+          for (const [start, count, fi] of d.faceGroups) {
+            const bi = fi >= 0 ? d.faceBody[fi] : -1;
+            const c = bi >= 0 ? bodyCols.get(bi) : null;
+            if (!c) continue;
+            for (let k = start; k < start + count; k++) {
+              const vi = d.triangles[k];
+              cols[vi * 3] = c.r; cols[vi * 3 + 1] = c.g; cols[vi * 3 + 2] = c.b;
+            }
+          }
+          geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+          useVertexColors = true;
+        }
+      }
+      const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(useVertexColors ? '#ffffff' : (entry.color || '#2f9e91')),
+        vertexColors: useVertexColors,
+        roughness: 0.58,
+        metalness: 0.03,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      const subGrp = new THREE.Group();
+      subGrp.add(mesh);
+      disposables.push(geo, mat);
+      if (d.lines && d.lines.length >= 6) {
+        const eg = new THREE.BufferGeometry();
+        eg.setAttribute('position', new THREE.BufferAttribute(d.lines, 3));
+        const em = new THREE.LineBasicMaterial({ color: new THREE.Color(theme.edge), transparent: true, opacity: 0.5 });
+        subGrp.add(new THREE.LineSegments(eg, em));
+        disposables.push(eg, em);
+      }
+      if (entry.matrix && entry.matrix.isMatrix4) {
+        subGrp.matrixAutoUpdate = false;
+        subGrp.matrix.copy(entry.matrix);
+      }
+      tempGrp.add(subGrp);
+    }
+    tempGrp.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(tempGrp);
+    if (box.isEmpty()) {
+      for (const d of disposables) d.dispose();
+      return null;
+    }
+    const c = box.getCenter(new THREE.Vector3());
+    const R = Math.max(1, box.getSize(new THREE.Vector3()).length() / 2);
+    const tc = new THREE.PerspectiveCamera(30, w / hgt, 0.05, 10000);
+    const dir = new THREE.Vector3(0.62, -0.9, 0.7).normalize();
+    const dist = (R / Math.sin((tc.fov * Math.PI) / 360)) * 1.18 / Math.min(1, w / hgt);
+    tc.position.copy(c).addScaledVector(dir, dist);
+    tc.up.set(0, 0, 1);
+    tc.lookAt(c);
+    tc.near = Math.max(0.05, dist - R * 3);
+    tc.far = dist + R * 3;
+    tc.updateProjectionMatrix();
+
+    const old = renderer.getSize(new THREE.Vector2()), oldPR = renderer.getPixelRatio();
+    const oldCol = renderer.getClearColor(new THREE.Color()), oldA = renderer.getClearAlpha(), oldClip = renderer.localClippingEnabled;
+    const gridVis = [gridMinor ? gridMinor.visible : false, gridMajor ? gridMajor.visible : false];
+    const gv = {}; for (const k of Object.keys(groups)) { gv[k] = groups[k].visible; groups[k].visible = false; }
+    scene.add(tempGrp);
+    try {
+      if (gridMinor) gridMinor.visible = false;
+      if (gridMajor) gridMajor.visible = false;
+      renderer.localClippingEnabled = false;
+      renderer.setPixelRatio(1);
+      renderer.setSize(w, hgt, false);
+      renderer.setClearColor(new THREE.Color(theme.surface || '#ffffff'), 0);
+      renderer.shadowMap.needsUpdate = true;
+      renderer.render(scene, tc);
+      return renderer.domElement.toDataURL('image/png');
+    } catch (_) {
+      return null;
+    } finally {
+      scene.remove(tempGrp);
+      for (const d of disposables) d.dispose();
+      if (gridMinor) gridMinor.visible = gridVis[0];
+      if (gridMajor) gridMajor.visible = gridVis[1];
+      for (const k of Object.keys(gv)) groups[k].visible = gv[k];
+      renderer.localClippingEnabled = oldClip;
+      renderer.setClearColor(oldCol, oldA);
+      renderer.setPixelRatio(oldPR);
+      renderer.setSize(old.x, old.y, false);
+      renderer.shadowMap.needsUpdate = true;
+      needsRender = true;
+    }
+  }
   function cameraBasis() {
     syncCamAnim();
     camera.updateMatrixWorld();
@@ -3512,7 +3629,7 @@ const Viewer = (() => {
   }
 
   return {
-    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, setGestures, get gestures() { return gesturesOn; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK, lights: LOOK.lights.map((l) => ({ ...l })), hasCustomEnv: !!customEnvTex, envImageName: customEnvName }; }, TEXTURES: BODY_TEXTURES, setEnvImage, get hasCustomEnv() { return !!customEnvTex; }, get envImageName() { return customEnvName; }, get floor() { return reflectFloor; }, get customLights() { return customLights.slice(); }, get lights() { return LOOK.manualLights ? customLights.slice() : [lights.key, lights.fill, lights.rim]; }, fitShadow, renderImage, renderPartThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
+    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, setGestures, get gestures() { return gesturesOn; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK, lights: LOOK.lights.map((l) => ({ ...l })), hasCustomEnv: !!customEnvTex, envImageName: customEnvName }; }, TEXTURES: BODY_TEXTURES, setEnvImage, get hasCustomEnv() { return !!customEnvTex; }, get envImageName() { return customEnvName; }, get floor() { return reflectFloor; }, get customLights() { return customLights.slice(); }, get lights() { return LOOK.manualLights ? customLights.slice() : [lights.key, lights.fill, lights.rim]; }, fitShadow, renderImage, renderPartThumb, renderMeshThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setCompareDiff, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedFaces, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls, draftAnalysis, innerRadiusAnalysis,
     setQuad, setActiveQuadPane, setQuadPaneOrtho, resetQuadPane, fitQuad, pickInPane,

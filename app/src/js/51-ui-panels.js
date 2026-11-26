@@ -501,6 +501,7 @@ const Panels = (() => {
   function closeFlyout(restore = false) {
     if (!flyout) return;
     const prev = flyout.btn;
+    if (flyout.onCleanup) { try { flyout.onCleanup(); } catch (_) {} }
     flyout.el.remove();
     prev && prev.setAttribute('aria-expanded', 'false');
     if (flyout.onKey) document.removeEventListener('keydown', flyout.onKey, true);
@@ -510,12 +511,16 @@ const Panels = (() => {
       try { prev.focus({ preventScroll: true }); } catch (_) { prev.focus(); }
     }
   }
-  function flyOutside(e) { if (e.target && e.target.closest && e.target.closest('#btn-whatis, #whatis-pop')) return; if (flyout && !flyout.el.contains(e.target) && !(flyout.btn && flyout.btn.contains(e.target))) closeFlyout(); }
+  function flyOutside(e) {
+    if (e.target && e.target.closest && e.target.closest('#btn-whatis, #whatis-pop, .modal-back:has(#userlib-step-dialog, #userlib-edit-dialog, #userlib-save-dialog)')) return;
+    if (flyout && !flyout.el.contains(e.target) && !(flyout.btn && flyout.btn.contains(e.target))) closeFlyout();
+  }
   function toggleFlyout(kind, btn) {
     if (flyout && flyout.kind === kind) { closeFlyout(); return; }
     closeFlyout();
     const flyTitle = kind === 'bodies' ? T('tool.fly.bodiesTitle') : kind === 'drone' ? T('tool.drone') : T('tool.fly.partsTitle');
     const el = h('div', { class: 'flyout', role: 'dialog', 'aria-label': flyTitle, tabindex: '-1' });
+    let flyCleanup = null;
     if (kind === 'bodies') {
       el.append(h('h3', null, T('tool.fly.bodiesTitle')));
       const tiles = h('div', { class: 'tiles' });
@@ -631,20 +636,88 @@ const Panels = (() => {
         isoBtn.onclick = () => { closeFlyout(); Iso286.openDialog(); };
         el.append(h('div', { class: 'btn-row pro', style: { marginTop: '6px' } }, isoBtn));
       }
-      el.append(h('h3', { id: 'my-parts-head', 'data-help': 'userLibrary' }, T('fly.myParts')));
+      const mySec = h('div', { class: 'ul-section', id: 'my-parts-section' });
+      let activeCat = '';
+      const myHeadRow = h('div', { class: 'ul-head-row', id: 'my-parts-head-row' });
+      myHeadRow.append(h('h3', { id: 'my-parts-head', 'data-help': 'userLibrary' }, T('fly.myParts')));
+      const stepBtn = h('button', { type: 'button', class: 'btn small ghost', id: 'my-parts-step-btn', 'data-help': 'stepCatalog', 'data-tip': T('fly.myPartsStepBtnTip') });
+      stepBtn.innerHTML = icon('folder') + esc(T('fly.myPartsStepBtn'));
+      stepBtn.onclick = () => UserLib.pickStepFile({ category: activeCat || '' });
+      myHeadRow.append(stepBtn);
+      mySec.append(myHeadRow);
+
+      const dropZone = h('div', { class: 'ul-dropzone', id: 'my-parts-dropzone', role: 'button', tabindex: '0', 'data-help': 'stepCatalog', 'aria-label': T('fly.myPartsStepDrop') },
+        h('span', { class: 'ul-dz-ico', html: icon('folder') }),
+        h('span', { class: 'ul-dz-txt' }, T('fly.myPartsStepDrop')));
+      dropZone.onclick = () => UserLib.pickStepFile({ category: activeCat || '' });
+      dropZone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); UserLib.pickStepFile({ category: activeCat || '' }); }
+      });
+      mySec.append(dropZone);
+
+      const catBar = h('div', { class: 'ul-cats', id: 'my-parts-cats', hidden: true });
+      mySec.append(catBar);
+
       const myGrid = h('div', { class: 'tiles user-tiles', id: 'my-parts-grid' });
       const renderMyParts = () => {
+        const allList = UserLib.list();
+        const cats = UserLib.categories ? UserLib.categories() : [];
+        if (activeCat && !cats.includes(activeCat)) activeCat = '';
+        catBar.innerHTML = '';
+        if (cats.length) {
+          catBar.hidden = false;
+          const mkCat = (catVal, label) => {
+            const b = h('button', { type: 'button', class: 'ul-cat' + (activeCat === catVal ? ' active' : ''), dataset: { cat: catVal } }, label);
+            b.onclick = () => { activeCat = catVal; renderMyParts(); };
+            return b;
+          };
+          catBar.append(mkCat('', T('fly.myPartsAllCats')));
+          for (const c of cats) catBar.append(mkCat(c, c));
+        } else {
+          catBar.hidden = true;
+        }
+
         myGrid.innerHTML = '';
-        const list = UserLib.list();
-        if (!list.length) {
+        if (!allList.length) {
           myGrid.append(h('div', { class: 'hint-box', style: { gridColumn: '1 / -1' } }, T('fly.myPartsEmpty')));
+          return;
+        }
+        const list = activeCat ? allList.filter((x) => String(x.category || '').trim() === activeCat) : allList;
+        if (!list.length) {
+          myGrid.append(h('div', { class: 'hint-box', style: { gridColumn: '1 / -1' } }, T('fly.myPartsEmptyCat', { cat: activeCat })));
           return;
         }
         for (const entry of list) {
           const pCount = Array.isArray(entry.params) ? entry.params.length : 0;
-          const tipTxt = entry.desc || (pCount ? (pCount === 1 ? T('fly.myPartsTipDimsOne') : T('fly.myPartsTipDimsMany', { n: pCount })) : T('fly.myPartsTip'));
-          const tile = h('div', { class: 'tile user-tile' + (entry.role === 'hole' ? ' hole-part' : ''), role: 'button', tabindex: '0', 'aria-label': entry.name, dataset: { userLibId: entry.id }, 'data-tip': tipTxt, 'data-help': 'userLibrary' });
-          tile.append(h('div', { class: 'ul-thumb-wrap', html: UserLib.thumbHTML(entry) }), h('span', { class: 'lbl' }, entry.name), h('span', { class: 'role' }, pCount ? (pCount === 1 ? T('fly.myPartsOneDim') : T('fly.myPartsManyDims', { n: pCount })) : (entry.role === 'hole' ? T('common.hole') : T('common.body'))));
+          const tipParts = [entry.name];
+          if (entry.category) tipParts.push(entry.category);
+          if (entry.manufacturer) tipParts.push(entry.manufacturer);
+          if (entry.desc) tipParts.push(entry.desc);
+          else if (pCount) tipParts.push(pCount === 1 ? T('fly.myPartsTipDimsOne') : T('fly.myPartsTipDimsMany', { n: pCount }));
+          else tipParts.push(T('fly.myPartsTip'));
+          const tipTxt = tipParts.join(' · ');
+
+          const subTxt = entry.manufacturer
+            ? entry.manufacturer
+            : entry.category
+              ? entry.category
+              : entry.source === 'step'
+                ? 'STEP'
+                : (pCount ? (pCount === 1 ? T('fly.myPartsOneDim') : T('fly.myPartsManyDims', { n: pCount })) : (entry.role === 'hole' ? T('common.hole') : T('common.body')));
+
+          const tile = h('div', {
+            class: 'tile user-tile' + (entry.role === 'hole' ? ' hole-part' : ''),
+            role: 'button',
+            tabindex: '0',
+            'aria-label': entry.name,
+            dataset: { userLibId: entry.id, category: entry.category || '', manufacturer: entry.manufacturer || '', source: entry.source || 'part' },
+            'data-tip': tipTxt,
+            'data-help': entry.source === 'step' ? 'stepCatalog' : 'userLibrary',
+          });
+          tile.append(h('div', { class: 'ul-thumb-wrap', html: UserLib.thumbHTML(entry) }));
+          if (entry.category) tile.append(h('span', { class: 'ul-cat-tag' }, entry.category));
+          tile.append(h('span', { class: 'lbl' }, entry.name), h('span', { class: 'role' }, subTxt));
+
           const delBtn = h('button', { type: 'button', class: 'ul-del', 'aria-label': T('fly.myPartsRemove'), 'data-tip': T('fly.myPartsRemove') });
           delBtn.innerHTML = icon('trash');
           delBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -661,6 +734,7 @@ const Panels = (() => {
             e.preventDefault(); e.stopPropagation();
             UI.menu(tile, [
               { icon: 'plus', label: T('fly.myPartsInsert'), run: () => { UserLib.insert(entry); closeFlyout(); } },
+              { icon: 'sliders', label: T('fly.myPartsEdit'), run: () => { UserLib.editDialog(entry.id); } },
               { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('fly.myPartsRenameTitle'), T('common.name'), entry.name, T('common.rename')); if (n && n.trim()) { UserLib.rename(entry.id, n.trim()); renderMyParts(); } } },
               '-',
               { icon: 'trash', label: T('common.remove'), run: () => { UserLib.remove(entry.id); renderMyParts(); } },
@@ -669,8 +743,55 @@ const Panels = (() => {
           myGrid.append(tile);
         }
       };
+
+      const hasFiles = (e) => {
+        const dt = e && e.dataTransfer;
+        if (!dt) return false;
+        if (dt.types && [...dt.types].includes('Files')) return true;
+        if (dt.items && [...dt.items].some((it) => it.kind === 'file')) return true;
+        if (dt.files && dt.files.length) return true;
+        return false;
+      };
+      let dzDepth = 0;
+      const onDragEnter = (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault(); e.stopPropagation();
+        dzDepth++;
+        dropZone.classList.add('dragover');
+      };
+      const onDragOver = (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault(); e.stopPropagation();
+        try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
+        dropZone.classList.add('dragover');
+      };
+      const onDragLeave = (e) => {
+        if (!hasFiles(e)) return;
+        e.stopPropagation();
+        dzDepth = Math.max(0, dzDepth - 1);
+        if (dzDepth === 0 || !el.contains(e.relatedTarget)) {
+          dzDepth = 0;
+          dropZone.classList.remove('dragover');
+        }
+      };
+      const onDrop = (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault(); e.stopPropagation();
+        dzDepth = 0;
+        dropZone.classList.remove('dragover');
+        const files = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
+        if (files.length) UserLib.importStepDialog(files, { category: activeCat || '' });
+      };
+      el.addEventListener('dragenter', onDragEnter);
+      el.addEventListener('dragover', onDragOver);
+      el.addEventListener('dragleave', onDragLeave);
+      el.addEventListener('drop', onDrop);
+
+      const offUl = UserLib.on('change', () => renderMyParts());
+      flyCleanup = () => offUl();
       renderMyParts();
-      el.append(myGrid);
+      mySec.append(myGrid);
+      el.append(mySec);
       el.append(h('div', { class: 'foot' }, T('tool.fly.partsFoot')));
     }
     $('#center').append(el);
@@ -682,7 +803,7 @@ const Panels = (() => {
       if (!flyout || flyout.el !== el) return;
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFlyout(true); }
     };
-    flyout = { el, btn, kind, onKey };
+    flyout = { el, btn, kind, onKey, onCleanup: flyCleanup };
     el.focus({ preventScroll: true });
     document.addEventListener('keydown', onKey, true);
     setTimeout(() => document.addEventListener('pointerdown', flyOutside, true), 0);

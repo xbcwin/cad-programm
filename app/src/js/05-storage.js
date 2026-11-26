@@ -2,11 +2,12 @@
 const Store = (() => {
   const DB_NAME = 'tracery-db', DB_VER = 1;
   const RECOVERY_KEY = 'recovery';
+  const USERLIB_KEY = 'userlib';
   const LS_REC_FLAG = 'tracery.recovery.flag';
   const LS_REC_QUICK = 'tracery.recovery.quick';
   const QUICK_MAX_CHARS = 400000;
   let db = null, dbPromise = null, initPromise = null, ready = false, usingIDB = true;
-  let index = [], lastId = null, recoveryCache = null;
+  let index = [], lastId = null, recoveryCache = null, userLibCache = null;
   let openTabs = { ids: [], activeId: null };
   const blobCache = new Map();     // blobId -> Uint8Array
   const pendingBlobs = new Map();  // blobId -> Promise<void>
@@ -349,13 +350,15 @@ const Store = (() => {
       const d = await ensureDB();
       if (d) {
         try {
-          const [idxRec, lastRec, tabsRec] = await Promise.all([
+          const [idxRec, lastRec, tabsRec, ulRec] = await Promise.all([
             txGet(d, 'meta', 'index'),
             txGet(d, 'meta', 'last'),
             txGet(d, 'meta', 'openTabs'),
+            txGet(d, 'meta', USERLIB_KEY),
           ]);
           if (idxRec && Array.isArray(idxRec.v)) index = idxRec.v;
           if (lastRec && typeof lastRec.v === 'string') lastId = lastRec.v;
+          if (ulRec && Array.isArray(ulRec.v)) userLibCache = ulRec.v;
           if (tabsRec && tabsRec.v && Array.isArray(tabsRec.v.ids)) {
             const cleanIds = [...new Set(tabsRec.v.ids.filter((x) => typeof x === 'string' && x))];
             openTabs = {
@@ -465,12 +468,25 @@ const Store = (() => {
     const keep = new Set();
     const docs = Array.isArray(activeDoc) ? activeDoc : (activeDoc ? [activeDoc] : []);
     for (const ad of docs) if (ad) collectBlobIds(ad, keep);
-    const [projs, vers, recMeta] = await Promise.all([txGetAll(d, 'projects'), txGetAll(d, 'versions'), txGet(d, 'meta', RECOVERY_KEY).catch(() => null)]);
+    const [projs, vers, recMeta, ulMeta] = await Promise.all([
+      txGetAll(d, 'projects'),
+      txGetAll(d, 'versions'),
+      txGet(d, 'meta', RECOVERY_KEY).catch(() => null),
+      txGet(d, 'meta', USERLIB_KEY).catch(() => null),
+    ]);
     for (const p of projs) collectBlobIds(p, keep);
     for (const vr of vers) for (const v of (vr && vr.list) || []) if (v && v.doc) collectBlobIds(v.doc, keep);
     if (recMeta && recMeta.v) {
       if (recMeta.v.doc) collectBlobIds(recMeta.v.doc, keep);
       if (recMeta.v.baseDoc) collectBlobIds(recMeta.v.baseDoc, keep);
+    }
+    const ulEntries = [];
+    if (ulMeta && Array.isArray(ulMeta.v)) ulEntries.push(...ulMeta.v);
+    if (Array.isArray(userLibCache)) ulEntries.push(...userLibCache);
+    for (const ue of ulEntries) {
+      if (!ue) continue;
+      if (ue.stepBlobId) keep.add(ue.stepBlobId);
+      if (ue.item) collectBlobIds({ items: [ue.item] }, keep);
     }
     const keys = await txGetAllKeys(d, 'blobs');
     const stale = keys.filter((k) => !keep.has(k) && !pendingBlobs.has(k));
@@ -650,6 +666,39 @@ const Store = (() => {
       else s.delete(id);
       return txDone(tx);
     }).catch((e) => { console.warn('Versionen speichern:', e); return false; });
+  }
+
+  // ---------- Eigene Teile-Bibliothek (BI-29) ----------
+  function getUserLibSync() {
+    return Array.isArray(userLibCache) ? deepClone(userLibCache) : null;
+  }
+  async function loadUserLib() {
+    await init();
+    await writeQueue;
+    if (Array.isArray(userLibCache)) return deepClone(userLibCache);
+    const d = await ensureDB();
+    if (!d) return null;
+    try {
+      const rec = await txGet(d, 'meta', USERLIB_KEY);
+      if (rec && Array.isArray(rec.v)) {
+        userLibCache = rec.v;
+        return deepClone(rec.v);
+      }
+    } catch (e) { console.warn('Bibliothek laden:', e); }
+    return null;
+  }
+  function saveUserLib(list) {
+    const snap = deepClone(Array.isArray(list) ? list : []);
+    for (const e of snap) {
+      if (e && e.item) extractBlobs({ items: [e.item] });
+    }
+    userLibCache = snap;
+    return enqueue(async () => {
+      await flushBlobs();
+      const d = await ensureDB();
+      if (d) await txPut(d, 'meta', { k: USERLIB_KEY, v: snap });
+      return true;
+    }).catch((e) => { console.warn('Bibliothek speichern:', e); return false; });
   }
 
   function whenIdle() { return Promise.all([flushBlobs(), writeQueue]); }
@@ -1172,6 +1221,7 @@ const Store = (() => {
     recentProjects, hasProject, getLastId, getOpenTabs, setOpenTabs, saveProject, loadProject, getCachedProject, ensureDocsLoaded, deleteProject, gcBlobs,
     on: ev.on,
     loadVersions, getVersionsSync, setVersions,
+    getUserLibSync, loadUserLib, saveUserLib,
     saveRecovery, loadRecovery, clearRecovery, getRecoveryFlag,
     get ready() { return ready; },
     get hasProjects() { return index.length > 0 || !!lastId; },

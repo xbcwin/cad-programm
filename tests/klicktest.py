@@ -40734,6 +40734,223 @@ def t_a196_rohre_fittings_flansche_riemen_ketten(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a197_step_katalog_bibliothek(p):
+    # 1. Einfach- und Profi-Modus: Drop-Zone & Button in „Meine Teile“ sichtbar, einfache Kachelzahl bleibt 5
+    p.empty()
+    p.ev("UserLib.clear(); return UserLib.whenReady();")
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#my-parts-dropzone')
+    simple_st = p.ev("""
+      const dz = document.querySelector('#my-parts-dropzone');
+      const btn = document.querySelector('#my-parts-step-btn');
+      const tiles = [...document.querySelectorAll('.flyout.parts .tile')].filter(t => t.offsetParent !== null).length;
+      return {
+        dzVis: !!(dz && dz.offsetParent !== null),
+        btnVis: !!(btn && btn.offsetParent !== null),
+        tiles,
+      };
+    """)
+    p.pg.keyboard.press('Escape')
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#my-parts-dropzone')
+    pro_st = p.ev("""
+      const dz = document.querySelector('#my-parts-dropzone');
+      const btn = document.querySelector('#my-parts-step-btn');
+      return {
+        dzVis: !!(dz && dz.offsetParent !== null),
+        btnVis: !!(btn && btn.offsetParent !== null),
+      };
+    """)
+    p.pg.keyboard.press('Escape')
+    ok1 = bool(
+        simple_st['dzVis'] and simple_st['btnVis'] and simple_st['tiles'] == 5
+        and pro_st['dzVis'] and pro_st['btnVis']
+    )
+
+    # 2. Realistische STEP-Datei erzeugen (Motor-Kontur Ø42 x 40 mm mit Hersteller-Angabe im STEP-Kopf)
+    #    und per echtem Drag-and-Drop auf #my-parts-dropzone ziehen -> Dialog öffnet, Vorschau rendert, speichern
+    p.ev("Start.show()")
+    p.wait(200)
+    p.empty()
+    p.ev("""
+      App.change('NEMA17 Rohling', d => {
+        const body = Model.newItem('box', { w: 42, d: 42, h: 38 }, { name: 'Stator', color: '#2b3440' });
+        const shaft = Model.newItem('cylinder', { d: 5, h: 20 }, { name: 'Welle', color: '#aeb8c2' });
+        shaft.t.z = 38;
+        d.items = [body, shaft];
+      });
+    """)
+    warte_rechnen(p)
+    step_txt = p.ev("""
+      return Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) }).then(r => {
+        let s = new TextDecoder('utf-8').decode(new Uint8Array(r.data));
+        s = s.replace(/FILE_NAME\\s*\\(([^;]*?)\\);/i, "FILE_NAME('nema17_motor.step','2026-11-26T01:00:00',('Katalog'),('StepperOnline'),'Tracery','','');");
+        return s;
+      });
+    """)
+    ref_vol = p.ev("return Mass.measure().then(m => m?.volume || 0)")
+
+    p.ev("Start.show()")
+    p.wait(200)
+    p.empty()
+    warte_rechnen(p)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#my-parts-dropzone')
+    p.ev("""
+      const dz = document.querySelector('#my-parts-dropzone');
+      const bytes = new TextEncoder().encode(arg);
+      const file = new File([bytes], 'nema17_motor.step', { type: 'application/step' });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      dz.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      dz.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      dz.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    """, step_txt)
+    p.pg.wait_for_selector('#userlib-step-dialog')
+    # Warten bis 3D-Vorschaubild aus dem Kern gerendert wurde
+    p.pg.wait_for_function("() => { const img = document.querySelector('#userlib-step-dialog .ul-save-preview img.ul-thumb'); return !!(img && img.src.startsWith('data:image/png;base64,') && img.src.length > 200); }", timeout=20000)
+
+    dlg_st = p.ev("""
+      const ov = document.querySelector('#drop-overlay');
+      const img = document.querySelector('#userlib-step-dialog .ul-save-preview img.ul-thumb');
+      return {
+        overlayHidden: !ov || !!ov.hidden,
+        sceneCount: App.doc.items.length,
+        detectedMfr: document.querySelector('#ul-step-mfr')?.value || '',
+        thumbSrc: img ? img.src : '',
+        metaTxt: document.querySelector('#ul-step-meta')?.textContent || '',
+      };
+    """)
+    p.pg.locator('#ul-step-name').fill('NEMA 17 Motor')
+    p.pg.locator('#userlib-step-dialog .ul-cat-chip[data-cat="Motoren"]').click()
+    p.pg.locator('#ul-step-desc').fill('Schrittmotor 42x42x38 mit 5mm Welle')
+    p.pg.locator('#ul-step-ok').click()
+    p.pg.wait_for_selector('#userlib-step-dialog', state='detached')
+    p.ev("return UserLib.whenReady();")
+
+    ok2 = bool(
+        dlg_st['overlayHidden']
+        and dlg_st['sceneCount'] == 0
+        and dlg_st['detectedMfr'] == 'StepperOnline'
+        and dlg_st['thumbSrc'].startswith('data:image/png;base64,') and len(dlg_st['thumbSrc']) > 200
+        and 'nema17_motor.step' in dlg_st['metaTxt']
+    )
+
+    # 3. Kategorie „Motoren“ im Flyout wählen -> Teil erscheint dort mit Vorschaubild & lässt sich einsetzen
+    p.pg.wait_for_selector('#my-parts-cats .ul-cat[data-cat="Motoren"]')
+    p.pg.locator('#my-parts-cats .ul-cat[data-cat="Motoren"]').click()
+    cat_st = p.ev("""
+      const tile = document.querySelector('#my-parts-grid .tile.user-tile');
+      const img = tile ? tile.querySelector('img.ul-thumb') : null;
+      return {
+        count: document.querySelectorAll('#my-parts-grid .tile.user-tile').length,
+        name: tile ? tile.querySelector('.lbl')?.textContent : '',
+        sub: tile ? tile.querySelector('.role')?.textContent : '',
+        catTag: tile ? tile.querySelector('.ul-cat-tag')?.textContent : '',
+        catData: tile ? tile.dataset.category : '',
+        mfrData: tile ? tile.dataset.manufacturer : '',
+        thumbOk: !!(img && img.src.startsWith('data:image/png;base64,') && img.src.length > 200),
+      };
+    """)
+    p.pg.locator('#my-parts-grid .tile.user-tile').first.click()
+    warte_rechnen(p)
+    ins_st = p.ev("""
+      return Mass.measure().then(m => {
+        const it = App.doc.items[0];
+        const b = it && Actions.worldBox(it.id);
+        return {
+          itemsLen: App.doc.items.length,
+          name: it?.name || '',
+          supplier: it?.props?.supplier || '',
+          vol: m?.volume || 0,
+          dx: b ? b.max.x - b.min.x : 0,
+          dy: b ? b.max.y - b.min.y : 0,
+          dz: b ? b.max.z - b.min.z : 0,
+        };
+      });
+    """)
+    ok3 = bool(
+        cat_st['count'] == 1 and cat_st['name'] == 'NEMA 17 Motor'
+        and cat_st['sub'] == 'StepperOnline' and cat_st['catTag'] == 'Motoren'
+        and cat_st['catData'] == 'Motoren' and cat_st['mfrData'] == 'StepperOnline'
+        and cat_st['thumbOk']
+        and ins_st['itemsLen'] == 1 and ins_st['name'] == 'NEMA 17 Motor'
+        and ins_st['supplier'] == 'StepperOnline'
+        and abs(ins_st['vol'] - ref_vol) < 50
+        and abs(ins_st['dx'] - 42) < 0.5 and abs(ins_st['dy'] - 42) < 0.5 and abs(ins_st['dz'] - 58) < 0.5
+    )
+
+    # 4. Echte Browser-Datenbank (IndexedDB): localStorage-Spiegel löschen, gcBlobs auf leerem Dokument ausführen,
+    #    Seite neu laden -> Kategorie „Motoren“ mit Vorschau & voller 3D-Geometrie immer noch da
+    p.ev("Start.show()")
+    p.wait(200)
+    p.empty()
+    p.ev("""
+      localStorage.removeItem(UserLib.STORAGE_KEY);
+      return Store.gcBlobs(App.doc);
+    """)
+    p.pg.reload(wait_until='domcontentloaded')
+    p.pg.wait_for_function("() => !!(window.__M && window.__M.UserLib && window.__M.UserLib.ready && window.__M.Commands && window.__M.App)", timeout=20000)
+    p.ev("Start.show()")
+    p.wait(200)
+    p.empty()
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#my-parts-cats .ul-cat[data-cat="Motoren"]')
+    p.pg.locator('#my-parts-cats .ul-cat[data-cat="Motoren"]').click()
+    reloaded = p.ev("""
+      const list = UserLib.list({ category: 'Motoren' });
+      const tile = document.querySelector('#my-parts-grid .tile.user-tile');
+      const img = tile ? tile.querySelector('img.ul-thumb') : null;
+      return {
+        n: list.length,
+        name: list[0]?.name || '',
+        cat: list[0]?.category || '',
+        mfr: list[0]?.manufacturer || '',
+        id: list[0]?.id || '',
+        hasThumb: !!(img && img.src.startsWith('data:image/png;base64,') && img.src.length > 200),
+      };
+    """)
+    p.pg.locator('#my-parts-grid .tile.user-tile').first.click()
+    warte_rechnen(p)
+    reloaded_vol = p.ev("return Mass.measure().then(m => m?.volume || 0)")
+
+    # Metadaten bearbeiten, Befehlssuche, Hilfetext & DE/EN-Schlüsselgleichheit prüfen, dann aufräumen
+    p.ev("UserLib.editDialog(arg)", reloaded['id'])
+    p.pg.wait_for_selector('#userlib-edit-dialog')
+    p.pg.locator('#ul-edit-mfr').fill('StepperOnline GmbH')
+    p.pg.locator('#ul-edit-ok').click()
+    p.pg.wait_for_selector('#userlib-edit-dialog', state='detached')
+    p.ev("return UserLib.whenReady();")
+
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const helpOk = !!(wh.stepCatalog && wh.stepCatalog.tip && wh.stepCatalog.hilfe && wh.stepCatalog.tipp);
+      const cmdOk = Commands.search('step bibliothek').some(c => c.id === 'import-step-userlib');
+      const updatedMfr = UserLib.list({ category: 'Motoren' })[0]?.manufacturer || '';
+      return { i18nOk, helpOk, cmdOk, updatedMfr, errs: App.errors.length };
+    })()""")
+    p.ev("UserLib.clear(); return UserLib.whenReady();")
+
+    ok4 = bool(
+        reloaded['n'] == 1 and reloaded['name'] == 'NEMA 17 Motor'
+        and reloaded['cat'] == 'Motoren' and reloaded['mfr'] == 'StepperOnline'
+        and reloaded['hasThumb']
+        and abs(reloaded_vol - ref_vol) < 50
+        and meta['updatedMfr'] == 'StepperOnline GmbH'
+        and meta['i18nOk'] and meta['helpOk'] and meta['cmdOk'] and meta['errs'] == 0
+    )
+
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -41045,6 +41262,7 @@ TESTS = [
     ('[A-195] Bibliothek: Toleranz-Tabellen ISO 286 (BI-26)', t_a195_toleranz_tabellen_iso286),
     ('[F-11252354] Volltest-Reparatur: Mass.measure wartet auf App-Neubau / Zeichnung-PDF-Menü eindeutig / Einstellungen-Dialog ohne Geister-Reopen', t_f11252354),
     ('[A-196] Rohre, Fittings, Flansche, Riemen und Ketten (BI-27, BI-28)', t_a196_rohre_fittings_flansche_riemen_ketten),
+    ('[A-197] STEP-Teile aus Hersteller-Katalogen einsortieren (BI-29)', t_a197_step_katalog_bibliothek),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

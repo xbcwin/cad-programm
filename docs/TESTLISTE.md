@@ -3031,6 +3031,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Einfach- und Profi-Oberfläche, Befehlssuche, GeomCheck, Rückgängig/Wiederherstellen, Hilfetexte, Erklärungen und DE/EN-Texte geprüft (Klicktest `[A-196]`)
 - [ ] **Von Hand**: Im Browser ein DN25-Rohr mit Bogen, T-Stück und Flansch sowie einen GT2-Riemen um zwei Zahnriemenscheiben im 3D-Bild optisch prüfen.
 
+## Bibliothek: STEP-Teile aus Hersteller-Katalogen einsortieren (Auto [A-197], BI-29)
+- [x] Drop-Zone (`#my-parts-dropzone`) und Knopf (`#my-parts-step-btn`) in „Bauteile → Meine Teile“ in Einfach und Profi sichtbar; einfache Bauteil-Kachelzahl bleibt `5` (Klicktest `[A-197]`)
+- [x] STEP-Datei per Drag-and-Drop einsortieren erkennt Hersteller aus dem STEP-Kopf (`FILE_NAME`), rendert ein 3D-Vorschaubild (`Viewer.renderMeshThumb`) und speichert mit Name, Kategorie „Motoren“ und Hersteller (Klicktest `[A-197]`)
+- [x] Kategorie-Filter „Motoren“ zeigt das STEP-Teil mit Vorschau, Hersteller-Untertitel und setzt es mit voller 3D-Geometrie sowie `props.supplier` ins Projekt ein (Klicktest `[A-197]`)
+- [x] Persistenz in IndexedDB (`tracery-db` mit `Store.gcBlobs()`-Schutz) über Neuladen ohne `localStorage`-Spiegel, Metadaten-Dialog (`editDialog`), Befehlssuche, Hilfetext (`stepCatalog`) und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-197]`)
+- [ ] **Von Hand**: Im Browser eine reale Hersteller-STEP-Datei (z. B. von GrabCAD, McMaster-Carr oder StepperOnline) auf „Meine Teile“ ziehen, einsortieren und nach Kategorie filtern.
+
 ## Fehler melden
 
 ```

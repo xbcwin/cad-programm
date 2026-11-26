@@ -2939,6 +2939,11 @@ const HELP = {
   "tip": "Toleranz-Tabelle nach DIN EN ISO 286-2: Grundtoleranzen (IT5–IT11) & Passungen (H7, g6 …)",
   "hilfe": "Schlägt im Profi-Modus zu jedem Nennmaß (bis 500 mm) die Grundtoleranzen (IT5 bis IT11), genormte Bohrungs- und Wellenpassungen (z. B. H7, g6, h6, k6, m6, p6) sowie komplette Passungspaare (z. B. H7/g6) direkt aus der lokalen Normtabelle nach. Mit „Übernehmen“ setzt du die gewählte Toleranz oder Passung direkt am aktuellen Skizzen-, Zeichnungs-, 3D- oder Projektmaß.",
   "tipp": "Du kannst im Feld „Nennmaß“ auch direkt Kurzformen wie „Ø20 H7“ oder „20 g6“ eintippen – beide Werte werden sofort nachgeschlagen."
+ },
+ "stepCatalog": {
+  "tip": "Eigene STEP-Teile aus Hersteller-Katalogen mit Kategorie, Hersteller und Vorschaubild in die Bibliothek legen",
+  "hilfe": "Ziehe eine oder mehrere STEP-Dateien (.step / .stp) direkt auf „Meine Teile“ (oder klicke auf „STEP einsortieren …“). Tracery liest Hersteller-Angaben aus der Datei, erstellt ein 3D-Vorschaubild und speichert das Teil dauerhaft mit Name, Kategorie und Hersteller in deiner Browser-Datenbank.",
+  "tipp": "Über die Kategorie-Knöpfe über dem Raster filterst du z. B. gezielt nach „Motoren“ oder „Lager & Wellen“ – ein Klick setzt das Teil in jedes Projekt ein."
  }
 };
 

@@ -165,6 +165,7 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
   (async () => {
     try {
       await Store.init();
+      await UserLib.init();
       const rec = Start.checkRecoveryOnBoot ? await Start.checkRecoveryOnBoot() : null;
       if (rec) {
         let baseLoaded = false;
