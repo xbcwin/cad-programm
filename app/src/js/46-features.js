@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -2113,7 +2113,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -2464,6 +2464,7 @@ const Features = (() => {
       c: face.info.c.map((v) => round(v, 6)),
       n: Array.isArray(face.info.n) ? face.info.n.map((v) => round(v, 6)) : null,
       t: face.info.t || null,
+      ...(face.info.tid ? { tid: face.info.tid } : {}),
     };
   }
   function thicken(face, opts = {}) {
@@ -2538,6 +2539,344 @@ const Features = (() => {
     sec.append(row);
     const inJoinHint = p.dir === 'in' && (p.mode || 'join') === 'join' ? ' Hinweis: „Nach innen“ mit „Vereinigen“ liegt im Körper – wähle „Eigene Platte“ oder „Vom Körper abziehen“, um es sichtbar zu machen.' : '';
     sec.append(h('div', { class: 'hint-box', html: 'Macht aus der gewählten Fläche (eben oder gebogen) eine Platte mit fester Dicke – nach außen, innen oder mittig.' + inJoinHint }));
+  }
+  // ---------- Direkt bearbeiten: Fläche verschieben, drehen, versetzen (DB-01, DB-02) ----------
+  function directFaceHint(face, tgtId) {
+    if (!face || !face.info) return null;
+    const fi = face.info;
+    const W = tgtId ? Model.worldMatrix(App.doc, tgtId) : new THREE.Matrix4();
+    const inv = W.clone().invert();
+    let pL = Array.isArray(fi.c) ? new THREE.Vector3(...fi.c) : new THREE.Vector3();
+    if (Array.isArray(face.point) && face.point.length >= 3) {
+      pL = new THREE.Vector3(...face.point).applyMatrix4(inv);
+    }
+    let nL = null;
+    if (Array.isArray(fi.n) && fi.n.length >= 3) {
+      nL = new THREE.Vector3(...fi.n).normalize();
+    } else if (Array.isArray(face.normal) && face.normal.length >= 3) {
+      nL = new THREE.Vector3(...face.normal).transformDirection(inv).normalize();
+    } else if (fi.t === 'CYLINDRE' && Array.isArray(fi.axis)) {
+      const o = new THREE.Vector3(fi.axis[0], fi.axis[1], fi.axis[2]);
+      const d = new THREE.Vector3(fi.axis[3], fi.axis[4], fi.axis[5]).normalize();
+      const rel = pL.clone().sub(o);
+      const rad = rel.sub(d.multiplyScalar(rel.dot(d)));
+      if (rad.lengthSq() > 1e-9) nL = rad.normalize();
+    }
+    if (!nL || nL.lengthSq() < 1e-9) nL = new THREE.Vector3(0, 0, 1);
+    return {
+      p: pL.toArray().map((v) => round(v, 6)),
+      n: nL.toArray().map((v) => round(v, 6)),
+    };
+  }
+  function directFace(face = null, opts = {}) {
+    if (App.ctx) { UI.toast(T('toast.directFaceNoCtx'), { icon: 'info' }); return null; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = faceSigOf(face);
+    if (!tgt || tgt.role === 'hole' || !sig) {
+      if (opts.noChange) return null;
+      startDirectFace(opts);
+      return null;
+    }
+    const isPlanar = !face.info || face.info.t === 'PLANE';
+    let mode = opts.mode === 'rotate' || opts.mode === 'offset' ? opts.mode : (opts.mode === 'move' ? 'move' : (isPlanar ? 'move' : 'offset'));
+    if (mode === 'rotate' && !isPlanar) {
+      if (!opts.silent) UI.toast(T('toast.directFaceNoRotCurved'), { icon: 'info' });
+      mode = 'offset';
+    }
+    const hint = !isPlanar ? directFaceHint(face, tgt.id) : null;
+    const p = {
+      target: tgt.id,
+      face: sig,
+      mode,
+      axis: opts.axis === 'x' || opts.axis === 'y' || opts.axis === 'z' || opts.axis === 'free' ? opts.axis : 'normal',
+      dist: opts.dist ?? (mode === 'move' ? 5 : 0),
+      dx: opts.dx ?? 0,
+      dy: opts.dy ?? 0,
+      dz: opts.dz ?? 0,
+      offset: opts.offset ?? (mode === 'offset' ? 2 : 0),
+      angle: opts.angle ?? (mode === 'rotate' ? 15 : 0),
+      rotAxis: opts.rotAxis === 'v' || opts.rotAxis === 'pick' ? opts.rotAxis : 'u',
+      ...(Array.isArray(opts.rotDir) ? { rotDir: opts.rotDir.slice(0, 3) } : {}),
+      pivot: opts.pivot === 'point' ? 'point' : 'center',
+      ...(Array.isArray(opts.rotOrigin) ? { rotOrigin: opts.rotOrigin.slice(0, 3) } : {}),
+      ...(hint ? { handleHint: hint } : {}),
+    };
+    const buildStep = (doc) => {
+      const s = Model.newItem('directFace', p, { name: opts.name || T('kind.directFace'), color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, s);
+      return s;
+    };
+    let step = null;
+    if (opts.noChange) {
+      step = buildStep(App.doc);
+    } else {
+      const undoLabel = mode === 'rotate' ? T('undo.directFaceRotate') : mode === 'offset' ? T('undo.directFaceOffset') : T('undo.directFaceMove');
+      App.change(undoLabel, (doc) => { step = buildStep(doc); });
+    }
+    if (step && !opts.noSelect) App.select([step.id]);
+    if (step && !opts.silent) {
+      const msgKey = mode === 'rotate' ? 'toast.directFaceRotAdded' : mode === 'offset' ? 'toast.directFaceOffAdded' : 'toast.directFaceMoveAdded';
+      UI.toast(T(msgKey), { icon: 'check' });
+    }
+    return step;
+  }
+  function startDirectFace(opts = {}) {
+    if (App.ctx) { UI.toast(T('toast.directFaceNoCtx'), { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast(T('toast.directFaceNeedBody'), { icon: 'info' }); return false; }
+    const f = Actions.selectedFace();
+    if (f) { directFace(f, opts); return true; }
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (tgt && tgt.role !== 'hole' && fi && Array.isArray(fi.c)) {
+          stopPick();
+          directFace({
+            id: hit.id,
+            idx: hit.faceIdx,
+            info: fi,
+            point: hit.point ? hit.point.toArray() : null,
+            normal: hit.normal ? hit.normal.toArray() : null,
+          }, opts);
+          return;
+        }
+      }
+      UI.toast(T('toast.directFacePickPrompt'), { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const tgt = hit ? resolveTopTarget(hit.id) : null;
+      const ok = !!(hit && hit.faceIdx >= 0 && tgt && tgt.role !== 'hole');
+      Viewer.highlightFace('hover', ok ? hit.id : null, ok ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Fläche wählen:</b> Klick auf eine Fläche eines Körpers. <b>Esc</b> bricht ab.');
+    return true;
+  }
+  function pickDirectFace(stepId) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.id !== stepId && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (tgt && tgt.role !== 'hole' && fi && Array.isArray(fi.c)) {
+          stopPick();
+          const fObj = { id: hit.id, idx: hit.faceIdx, info: fi, point: hit.point ? hit.point.toArray() : null, normal: hit.normal ? hit.normal.toArray() : null };
+          const sig = faceSigOf(fObj);
+          const isPlanar = fi.t === 'PLANE';
+          const hint = !isPlanar ? directFaceHint(fObj, tgt.id) : null;
+          App.change(T('undo.directFacePick'), (doc) => {
+            const f = Model.find(doc, stepId); if (!f) return false;
+            f.item.p.target = tgt.id;
+            f.item.p.face = sig;
+            if (!isPlanar && f.item.p.mode === 'rotate') f.item.p.mode = 'offset';
+            if (hint) f.item.p.handleHint = hint; else delete f.item.p.handleHint;
+          });
+          UI.toast('Fläche aktualisiert.', { icon: 'check' });
+          return;
+        }
+      }
+      UI.toast(T('toast.directFacePickPrompt'), { icon: 'info' });
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
+    UI.hint('<b>Fläche wählen:</b> Klick auf eine Fläche des Körpers. <b>Esc</b> bricht ab.');
+  }
+  function pickDirectFaceRotAxis(stepId) {
+    pickAxisThen((A) => {
+      const f = Model.find(App.doc, stepId);
+      if (!f || !f.item || !f.item.p) return;
+      const tid = f.item.p.target;
+      const W = tid ? Model.worldMatrix(App.doc, tid) : new THREE.Matrix4();
+      const inv = W.clone().invert();
+      const oL = A.o.clone().applyMatrix4(inv).toArray().map((v) => round(v, 6));
+      const dL = A.d.clone().transformDirection(inv).normalize().toArray().map((v) => round(v, 6));
+      App.change(T('undo.directFaceAxis'), (doc) => {
+        const fn = Model.find(doc, stepId); if (!fn) return false;
+        fn.item.p.mode = 'rotate';
+        fn.item.p.rotAxis = 'pick';
+        fn.item.p.rotDir = dL;
+        fn.item.p.pivot = 'point';
+        fn.item.p.rotOrigin = oL;
+      });
+      App.select([stepId]);
+      UI.toast('Drehachse gesetzt: ' + A.what + '.', { icon: 'check' });
+    }, '<b>Drehachse wählen:</b> Klick auf eine gerade Kante oder Bezugsachse als Kippachse der Fläche. <b>Esc</b> bricht ab.');
+  }
+  function directFaceFrame(itOrId) {
+    const it = typeof itOrId === 'string' ? (Model.find(App.doc, itOrId) || {}).item : itOrId;
+    if (!it || it.kind !== 'directFace' || !it.p || !it.p.face) return null;
+    const p = it.p;
+    const sig = p.face;
+    if (!Array.isArray(sig.c)) return null;
+    const tgtId = p.target;
+    const tgtFound = tgtId ? Model.find(App.doc, tgtId) : null;
+    if (!tgtFound) return null;
+    const W = Model.worldMatrix(App.doc, tgtId);
+    const V = Model.vars(App.doc).v;
+    const mode = p.mode === 'rotate' || p.mode === 'offset' ? p.mode : 'move';
+    const axis = p.axis === 'x' || p.axis === 'y' || p.axis === 'z' || p.axis === 'free' ? p.axis : 'normal';
+    const isPlanar = !sig.t || sig.t === 'PLANE';
+    const c0 = new THREE.Vector3(...(p.handleHint && Array.isArray(p.handleHint.p) ? p.handleHint.p : sig.c));
+    const n0 = new THREE.Vector3(...(Array.isArray(sig.n) ? sig.n : (p.handleHint && Array.isArray(p.handleHint.n) ? p.handleHint.n : [0, 0, 1]))).normalize();
+    const dist = Model.num(p.dist, V, 0);
+    const dx = Model.num(p.dx, V, 0), dy = Model.num(p.dy, V, 0), dz = Model.num(p.dz, V, 0);
+    const offset = Model.num(p.offset, V, 0);
+    const angle = Model.num(p.angle, V, 0);
+    let shiftL = new THREE.Vector3();
+    if (mode === 'offset') shiftL = n0.clone().multiplyScalar(offset);
+    else if (mode === 'move') {
+      if (axis === 'free') shiftL.set(dx, dy, dz);
+      else if (axis === 'x') shiftL.set(dist, 0, 0);
+      else if (axis === 'y') shiftL.set(0, dist, 0);
+      else if (axis === 'z') shiftL.set(0, 0, dist);
+      else shiftL = n0.clone().multiplyScalar(dist);
+    }
+    const origin = c0.clone().add(shiftL).applyMatrix4(W);
+    const normal = n0.clone().transformDirection(W).normalize();
+    let moveDir = normal.clone();
+    if (mode === 'move' && isPlanar) {
+      if (axis === 'x') moveDir = new THREE.Vector3(1, 0, 0).transformDirection(W).normalize();
+      else if (axis === 'y') moveDir = new THREE.Vector3(0, 1, 0).transformDirection(W).normalize();
+      else if (axis === 'z') moveDir = new THREE.Vector3(0, 0, 1).transformDirection(W).normalize();
+    }
+    const ref = Math.abs(n0.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+    const U = new THREE.Vector3().crossVectors(ref, n0).normalize();
+    const Vb = new THREE.Vector3().crossVectors(n0, U).normalize();
+    let rotAxL = U.clone();
+    if (p.rotAxis === 'v') rotAxL = Vb.clone();
+    else if (p.rotAxis === 'pick' && Array.isArray(p.rotDir) && p.rotDir.length >= 3) {
+      const dRaw = new THREE.Vector3(...p.rotDir);
+      const dProj = dRaw.clone().addScaledVector(n0, -dRaw.dot(n0));
+      if (dProj.lengthSq() > 1e-9) rotAxL = dProj.normalize();
+    }
+    let rotPivL = c0.clone();
+    if ((p.rotAxis === 'pick' || p.pivot === 'point') && Array.isArray(p.rotOrigin) && p.rotOrigin.length >= 3) {
+      const oRaw = new THREE.Vector3(...p.rotOrigin);
+      rotPivL = oRaw.clone().addScaledVector(n0, -oRaw.clone().sub(c0).dot(n0));
+    }
+    const rotAxisDir = rotAxL.clone().transformDirection(W).normalize();
+    const rotPivot = rotPivL.clone().applyMatrix4(W);
+    const u0 = normal.clone();
+    const w0 = new THREE.Vector3().crossVectors(rotAxisDir, u0).normalize();
+    const wb = Actions.worldBox(tgtId);
+    const sz = wb && !wb.isEmpty() ? wb.getSize(new THREE.Vector3()).length() : 20;
+    const radius = Math.max(10, Math.min(42, sz * 0.45));
+    return {
+      targetId: tgtId,
+      mode,
+      axis,
+      isPlanar,
+      origin,
+      normal,
+      moveDir,
+      rotAxisDir,
+      rotPivot,
+      u0,
+      w0,
+      radius,
+      dist,
+      dx,
+      dy,
+      dz,
+      offset,
+      angle,
+    };
+  }
+  function renderDirectFace(it, sec, setP) {
+    const p = it.p || {};
+    const isPlanar = !p.face || !p.face.t || p.face.t === 'PLANE';
+    const mode = p.mode === 'rotate' || p.mode === 'offset' ? p.mode : 'move';
+    const axis = p.axis === 'x' || p.axis === 'y' || p.axis === 'z' || p.axis === 'free' ? p.axis : 'normal';
+    const fl = h('div', { class: 'fields' });
+    const modeOpts = isPlanar
+      ? [['move', T('panel.directFace.modeMove')], ['rotate', T('panel.directFace.modeRotate')], ['offset', T('panel.directFace.modeOffset')]]
+      : [['offset', T('panel.directFace.modeOffset')], ['move', T('panel.directFace.modeMove')]];
+    fl.append(UI.selectField({
+      id: 'df-face-mode',
+      label: T('panel.directFace.mode'),
+      value: modeOpts.some((o) => o[0] === mode) ? mode : modeOpts[0][0],
+      options: modeOpts,
+      onChange: (v) => App.change(T('undo.directFaceMode'), (doc) => {
+        const fn = Model.find(doc, it.id); if (!fn) return false;
+        fn.item.p.mode = v;
+      }),
+    }));
+    if (mode === 'move') {
+      if (isPlanar) {
+        fl.append(UI.selectField({
+          id: 'df-face-axis',
+          label: T('panel.directFace.axis'),
+          value: axis,
+          options: [['normal', T('panel.directFace.axisNormal')], ['x', 'X'], ['y', 'Y'], ['z', 'Z'], ['free', T('panel.directFace.axisFree')]],
+          onChange: (v) => App.change(T('undo.directFaceAxis'), (doc) => {
+            const fn = Model.find(doc, it.id); if (!fn) return false;
+            fn.item.p.axis = v;
+          }),
+        }));
+      }
+      if (axis === 'free' && isPlanar) {
+        fl.append(
+          UI.numField({ id: 'df-face-dx', label: 'X', value: p.dx ?? 0, unit: 'mm', onCommit: (v) => setP('dx', v) }),
+          UI.numField({ id: 'df-face-dy', label: 'Y', value: p.dy ?? 0, unit: 'mm', onCommit: (v) => setP('dy', v) }),
+          UI.numField({ id: 'df-face-dz', label: 'Z', value: p.dz ?? 0, unit: 'mm', onCommit: (v) => setP('dz', v) })
+        );
+      } else {
+        fl.append(UI.numField({ id: 'df-face-dist', label: T('panel.directFace.dist'), value: p.dist ?? 0, unit: 'mm', onCommit: (v) => setP('dist', v) }));
+      }
+    } else if (mode === 'offset') {
+      fl.append(UI.numField({ id: 'df-face-offset', label: T('panel.directFace.offset'), value: p.offset ?? 0, unit: 'mm', onCommit: (v) => setP('offset', v) }));
+    } else {
+      fl.append(UI.numField({ id: 'df-face-angle', label: T('panel.directFace.angle'), value: p.angle ?? 0, unit: '°', step: 5, onCommit: (v) => setP('angle', v) }));
+      const rotOpts = [['u', T('panel.directFace.rotU')], ['v', T('panel.directFace.rotV')]];
+      if (p.rotAxis === 'pick') rotOpts.push(['pick', T('panel.directFace.rotPick')]);
+      fl.append(UI.selectField({
+        id: 'df-face-rot-axis',
+        label: T('panel.directFace.rotAxis'),
+        value: p.rotAxis === 'v' || p.rotAxis === 'pick' ? p.rotAxis : 'u',
+        options: rotOpts,
+        onChange: (v) => App.change(T('undo.directFaceAxis'), (doc) => {
+          const fn = Model.find(doc, it.id); if (!fn) return false;
+          fn.item.p.rotAxis = v;
+          if (v !== 'pick') fn.item.p.pivot = 'center';
+        }),
+      }));
+    }
+    sec.append(fl);
+    const row = h('div', { class: 'btn-row' });
+    if (mode === 'rotate') {
+      const ab = h('button', { type: 'button', class: 'btn small', id: 'df-face-pick-axis' });
+      ab.innerHTML = icon('axes') + esc(T('panel.directFace.pickAxisBtn'));
+      ab.onclick = () => pickDirectFaceRotAxis(it.id);
+      row.append(ab);
+    }
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'df-face-pick' });
+    pb.innerHTML = icon('cursor') + esc(T('panel.ext.pickOtherFace'));
+    pb.onclick = () => pickDirectFace(it.id);
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'df-face-goto' });
+      gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: T(mode === 'rotate' ? 'panel.directFace.hintRotate' : mode === 'offset' ? 'panel.directFace.hintOffset' : 'panel.directFace.hintMove') }));
   }
   // ---------- Rippe (KP-06) ----------
   function ribTargets(idx = Infinity) {
@@ -6910,5 +7249,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, portCutout, startPortCutout, pickPortCutoutFace, renderPortCutout, magnetPocket, startMagnetPocket, pickMagnetPocketFace, renderMagnetPocket, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, deleteFace, startDeleteFace, pickDeleteFace, removeDeleteFaceEntry, renderDeleteFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, portCutout, startPortCutout, pickPortCutoutFace, renderPortCutout, magnetPocket, startMagnetPocket, pickMagnetPocketFace, renderMagnetPocket, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, deleteFace, startDeleteFace, pickDeleteFace, removeDeleteFaceEntry, renderDeleteFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, directFace, startDirectFace, pickDirectFace, pickDirectFaceRotAxis, directFaceFrame, renderDirectFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut };
 })();

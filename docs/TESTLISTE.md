@@ -3031,6 +3031,21 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Einfach- und Profi-Oberfläche, Befehlssuche, GeomCheck, Rückgängig/Wiederherstellen, Hilfetexte, Erklärungen und DE/EN-Texte geprüft (Klicktest `[A-196]`)
 - [ ] **Von Hand**: Im Browser ein DN25-Rohr mit Bogen, T-Stück und Flansch sowie einen GT2-Riemen um zwei Zahnriemenscheiben im 3D-Bild optisch prüfen.
 
+## Direkt bearbeiten: Fläche verschieben, drehen, versetzen (Auto [A-198], DB-01, DB-02)
+- [x] **Quader-Deckfläche per Pfeil um 5 mm nach oben verschieben**: Im Einfach-Modus ausgeblendet, im Profi-Modus erscheint der Pfeil `faceDirect`; Ziehen und `5` + Enter legt den Schritt `directFace` an und erhöht den Quader exakt um +5 mm auf 25 mm (`t_direkt_flaeche`).
+- [x] **Panel-Werte, Unterdrücken & Rückgängig**: Änderung auf `-3 mm` verkürzt auf 17 mm; Unterdrücken und `Strg Z`/`Strg Y` schalten sauber um (`t_direkt_flaeche`).
+- [x] **Fläche drehen (DB-01)**: Über `#ctx-direct-face` → „Fläche drehen“ neigt den Quader-Deckel um 15° mit aktivem `faceRot`-Drehgriff und korrekter Flächennormale (`t_direkt_flaeche`).
+- [x] **Importiertes STEP-Teil versetzen (DB-02, mit und ohne Verlauf)**: Exportierter/re-importierter STEP-Quader lässt sich über `#df-face-offset` um `+5 mm` und `-3 mm` versetzen sowie im `noHistory`-Modus direkt um `+4 mm` einfrieren (`t_direkt_flaeche`).
+- [x] **Gebogene Fläche versetzen & Hilfen**: Zylindermantel (Ø 20 mm) wächst beim Versetzen um `+3 mm` auf Ø 26 mm; `HELP.directFace` vollständig (`t_direkt_flaeche`).
+- [ ] **Von Hand**: Im Browser ein beliebiges STEP-Teil importieren, eine Fläche direkt mit dem Pfeil ziehen und anschließend eine Nachbarfläche um eine gewählte Kante neigen.
+
+## Bibliothek: STEP-Teile aus Hersteller-Katalogen einsortieren (Auto [A-197], BI-29)
+- [x] Drop-Zone (`#my-parts-dropzone`) und Knopf (`#my-parts-step-btn`) in „Bauteile → Meine Teile“ in Einfach und Profi sichtbar; einfache Bauteil-Kachelzahl bleibt `5` (Klicktest `[A-197]`)
+- [x] STEP-Datei per Drag-and-Drop einsortieren erkennt Hersteller aus dem STEP-Kopf (`FILE_NAME`), rendert ein 3D-Vorschaubild (`Viewer.renderMeshThumb`) und speichert mit Name, Kategorie „Motoren“ und Hersteller (Klicktest `[A-197]`)
+- [x] Kategorie-Filter „Motoren“ zeigt das STEP-Teil mit Vorschau, Hersteller-Untertitel und setzt es mit voller 3D-Geometrie sowie `props.supplier` ins Projekt ein (Klicktest `[A-197]`)
+- [x] Persistenz in IndexedDB (`tracery-db` mit `Store.gcBlobs()`-Schutz) über Neuladen ohne `localStorage`-Spiegel, Metadaten-Dialog (`editDialog`), Befehlssuche, Hilfetext (`stepCatalog`) und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-197]`)
+- [ ] **Von Hand**: Im Browser eine reale Hersteller-STEP-Datei (z. B. von GrabCAD, McMaster-Carr oder StepperOnline) auf „Meine Teile“ ziehen, einsortieren und nach Kategorie filtern.
+
 ## Bibliothek: Logo aus SVG und RAL-Farben (Auto [A-194], BI-24, BI-25)
 - [x] SVG-Logo (`svgLogo`, `SvgLogo`): Standard-Symbol und kleine `.svg`-Datei mit Loch bauen in Einfach und Profi als erhabener Körper (`relief`), auf abgerundeter Platte (`emboss` / `deboss`) und als Prägung auf einer Körperfläche ohne Geometriefehler (Klicktest `[A-194]`)
 - [x] RAL-Farbtafel (`RalColors`): Suche nach `3020` / `Verkehrsrot` im Dialog `#ral-picker-dlg` setzt Körperfarbe `#bb1e10` (`it.ral = '3020'`) samt `#item-ral-badge`, Flächenfarbe und Rückgängig/Wiederherstellen (Klicktest `[A-194]`)

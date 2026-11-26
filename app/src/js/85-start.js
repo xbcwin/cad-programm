@@ -3273,13 +3273,16 @@ const Start = (() => {
     const btn = $('#btn-folder-status');
     if (btn) btn.onclick = (e) => openFolderMenu(e.currentTarget);
     updateFolderUI();
+    const isLibDropTarget = (e) => !!(e && e.target && e.target.closest && e.target.closest('.flyout.parts, #my-parts-section, #userlib-step-dialog, #userlib-edit-dialog'));
     window.addEventListener('dragenter', (e) => {
       if (!isFileDrag(e)) return;
+      if (isLibDropTarget(e)) { hideDropOverlay(); return; }
       dragDepth++;
       showDropOverlay();
     });
     window.addEventListener('dragover', (e) => {
       if (!isFileDrag(e)) return;
+      if (isLibDropTarget(e)) { hideDropOverlay(); return; }
       e.preventDefault();
       try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
       if (dragDepth <= 0) dragDepth = 1;
@@ -3294,6 +3297,7 @@ const Start = (() => {
     });
     window.addEventListener('drop', (e) => {
       if (!isFileDrag(e)) return;
+      if (isLibDropTarget(e)) { hideDropOverlay(); return; }
       e.preventDefault();
       hideDropOverlay();
       const files = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
