@@ -773,6 +773,10 @@ const IC = {
   profileT: '<path d="M4 4h16v4.5h-5.75V20h-4.5V8.5H4z" fill="currentColor" opacity=".18"/><path d="M4 4h16v4.5h-5.75V20h-4.5V8.5H4z"/>',
   profileI: '<path d="M5 4h14v4h-5v8h5v4H5v-4h5V8H5z" fill="currentColor" opacity=".18"/><path d="M5 4h14v4h-5v8h5v4H5v-4h5V8H5z"/>',
   profileFlat: '<rect x="3" y="9" width="18" height="6" rx=".8" fill="currentColor" opacity=".18"/><rect x="3" y="9" width="18" height="6" rx=".8"/>',
+  tSlotProfile: '<path d="M5 3h4.5v2.5H8v2h8v-2h-1.5V3H19l2 2v4.5h-2.5V8h-2v8h2v-1.5H21V19l-2 2h-4.5v-2.5H16v-2H8v2h1.5V21H5l-2-2v-4.5h2.5V16h2V8h-2v1.5H3V5z" fill="currentColor" opacity=".16" stroke="none"/><path d="M5 3h4.5v2.5H8v2h8v-2h-1.5V3H19l2 2v4.5h-2.5V8h-2v8h2v-1.5H21V19l-2 2h-4.5v-2.5H16v-2H8v2h1.5V21H5l-2-2v-4.5h2.5V16h2V8h-2v1.5H3V5z"/><circle cx="12" cy="12" r="2.1"/>',
+  tSlotBracket: '<path d="M4 4h4.5v11.5H20V20H4z" fill="currentColor" opacity=".2"/><path d="M4 4h4.5v11.5H20V20H4z"/><path d="M8.5 6.5L17.5 15.5H8.5z" fill="currentColor" opacity=".12"/><circle cx="6.25" cy="11" r="1" fill="currentColor" stroke="none"/><circle cx="14" cy="17.75" r="1" fill="currentColor" stroke="none"/>',
+  tSlotNut: '<path d="M3 12h5V7h8v5h5v6H3z" fill="currentColor" opacity=".18"/><path d="M3 12h5V7h8v5h5v6H3z"/><path d="M10.5 7v11M13.5 7v11" stroke-dasharray="2 1.2"/>',
+  tSlotEndCap: '<path d="M5 5h14l2 2v10l-2 2H5l-2-2V7z" fill="currentColor" opacity=".16"/><path d="M5 5h14l2 2v10l-2 2H5l-2-2V7z"/><circle cx="12" cy="12" r="2.6" stroke-dasharray="2 1.2"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -3009,6 +3013,26 @@ const HELP = {
   "tip": "Norm-Profil (Vierkantrohr, Rundrohr, L-, U-, T-, I-Profil oder Flachstahl) in wählbarer Länge",
   "hilfe": "Erzeugt ein Konstruktionsprofil mit genormtem Querschnitt (Vierkantrohr, Rundrohr, L-Profil, U-Profil, T-Profil, I-Träger oder Flachstahl) und beliebiger Länge. Im Eigenschaften-Panel kannst du jederzeit zwischen allen Profilarten, den passenden Normgrößen oder eigenen Maßen wechseln.",
   "tipp": "Wähle „Eigene Maße“ bei Normgröße (oder gib direkt Breite, Höhe oder Wandstärke ein), um Sonderprofile außerhalb der Standardtabelle zu erzeugen."
+ },
+ "tSlotProfile": {
+  "tip": "Alu-Nutprofil der Baureihen 20, 30, 40 oder 45 (Nut 6/8/10) mit Nuten und Kernbohrung",
+  "hilfe": "Erzeugt ein Aluminium-Systemprofil mit echten T-Nuten (Baureihe 20 mit Nut 6, Baureihe 30/40 mit Nut 8, Baureihe 45 mit Nut 10) und Mittelbohrung(en) in Einzel- oder Doppelbreite (z. B. 20×20 oder 20×40). Rechts kannst du mit einem Klick passende Winkel, Nutensteine und Endkappen direkt ans Profil setzen.",
+  "tipp": "Für Rahmen und Gestelle wählst du erst das Profil und setzt Winkel, Nutensteine und Endkappen direkt über die Knöpfe im Eigenschaften-Panel ohne Durchdringung an."
+ },
+ "tSlotBracket": {
+  "tip": "90°-Eckwinkel mit Seitenrippen für Alu-Nutprofile (Baureihe 20, 30, 40, 45)",
+  "hilfe": "Erzeugt einen passenden Eckverbinder mit Verstärkungsrippen, Durchgangslöchern und optionalen Zentriernasen für die jeweilige Profil-Baureihe. Ist schon ein Nutprofil im Projekt, setzt der Knopf „Winkel ans Profil setzen“ ihn bündig an die Profilseite.",
+  "tipp": "Schenkellänge, Breite und Bohrungsdurchmesser lassen sich bei Bedarf rechts im Eigenschaften-Panel einzeln anpassen."
+ },
+ "tSlotNut": {
+  "tip": "Nutenstein mit Gewindebohrung passend für Nut 6, 8 oder 10",
+  "hilfe": "Erzeugt einen T-förmigen Nutenstein mit passender Kernbohrung (M4 bis M8) für die gewählte Profil-Baureihe. Ist ein Nutprofil vorhanden, schiebt „Nutenstein in Profil-Nut setzen“ ihn direkt passgenau in die Hinterschnitt-Nut.",
+  "tipp": "Mit „Passend zur Nut“ wählt Tracery automatisch das gängige Gewinde zur Baureihe (M5 bei 20, M6 bei 30, M8 bei 40/45)."
+ },
+ "tSlotEndCap": {
+  "tip": "Abdeckkappe mit Haltezapfen für Alu-Nutprofile (20×20 bis 45×90)",
+  "hilfe": "Erzeugt eine Kunststoff-Endkappe mit abgeschrägten Ecken und passenden Press-Zapfen für die Stirnseite der Alu-Nutprofile. Mit „Endkappe aufs Profil setzen“ sitzt sie bündig auf dem Profilende.",
+  "tipp": "Die Zapfen greifen genau in die Kernbohrung(en) des gewählten Profils und schließen die Schnittkante sauber ab."
  }
 };
 

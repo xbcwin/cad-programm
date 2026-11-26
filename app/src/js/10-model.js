@@ -1206,6 +1206,14 @@ const Model = (() => {
             o.p.spec = chainMetrics(o.p);
           } else if (o.p.lib === 'profile' && typeof profileMetrics === 'function') {
             o.p.spec = profileMetrics(o.p);
+          } else if (o.p.lib === 'tSlotProfile' && typeof tSlotMetrics === 'function') {
+            o.p.spec = tSlotMetrics(o.p);
+          } else if (o.p.lib === 'tSlotBracket' && typeof tSlotBracketMetrics === 'function') {
+            o.p.spec = tSlotBracketMetrics(o.p);
+          } else if (o.p.lib === 'tSlotNut' && typeof tSlotNutMetrics === 'function') {
+            o.p.spec = tSlotNutMetrics(o.p);
+          } else if (o.p.lib === 'tSlotEndCap' && typeof tSlotEndCapMetrics === 'function') {
+            o.p.spec = tSlotEndCapMetrics(o.p);
           }
         }
       }
@@ -2851,6 +2859,10 @@ const Model = (() => {
         if (L === 'stdBelt') { const m = typeof beltMetrics === 'function' ? beltMetrics(p) : { shape: 'loop', outerX: 60, outerY: 28, outerZ: 6 }; return m.shape === 'open' ? [-m.outerX / 2, -m.toothH, 0, m.outerX / 2, m.backT, m.outerZ] : [-m.outerX / 2, -m.outerY / 2, 0, m.outerX / 2, m.outerY / 2, m.outerZ]; }
         if (L === 'stdChain') { const m = typeof chainMetrics === 'function' ? chainMetrics(p) : { outerX: 164.2, outerY: 11.8, totalW: 16.6 }; return [-m.outerX / 2, -m.outerY / 2, 0, m.outerX / 2, m.outerY / 2, m.totalW]; }
         if (L === 'profile') { const m = typeof profileMetrics === 'function' ? profileMetrics(p) : { w: 30, h: 30, length: 500 }; return [-m.w / 2, -m.h / 2, 0, m.w / 2, m.h / 2, m.length]; }
+        if (L === 'tSlotProfile') { const m = typeof tSlotMetrics === 'function' ? tSlotMetrics(p) : { w: 20, h: 20, length: 300 }; return [-m.w / 2, -m.h / 2, 0, m.w / 2, m.h / 2, m.length]; }
+        if (L === 'tSlotBracket') { const m = typeof tSlotBracketMetrics === 'function' ? tSlotBracketMetrics(p) : { legLen: 20, width: 18, guides: 'nein', lugH: 0 }; const g = m.guides === 'ja' ? -m.lugH : 0; return [g, -m.width / 2, g, m.legLen, m.width / 2, m.legLen]; }
+        if (L === 'tSlotNut') { const m = typeof tSlotNutMetrics === 'function' ? tSlotNutMetrics(p) : { baseW: 9.8, length: 10, totalH: 3.2 }; return [-m.baseW / 2, -m.length / 2, 0, m.baseW / 2, m.length / 2, m.totalH]; }
+        if (L === 'tSlotEndCap') { const m = typeof tSlotEndCapMetrics === 'function' ? tSlotEndCapMetrics(p) : { w: 20, h: 20, capT: 2.5, pinL: 6 }; return [-m.w / 2, -m.h / 2, -m.pinL, m.w / 2, m.h / 2, m.capT]; }
         if (L === 'buyAntenna') { const r = Math.max(4, p.form === 'stab' ? n('d', 3) : n('kd', 14)) / 2; return [-r, -r, 0, r, r, n('L', 45)]; }
         if (L === 'buyStack') { const s = n('a', 30.5) + 5.5; return [-s / 2, -s / 2, 0, s / 2, s / 2, n('h', 12)]; }
         if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }
@@ -3220,6 +3232,10 @@ const Model = (() => {
         if (L === 'pipeFlange' && typeof pipeFlangeMetrics === 'function') { const m = pipeFlangeMetrics(p); return `${m.dn !== 'custom' ? m.dn + ' · ' : ''}Ø ${f(m.flangeD)} × ${f(m.totalH)}${u}`; }
         if (L === 'stdBelt' && typeof beltMetrics === 'function') { const m = beltMetrics(p); return `${m.profile} · L ${f(m.length)}${u}`; }
         if (L === 'stdChain' && typeof chainMetrics === 'function') { const m = chainMetrics(p); return `${m.chainLabelShort} · ${m.links} Glieder (${f(m.actualLength)}${u})`; }
+        if (L === 'tSlotProfile' && typeof tSlotMetrics === 'function') { const m = tSlotMetrics(p); return `${f(m.w)} × ${f(m.h)} × ${f(m.length)}${u} (Nut ${f(m.slotW)})`; }
+        if (L === 'tSlotBracket' && typeof tSlotBracketMetrics === 'function') { const m = tSlotBracketMetrics(p); return `Winkel ${m.series} · ${f(m.legLen)} × ${f(m.width)}${u}`; }
+        if (L === 'tSlotNut' && typeof tSlotNutMetrics === 'function') { const m = tSlotNutMetrics(p); return `Nut ${f(m.slotW)} · ${m.thread} × ${f(m.length)}${u}`; }
+        if (L === 'tSlotEndCap' && typeof tSlotEndCapMetrics === 'function') { const m = tSlotEndCapMetrics(p); return `Endkappe ${f(m.w)} × ${f(m.h)}${u}`; }
         return p.size || '';
       }
     }

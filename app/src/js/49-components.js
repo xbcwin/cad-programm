@@ -923,6 +923,7 @@ const Comp = (() => {
     'target', 'targets', 'pivot', 'uniform', 'bendAxis', 'anchor', 'flip', 'face', 'faceRef', 'toFace',
     'dir', 'extent', 'wallSide', 'side', 'roundEnds', 'kind', 'extend', 'shape', 'form', 'norm', 'end',
     'from', 'ends', 'size', 'profile', 'autoNorm', 'style', 'autoDepth', 'layout', 'sketch3dId', 'wrapId',
+    'series', 'guides', 'thread',
     'prof', 'profName', 'by', 'lib', 'fmt', 'file', 'blobId', 'data', 'stepEntity', 'stepMat', 'sketch',
     'sketches', 'path', 'rail', 'rail2', 'path3d', 'sketch3d', 'features', 'datumId', 'axisId', 'axisEnt',
     'docId', 'docName', 'docType', 'variantId', 'skelOverrides', 'assembly', 'sel', 'printFit',

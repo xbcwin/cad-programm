@@ -5617,6 +5617,10 @@ export function createKernel(R, oc) {
     if (lib === 'stdBelt') return buildStdBelt(p);
     if (lib === 'stdChain') return buildStdChain(p);
     if (lib === 'profile') return buildProfile(p);
+    if (lib === 'tSlotProfile') return buildTSlotProfile(p);
+    if (lib === 'tSlotBracket') return buildTSlotBracket(p);
+    if (lib === 'tSlotNut') return buildTSlotNut(p);
+    if (lib === 'tSlotEndCap') return buildTSlotEndCap(p);
     const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
     const tol = num(p.tol, 0) + pf;
     if (lib === 'screwHole') {
@@ -7342,6 +7346,210 @@ export function createKernel(R, oc) {
       return out;
     } finally {
       safeDelete(outer); safeDelete(inner); safeDelete(face); safeDelete(shape);
+    }
+  }
+  function buildTSlotProfile(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const nx = Math.max(1, Math.min(2, Math.round(pos(sp.nx ?? p.nx, 1))));
+    const ny = Math.max(1, Math.min(2, Math.round(pos(sp.ny ?? p.ny, 1))));
+    const grid = Math.max(10, pos(sp.grid ?? p.grid, 20));
+    const w = Math.max(10, pos(sp.w ?? p.w, nx * grid));
+    const h = Math.max(10, pos(sp.h ?? p.h, ny * grid));
+    const L = Math.max(5, pos(sp.length ?? p.length, 300));
+    const sw2 = Math.max(1.5, pos(sp.slotW ?? p.slotW, 6.0)) / 2;
+    const lipT = Math.max(0.8, pos(sp.lipT ?? p.lipT, 1.8));
+    const cw2 = Math.max(sw2 + 0.8, pos(sp.cavityW ?? p.cavityW, 10.4) / 2);
+    const cavityH = Math.max(0.8, pos(sp.cavityH ?? p.cavityH, 2.0));
+    const slotD = Math.max(lipT + cavityH + 0.6, pos(sp.slotD ?? p.slotD, 6.0));
+    const boreD = Math.max(2.0, Math.min(grid - 2 * slotD - 1.0, pos(sp.boreD ?? p.boreD, 5.0)));
+    const c = Math.max(0.2, Math.min(grid / 2 - sw2 - 0.6, pos(sp.chamfer ?? p.chamfer, 1.0)));
+
+    const pushSlot = (pts, cx, cy, tx, ty, nxIn, nyIn) => {
+      const loc = [
+        [-sw2, 0], [-sw2, lipT], [-cw2, lipT], [-cw2, lipT + cavityH], [-sw2, slotD],
+        [sw2, slotD], [cw2, lipT + cavityH], [cw2, lipT], [sw2, lipT], [sw2, 0],
+      ];
+      for (const [u, v] of loc) pts.push([cx + u * tx + v * nxIn, cy + u * ty + v * nyIn, 0]);
+    };
+
+    const pts = [];
+    // Unten (y = -h/2, +X Richtung, Normale +Y)
+    pts.push([-w / 2 + c, -h / 2, 0]);
+    for (let ix = 0; ix < nx; ix++) pushSlot(pts, -w / 2 + (ix + 0.5) * grid, -h / 2, 1, 0, 0, 1);
+    pts.push([w / 2 - c, -h / 2, 0]);
+    // Rechts (x = +w/2, +Y Richtung, Normale -X)
+    pts.push([w / 2, -h / 2 + c, 0]);
+    for (let iy = 0; iy < ny; iy++) pushSlot(pts, w / 2, -h / 2 + (iy + 0.5) * grid, 0, 1, -1, 0);
+    pts.push([w / 2, h / 2 - c, 0]);
+    // Oben (y = +h/2, -X Richtung, Normale -Y)
+    pts.push([w / 2 - c, h / 2, 0]);
+    for (let ix = nx - 1; ix >= 0; ix--) pushSlot(pts, -w / 2 + (ix + 0.5) * grid, h / 2, -1, 0, 0, -1);
+    pts.push([-w / 2 + c, h / 2, 0]);
+    // Links (x = -w/2, -Y Richtung, Normale +X)
+    pts.push([-w / 2, h / 2 - c, 0]);
+    for (let iy = ny - 1; iy >= 0; iy--) pushSlot(pts, -w / 2, -h / 2 + (iy + 0.5) * grid, 0, -1, 1, 0);
+    pts.push([-w / 2, -h / 2 + c, 0]);
+
+    let face = null, shape = null;
+    try {
+      face = polygonFace(pts);
+      shape = R.basicFaceExtrusion(face, new R.Vector([0, 0, L]));
+      for (let ix = 0; ix < nx; ix++) {
+        for (let iy = 0; iy < ny; iy++) {
+          const cx = -w / 2 + (ix + 0.5) * grid;
+          const cy = -h / 2 + (iy + 0.5) * grid;
+          let cyl = null, next = null;
+          try {
+            cyl = R.makeCylinder(boreD / 2, L + 2, [cx, cy, -1], [0, 0, 1]);
+            next = shape.cut(cyl);
+            safeDelete(shape);
+            shape = next;
+            next = null;
+          } finally {
+            safeDelete(cyl);
+            safeDelete(next);
+          }
+        }
+      }
+      if (!isClosedValidSolid(shape)) throw new Error('Alu-Nutprofil ergab keinen geschlossenen Körper.');
+      const out = shape;
+      shape = null;
+      return out;
+    } finally {
+      safeDelete(face); safeDelete(shape);
+    }
+  }
+  function buildTSlotBracket(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const legLen = Math.max(12, pos(sp.legLen ?? p.legLen, 20));
+    const width = Math.max(10, pos(sp.width ?? p.width, 18));
+    const wallT = Math.min(legLen * 0.35, Math.max(2, pos(sp.wallT ?? p.wallT, 3.5)));
+    const ribT = Math.min(width * 0.25, Math.max(1.5, pos(sp.ribT ?? p.ribT, 2.5)));
+    const holeD = Math.max(2.5, Math.min(width - 2 * ribT - 1.2, pos(sp.holeD ?? p.holeD, 5.5)));
+    const holePos = Math.max(wallT + holeD / 2 + 1.5, Math.min(legLen - holeD / 2 - 2, pos(sp.holePos ?? p.holePos, 10.5)));
+    const guides = String(sp.guides ?? p.guides ?? 'nein') === 'ja';
+    const lugW = Math.min(width - 2, Math.max(3, pos(sp.lugW ?? p.lugW, 5.6)));
+    const lugH = Math.max(0.8, pos(sp.lugH ?? p.lugH, 1.4));
+    const w2 = width / 2;
+
+    let lFace = null, ribFace1 = null, ribFace2 = null;
+    let body = null, rib1 = null, rib2 = null, lug1 = null, lug2 = null, hole1 = null, hole2 = null;
+    const parts = [];
+    try {
+      lFace = polygonFace([
+        [0, -w2, 0], [legLen, -w2, 0], [legLen, -w2, wallT],
+        [wallT, -w2, wallT], [wallT, -w2, legLen], [0, -w2, legLen],
+      ]);
+      body = R.basicFaceExtrusion(lFace, new R.Vector([0, width, 0]));
+      parts.push(body);
+
+      const mkRibPts = (y0) => [
+        [wallT - 0.5, y0, wallT - 0.5],
+        [legLen - 1.0, y0, wallT - 0.5],
+        [legLen - 1.0, y0, wallT + 1.0],
+        [wallT + 1.0, y0, legLen - 1.0],
+        [wallT - 0.5, y0, legLen - 1.0],
+      ];
+      ribFace1 = polygonFace(mkRibPts(-w2));
+      rib1 = R.basicFaceExtrusion(ribFace1, new R.Vector([0, ribT, 0]));
+      parts.push(rib1);
+      ribFace2 = polygonFace(mkRibPts(w2 - ribT));
+      rib2 = R.basicFaceExtrusion(ribFace2, new R.Vector([0, ribT, 0]));
+      parts.push(rib2);
+
+      const lugStart = holePos + holeD / 2 + 1.0;
+      if (guides && legLen - 1.0 > lugStart + 1.5) {
+        lug1 = R.makeBox([-lugH, -lugW / 2, lugStart], [0.5, lugW / 2, legLen - 1.0]);
+        lug2 = R.makeBox([lugStart, -lugW / 2, -lugH], [legLen - 1.0, lugW / 2, 0.5]);
+        parts.push(lug1, lug2);
+      }
+
+      let shape = fuseAll(parts, false);
+      hole1 = R.makeCylinder(holeD / 2, wallT + 2, [holePos, 0, -1], [0, 0, 1]);
+      let cut1 = shape.cut(hole1);
+      safeDelete(shape);
+      shape = cut1;
+      hole2 = R.makeCylinder(holeD / 2, wallT + 2, [-1, 0, holePos], [1, 0, 0]);
+      let cut2 = shape.cut(hole2);
+      safeDelete(shape);
+      shape = cut2;
+
+      if (!isClosedValidSolid(shape)) throw new Error('Profil-Winkel ergab keinen geschlossenen Körper.');
+      const out = shape;
+      shape = null;
+      return out;
+    } finally {
+      safeDelete(lFace); safeDelete(ribFace1); safeDelete(ribFace2);
+      safeDelete(body); safeDelete(rib1); safeDelete(rib2);
+      safeDelete(lug1); safeDelete(lug2); safeDelete(hole1); safeDelete(hole2);
+    }
+  }
+  function buildTSlotNut(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const baseW = Math.max(6, pos(sp.baseW ?? p.baseW, 9.8));
+    const baseH = Math.max(0.8, pos(sp.baseH ?? p.baseH, 1.6));
+    const neckW = Math.max(3, Math.min(baseW - 0.8, pos(sp.neckW ?? p.neckW, 5.6)));
+    const neckH = Math.max(0.8, pos(sp.neckH ?? p.neckH, 1.6));
+    const boreD = Math.max(2, Math.min(neckW - 0.8, pos(sp.boreD ?? p.boreD, 4.2)));
+    const L = Math.max(boreD + 3, pos(sp.length ?? p.length, 10));
+    const bw2 = baseW / 2, nw2 = neckW / 2, L2 = L / 2, totH = baseH + neckH;
+
+    let face = null, body = null, hole = null, shape = null;
+    try {
+      face = polygonFace([
+        [-bw2, -L2, 0], [bw2, -L2, 0], [bw2, -L2, baseH], [nw2, -L2, baseH],
+        [nw2, -L2, totH], [-nw2, -L2, totH], [-nw2, -L2, baseH], [-bw2, -L2, baseH],
+      ]);
+      body = R.basicFaceExtrusion(face, new R.Vector([0, L, 0]));
+      hole = R.makeCylinder(boreD / 2, totH + 2, [0, 0, -1], [0, 0, 1]);
+      shape = body.cut(hole);
+      if (!isClosedValidSolid(shape)) throw new Error('Nutenstein ergab keinen geschlossenen Körper.');
+      const out = shape;
+      shape = null;
+      return out;
+    } finally {
+      safeDelete(face); safeDelete(body); safeDelete(hole); safeDelete(shape);
+    }
+  }
+  function buildTSlotEndCap(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const nx = Math.max(1, Math.min(2, Math.round(pos(sp.nx ?? p.nx, 1))));
+    const ny = Math.max(1, Math.min(2, Math.round(pos(sp.ny ?? p.ny, 1))));
+    const grid = Math.max(10, pos(sp.grid ?? p.grid, 20));
+    const w = Math.max(10, pos(sp.w ?? p.w, nx * grid));
+    const h = Math.max(10, pos(sp.h ?? p.h, ny * grid));
+    const c = Math.max(0.2, Math.min(grid / 2 - 2, pos(sp.chamfer ?? p.chamfer, 1.0)));
+    const capT = Math.max(1.2, pos(sp.capT ?? p.capT, 2.5));
+    const pinD = Math.max(2, pos(sp.pinD ?? p.pinD, 4.7));
+    const pinL = Math.max(2, pos(sp.pinL ?? p.pinL, 6.0));
+
+    let face = null, plate = null;
+    const parts = [];
+    const pins = [];
+    try {
+      face = polygonFace([
+        [-w / 2 + c, -h / 2, 0], [w / 2 - c, -h / 2, 0],
+        [w / 2, -h / 2 + c, 0], [w / 2, h / 2 - c, 0],
+        [w / 2 - c, h / 2, 0], [-w / 2 + c, h / 2, 0],
+        [-w / 2, h / 2 - c, 0], [-w / 2, -h / 2 + c, 0],
+      ]);
+      plate = R.basicFaceExtrusion(face, new R.Vector([0, 0, capT]));
+      parts.push(plate);
+      for (let ix = 0; ix < nx; ix++) {
+        for (let iy = 0; iy < ny; iy++) {
+          const cx = -w / 2 + (ix + 0.5) * grid;
+          const cy = -h / 2 + (iy + 0.5) * grid;
+          const pin = R.makeCylinder(pinD / 2, pinL + 0.2, [cx, cy, -pinL], [0, 0, 1]);
+          pins.push(pin);
+          parts.push(pin);
+        }
+      }
+      const shape = fuseAll(parts, false);
+      if (!isClosedValidSolid(shape)) throw new Error('Profil-Endkappe ergab keinen geschlossenen Körper.');
+      return shape;
+    } finally {
+      safeDelete(face); safeDelete(plate);
+      for (const pin of pins) safeDelete(pin);
     }
   }
   // ---------- Kanten-Veredelung ----------

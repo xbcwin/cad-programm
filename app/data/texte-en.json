@@ -5480,5 +5480,20 @@
   "fly.profiles": "Profiles",
   "panel.item.profileHint": "<b>{shape}</b> ({norm}) · Section <b>{dims}</b> · Area <b>{area} mm²</b> · Length {L} · approx. {kgm} kg/m (steel).",
   "panel.item.profileCustomSize": "Custom dimensions",
-  "undo.profileShape": "Profile type changed"
+  "undo.profileShape": "Profile type changed",
+  "fly.tSlotProfiles": "T-Slot Profiles & Accessories",
+  "panel.item.tSlotProfileHint": "<b>T-Slot Profile {size}</b> ({norm}) · <b>{slots} slots</b> (slot {slotW}) · Center bore Ø {bore} · Area <b>{area} mm²</b> · Length {L} · approx. {kgm} kg/m (Alu).",
+  "panel.item.addTSlotBracket": "Attach bracket",
+  "panel.item.addTSlotNut": "Insert T-nut",
+  "panel.item.addTSlotEndCap": "Attach end cap",
+  "panel.item.tSlotBracketHint": "<b>Corner Bracket {series}</b> (slot {slotW}) · Leg <b>{leg}</b> × Width {w} · Bore Ø {hole} ({screw}).",
+  "panel.item.tSlotNutHint": "<b>T-Slot Nut {series}</b> (slot {slotW}) · Thread <b>{thread}</b> (core Ø {bore}) · Base {bw} × Length {L}.",
+  "panel.item.tSlotEndCapHint": "<b>End Cap {size}</b> · Cap thickness <b>{t}</b> · Pin Ø {pinD} × {pinL}.",
+  "panel.item.snapBracketToProfile": "Snap bracket to profile",
+  "panel.item.snapNutToProfile": "Snap T-nut into profile",
+  "panel.item.snapEndCapToProfile": "Snap end cap to profile",
+  "undo.tSlotSize": "T-slot profile size changed",
+  "undo.tSlotSeries": "T-slot series changed",
+  "undo.tSlotAttach": "Accessory snapped to profile",
+  "toast.tSlotAttached": "Snapped flush to “{name}”."
 }
