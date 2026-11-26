@@ -2311,6 +2311,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `exportAmfPly`, `pointCloudImport` und `importCad` in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`ply`, `amf`, `xyz`) vollständig ohne JavaScript-Fehler.
 - [ ] **Von Hand**: Im Browser eine farbige PLY-Punktwolke oder ein Mesh aus MeshLab/Blender sowie eine eigene CSV-/XYZ-Messdatei per Ziehen ins Fenster öffnen, Punktgröße und Farbe rechts anpassen und „Als Skizzenpunkte übernehmen“ prüfen.
 
+## Impressum und Datenschutz (Release [R-01])
+
+- [x] **Startseite**: Unten stehen Links „Impressum“ und „Datenschutz“ (`app/impressum.html`, `app/datenschutz.html`).
+- [x] **Seiten**: Das Impressum nennt Nils Kriege, die Datenschutzerklärung nennt Hosting, Browser-Speicher und DSGVO-Rechte.
+- [x] **„Über Tracery“**: enthält den Link „Impressum & Datenschutz“.
+- [ ] **Von Hand**: Adresse und E-Mail im Impressum eingetragen, bevor die Seite online geht.
+
 ## Lizenz „Alle Rechte vorbehalten“ und fremde Bausteine (Auto [A-109], PL-02)
 
 - [x] **`LICENSE` & `docs/FREMDE-BAUSTEINE.md`**: `LICENSE` im Hauptordner enthält `© 2026 Nils Kriege`, `Alle Rechte vorbehalten` sowie das Verbot zum Nutzen, Kopieren und Verändern ohne schriftliche Erlaubnis; `docs/FREMDE-BAUSTEINE.md` führt `three.js` (`MIT`), Schrift `Inter` (`SIL Open Font License 1.1`), `replicad` (`MIT`) und `Open CASCADE Technology` (`LGPL-2.1`) samt Abschnitt „Bitte prüfen“ vollständig auf.

@@ -1,8 +1,14 @@
-# Tracery – CAD für Speed-Drohnen
+# Tracery – kostenloses CAD im Browser
 
-*Tracery* ist das englische Wort für Maßwerk: die exakt konstruierten Ornamente gotischer Kirchenfenster. Bis Oktober 2026 hieß das Programm „Maßwerk“.
+*Tracery* ist das englische Wort für Maßwerk: die exakt konstruierten Ornamente gotischer Kirchenfenster.
 
-Parametrisches CAD im Browser, spezialisiert auf FPV-/Speed-Drohnen. Exakte Geometrie mit OpenCascade (über replicad, als WebAssembly), Anzeige mit Three.js.
+Parametrisches 3D-CAD direkt im Browser – kostenlos, ohne Konto und ohne Installation. Deine Dateien bleiben auf deinem Rechner. Exakte Geometrie mit OpenCascade (über replicad, als WebAssembly), Anzeige mit Three.js.
+
+- Skizzen mit Regeln und Maßen, Formschritte (hochziehen, drehen, entlang Pfad, Übergang), Rundungen, Fasen, Gewinde, Bohrungen
+- Baugruppen mit Verbindungen und Stückliste, technische Zeichnungen mit Schnitt, Detail und Toleranzen
+- Import und Export: STEP, STL, DXF, SVG, OBJ, GLB, 3MF
+- Oberfläche „Einfach“ für Einsteiger und „Profi“ für Umsteiger aus anderen CAD-Programmen, auf Deutsch und Englisch
+- Als App installierbar und ohne Internet nutzbar
 
 ## Starten
 

@@ -68,7 +68,7 @@
   "start.emptyTitle": "Leeres Projekt",
   "start.emptyDesc": "Von null anfangen.",
   "start.templateLoaded": "Vorlage geladen. Klick einen Teil an, um ihn zu ändern.",
-  "start.footHtml": "Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).",
+  "start.footHtml": "Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).<br><a href=\"impressum.html\" target=\"_blank\" rel=\"noopener\">Impressum</a> · <a href=\"datenschutz.html\" target=\"_blank\" rel=\"noopener\">Datenschutz</a>",
   "start.tpl.box.name": "Box mit Deckel",
   "start.tpl.box.desc": "Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.",
   "start.tpl.sign.name": "Schild mit Loch",
@@ -5593,5 +5593,6 @@
   "undo.tSlotSize": "Nutprofil-Größe geändert",
   "undo.tSlotSeries": "Nutprofil-Baureihe geändert",
   "undo.tSlotAttach": "Zubehör ans Nutprofil gesetzt",
-  "toast.tSlotAttached": "Bündig an „{name}“ gesetzt."
+  "toast.tSlotAttached": "Bündig an „{name}“ gesetzt.",
+  "menu.main.legal": "Impressum & Datenschutz"
 }

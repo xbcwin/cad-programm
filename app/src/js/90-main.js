@@ -99,7 +99,8 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
       h('p', null, T('menu.main.aboutP2')),
       h('p', null, T('menu.main.aboutP3')),
       h('p', null, T('menu.main.aboutP4')),
-      h('p', { id: 'about-copyright', class: 'about-copyright' }, T('menu.main.aboutCopyright'))),
+      h('p', { id: 'about-copyright', class: 'about-copyright' }, T('menu.main.aboutCopyright')),
+      h('p', { id: 'about-legal' }, h('a', { href: 'impressum.html', target: '_blank', rel: 'noopener' }, T('menu.main.legal')))),
     actions: [
       { id: 'about-third-party', label: T('menu.main.thirdParty'), help: 'thirdPartyLibs', run: () => { setTimeout(() => openThirdPartyDialog(), 0); } },
       { label: T('common.close'), primary: true },

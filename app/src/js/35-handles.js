@@ -1026,6 +1026,8 @@ const Handles = (() => {
 
 // ---------- Maus-Bedienung ----------
 const Interact = (() => {
+  // Röntgen: Klick auf die Fläche wählt das Teil dahinter – der Griff „Fläche verschieben“ darf ihn nicht abfangen
+  const throughXray = (hnd) => (hnd && Viewer.xray && hnd.userData && hnd.userData.kind === 'faceDirect' ? null : hnd);
   let down = null, moving = null, hoverTimer = 0, lastHover = null, rdown = null, band = null;
   const activeTouches = new Map();
   let touchMulti = false, longPressTimer = 0, longPressOpened = null;
@@ -1091,7 +1093,7 @@ const Interact = (() => {
     if (!modelActive()) return;
     const isTouch = e.pointerType === 'touch';
     if (!isTouch && e.button !== 0) return;
-    const hnd = !(e.altKey && !App.ctx) ? Handles.hitHandle(e.clientX, e.clientY) : null;
+    const hnd = !(e.altKey && !App.ctx) ? throughXray(Handles.hitHandle(e.clientX, e.clientY)) : null;
     if (hnd) {
       Viewer.controls.enabled = false;
       if (Handles.start(hnd, e)) { down = { handle: true, touch: isTouch, id: e.pointerId }; try { Viewer.canvas.setPointerCapture(e.pointerId); } catch (_) {} }
@@ -1168,7 +1170,7 @@ const Interact = (() => {
     // Hover
     cancelAnimationFrame(hoverTimer);
     hoverTimer = requestAnimationFrame(() => {
-      const hnd = !(e.altKey && !App.ctx) ? Handles.hitHandle(e.clientX, e.clientY) : null;
+      const hnd = !(e.altKey && !App.ctx) ? throughXray(Handles.hitHandle(e.clientX, e.clientY)) : null;
       Handles.hover(hnd);
       if (hnd) { Viewer.canvas.style.cursor = hnd.userData.kind === 'rot' || hnd.userData.kind === 'revAngle' ? 'grab' : 'pointer'; Viewer.clearHover(); return; }
       const hit = Select.adjust(Viewer.pick(e.clientX, e.clientY, Select.pickOpts()));

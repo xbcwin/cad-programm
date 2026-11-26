@@ -22369,6 +22369,20 @@ def t_a107_abbrechen_meldungen(p):
 
 
 # ---------- [A-109] Lizenz „Alle Rechte vorbehalten“ & Fremde Bausteine ----------
+def t_r01_impressum_datenschutz(p):
+    # [R-01] Release: Impressum und Datenschutz auf der Startseite und in „Über Tracery“
+    foot = p.pg.locator('.start-foot')
+    ok1 = foot.locator('a[href="impressum.html"]').count() == 1 and foot.locator('a[href="datenschutz.html"]').count() == 1
+    r1 = p.pg.request.get(URL + 'impressum.html'); r2 = p.pg.request.get(URL + 'datenschutz.html')
+    t1 = r1.text() if r1.ok else ''; t2 = r2.text() if r2.ok else ''
+    ok2 = 'Impressum' in t1 and 'Nils Kriege' in t1 and 'DSGVO' in t2 and 'impressum.html' in t2
+    p.empty()
+    p.pg.locator('#btn-menu').click(); p.wait(250)
+    p.pg.locator('.menu button').filter(has_text='Über Tracery').first.click(); p.wait(300)
+    ok3 = p.pg.locator('#about-legal a[href="impressum.html"]').count() == 1
+    return [ok1, ok2, ok3]
+
+
 def t_a109_lizenz_fremde_bausteine(p):
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     lic_path = os.path.join(repo_root, 'LICENSE')
@@ -31994,6 +32008,8 @@ def t_a161_bohrung_stapel_baugruppe(p):
     p.wait(200)
     p.pg.select_option('#sh-scope', 'selected')
     p.wait(150)
+    # Unter Last baut sich das Panel erst nach dem Rechnen neu auf – auf das Kästchen warten statt fest 150 ms
+    p.pg.wait_for_selector('input[data-sh-target="%s"]' % ids['p1'], state='attached', timeout=20000)
     p.ev("document.querySelector('input[data-sh-target=\"' + arg + '\"]').click()", ids['p1'])
     warte_rechnen(p, 30)
 
@@ -43940,6 +43956,7 @@ TESTS = [
     ('[A-108] Einstellungen speichern/laden & Oberflächen-Größe (BE-30, BE-31)', t_a108_einstellungen_groesse),
     ('[A-107] Rechnen abbrechen & Meldungs-Zentrale (BE-27, BE-25)', t_a107_abbrechen_meldungen),
     ('[A-109] Lizenz „Alle Rechte vorbehalten“ & Fremde Bausteine (PL-02)', t_a109_lizenz_fremde_bausteine),
+    ('[R-01] Impressum und Datenschutz', t_r01_impressum_datenschutz),
     ('[A-111] Spline mit Kontrollpunkten und Tangenten-Griffen (SK-32, SK-33)', t_spline_kontrollpunkte_griffe),
     ('[A-112] Krümmungskamm und Regel „krümmungsglatt“ (SK-34, SK-35)', t_a112_kruemmung_g2),
     ('[A-110] Strecken und Live-Spiegeln (SK-30, SK-46)', t_a110_strecken_live_spiegeln),

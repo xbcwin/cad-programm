@@ -68,7 +68,7 @@
   "start.emptyTitle": "Empty Project",
   "start.emptyDesc": "Start from scratch.",
   "start.templateLoaded": "Template loaded. Click a part to edit it.",
-  "start.footHtml": "Projects are saved automatically in this browser. To keep and share safely: <b>Save project as file</b>.<br>Tracery computes with OpenCascade (LGPL-2.1) via replicad (MIT) and renders 3D with three.js (MIT).",
+  "start.footHtml": "Projects are saved automatically in this browser. To keep and share safely: <b>Save project as file</b>.<br>Tracery computes with OpenCascade (LGPL-2.1) via replicad (MIT) and renders 3D with three.js (MIT).<br><a href=\"impressum.html\" target=\"_blank\" rel=\"noopener\">Legal notice</a> · <a href=\"datenschutz.html\" target=\"_blank\" rel=\"noopener\">Privacy</a>",
   "start.tpl.box.name": "Box with Lid",
   "start.tpl.box.desc": "With dimensions like wall thickness and clearance – change them and everything adapts.",
   "start.tpl.sign.name": "Sign with Hole",
@@ -5593,5 +5593,6 @@
   "undo.tSlotSize": "T-slot profile size changed",
   "undo.tSlotSeries": "T-slot series changed",
   "undo.tSlotAttach": "Accessory snapped to profile",
-  "toast.tSlotAttached": "Snapped flush to “{name}”."
+  "toast.tSlotAttached": "Snapped flush to “{name}”.",
+  "menu.main.legal": "Legal notice & privacy"
 }
