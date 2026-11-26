@@ -260,7 +260,14 @@ const Handles = (() => {
       const txt = fmtAngleU(fr.angle);
       const el = h('div', { class: 'dimlabel', title: 'Klicken und genauen Winkel eintippen' }, txt);
       bindLabelPass(el);
-      el.addEventListener('click', (e) => { e.stopPropagation(); editFaceStepAngle(el, hm); });
+      el.addEventListener('click', (e) => {
+        if (!el.classList.contains('editing') && e.altKey && !App.ctx) {
+          e.stopPropagation();
+          Interact.selectBehind(e.clientX, e.clientY);
+          return;
+        }
+        e.stopPropagation(); editFaceStepAngle(el, hm);
+      });
       overlayEl.append(el); labels.push({ el, handle: hm });
       scaleHandles(); placeLabels();
       return;
@@ -277,7 +284,14 @@ const Handles = (() => {
       : prefix + (val > 0 ? '+' : '') + (Units.key() === 'mm' ? Units.fmtLen(val) : Units.fmtLenU(val));
     const el = h('div', { class: 'dimlabel face-direct-tip', title: 'Klicken und genauen Wert eintippen' }, txt);
     bindLabelPass(el);
-    el.addEventListener('click', (e) => { e.stopPropagation(); editFaceStepLabel(el, hm); });
+    el.addEventListener('click', (e) => {
+      if (!el.classList.contains('editing') && e.altKey && !App.ctx) {
+        e.stopPropagation();
+        Interact.selectBehind(e.clientX, e.clientY);
+        return;
+      }
+      e.stopPropagation(); editFaceStepLabel(el, hm);
+    });
     overlayEl.append(el); labels.push({ el, handle: hm });
     scaleHandles(); placeLabels();
   }
@@ -1077,14 +1091,14 @@ const Interact = (() => {
     if (!modelActive()) return;
     const isTouch = e.pointerType === 'touch';
     if (!isTouch && e.button !== 0) return;
-    const hnd = Handles.hitHandle(e.clientX, e.clientY);
+    const hnd = !(e.altKey && !App.ctx) ? Handles.hitHandle(e.clientX, e.clientY) : null;
     if (hnd) {
       Viewer.controls.enabled = false;
       if (Handles.start(hnd, e)) { down = { handle: true, touch: isTouch, id: e.pointerId }; try { Viewer.canvas.setPointerCapture(e.pointerId); } catch (_) {} }
       return;
     }
     // gewähltes Unterobjekt (z. B. ein Loch in einer Gruppe) direkt ziehen
-    if (!isTouch && App.sel.length === 1 && !App.doc.items.find((x) => x.id === App.sel[0])) {
+    if (!isTouch && !(e.altKey && !App.ctx) && App.sel.length === 1 && !App.doc.items.find((x) => x.id === App.sel[0])) {
       const gh = Viewer.pickGhost(e.clientX, e.clientY);
       if (gh && gh.id === App.sel[0]) {
         const f = Model.find(App.doc, gh.id);
@@ -1154,7 +1168,7 @@ const Interact = (() => {
     // Hover
     cancelAnimationFrame(hoverTimer);
     hoverTimer = requestAnimationFrame(() => {
-      const hnd = Handles.hitHandle(e.clientX, e.clientY);
+      const hnd = !(e.altKey && !App.ctx) ? Handles.hitHandle(e.clientX, e.clientY) : null;
       Handles.hover(hnd);
       if (hnd) { Viewer.canvas.style.cursor = hnd.userData.kind === 'rot' || hnd.userData.kind === 'revAngle' ? 'grab' : 'pointer'; Viewer.clearHover(); return; }
       const hit = Select.adjust(Viewer.pick(e.clientX, e.clientY, Select.pickOpts()));

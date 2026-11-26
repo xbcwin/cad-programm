@@ -5560,7 +5560,10 @@ def t_a001_drohnen_unsichtbar(p):
     p.pg.keyboard.press('Escape'); p.wait(150)
     p.pg.locator('#t-parts').click(); p.wait(300)
     parts_txt = (p.pg.locator('.flyout').text_content() or '').replace('\u00ad', '').lower()
-    no_drone_parts = all(w not in parts_txt for w in ['motorverkleidung', 'armverkleidung', 'stromlinien-rumpf', 'gopro', 'xt60', 'antennenhalter', 'lochbild'])
+    no_drone_parts = (
+        all(w not in parts_txt for w in ['motorverkleidung', 'armverkleidung', 'stromlinien-rumpf', 'gopro', 'xt60', 'antennenhalter'])
+        and all(p.pg.locator(f'.flyout [data-lib="{lib}"]').count() == 0 for lib in ['holePattern', 'goproMount', 'xt60Holder', 'antennaMount', 'aeroBody', 'armFairing', 'motorFairing'])
+    )
     keep_general = all(w in parts_txt for w in ['schraubenloch', 'zahnrad', 'scharnier', 'schnapphaken', 'gewindebolzen', 'schraube (norm)', 'mutter (norm)'])
     p.pg.keyboard.press('Escape'); p.wait(150)
     ok2 = no_btn and no_wind and no_drone_parts and keep_general
@@ -43692,6 +43695,33 @@ def t_a208_alu_nutprofile(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_f11260617(p):
+    # 1. Alt-Klick geht auch dann zum Teil dahinter durch, wenn genau unter dem Mauszeiger der Direkt-Bearbeiten-Griff (faceDirect) liegt
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:30,d:10,h:30},{name:'Deckel'}); a.t.y=-20; d.items.push(a); const b=Model.newItem('box',{w:10,d:10,h:10},{name:'Platine'}); b.t.y=10; b.t.z=10; d.items.push(b); })")
+    warte_rechnen(p)
+    p.ev("App.clearSelection(); Viewer.setView('front', false)"); p.wait(900)
+    x, y = world_screen(p, 0, -25, 15)
+    names = lambda: p.ev("return App.sel.map(id=>Model.find(App.doc,id).item.name)")
+    p.pg.mouse.click(x, y); p.wait(350); n1 = names()
+    hnd_at_mid = p.ev("return Handles.debugKinds().includes('faceDirect') && Handles.hitHandle(arg[0], arg[1])?.userData?.kind === 'faceDirect'", [x, y])
+    p.pg.keyboard.down('Alt'); p.pg.mouse.click(x, y); p.pg.keyboard.up('Alt'); p.wait(350); n2 = names()
+    p.pg.keyboard.down('Alt'); p.pg.mouse.click(x, y); p.pg.keyboard.up('Alt'); p.wait(350); n3 = names()
+    kinds_after = p.ev("return App.doc.items.map(it => it.kind)")
+    errs_after = p.ev("return App.errors.length")
+    ok1 = bool(n1 == ['Deckel'] and hnd_at_mid and n2 == ['Platine'] and n3 == ['Deckel'] and kinds_after == ['box', 'box'] and errs_after == 0)
+
+    # 2. Bauteil-Flyout zeigt das allgemeine Norm-Lochbild (#add-mount-pattern), waehrend Drohnen-holePattern & Co. verborgen bleiben
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    mp_cnt = p.pg.locator('.flyout #add-mount-pattern').count()
+    drone_libs = ['holePattern', 'goproMount', 'xt60Holder', 'antennaMount', 'aeroBody', 'armFairing', 'motorFairing']
+    no_drone_tiles = all(p.pg.locator(f'.flyout [data-lib="{lib}"]').count() == 0 for lib in drone_libs)
+    p.pg.keyboard.press('Escape'); p.wait(150)
+    ok2 = bool(mp_cnt == 1 and no_drone_tiles)
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -44016,6 +44046,7 @@ TESTS = [
     ('[A-209] Profile, Schritt 3: Gestell aus Linien (PR-03, PR-06)', t_a209_gestell_aus_linien),
     ('[A-205] Direkt bearbeiten: Formen in Importteilen erkennen (DB-08)', t_a205_formen_erkennen),
     ('[A-208] Profile, Schritt 2: Alu-Nutprofile mit Zubehör (PR-02)', t_a208_alu_nutprofile),
+    ('[F-11260617] Volltest-Reparatur: Alt-Klick durch Direkt-Bearbeiten-Griff / Bibliothek zeigt Norm-Lochbild ohne Drohnen-holePattern', t_f11260617),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

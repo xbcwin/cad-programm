@@ -3120,6 +3120,11 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Alle Baureihen 20, 30, 40, 45 (Nut 6/8/10) inkl. Doppelprofil 20×40 (2 Bohrungen) und Zubehör (inkl. Winkel mit Zentriernasen) bestehen `GeomCheck` = 0 Fehler; Rückgängig/Wiederherstellen, Validierung, Hilfen, Erklärungen und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-208]`)
 - [ ] **Von Hand**: Im Browser im Einfach- und Profi-Modus ein Alu-Nutprofil 30×30 oder 40×40 einfügen, Winkel, Nutenstein und Endkappe per Knopf ans Profil setzen und im 3D-Blick (auch im Schnitt) prüfen.
 
+## Volltest-Reparatur (Auto [F-11260617])
+- [x] `Alt`-Klick durch einen direkt vor der Kamera liegenden `faceDirect`-Anfasser wählt das Teil dahinter (`Platine` → `Deckel`) ohne unbeabsichtigten `directFace`-Schritt (`Teil dahinter`, `[F-11241523]`, `[F-11260617]`)
+- [x] Bauteil-Flyout `#t-parts` zeigt das allgemeine Norm-Lochbild (`#add-mount-pattern`) ohne die ausgeblendeten Drohnen-Teile (`holePattern`, `goproMount`, `xt60Holder`, `antennaMount`, `aeroBody`, `armFairing`, `motorFairing`) (`[A-001]`, `[F-11260617]`)
+- [ ] **Von Hand**: Im Browser in Frontansicht auf einen Körper klicken (Profi-Modus), mit gedrückter `Alt`-Taste direkt auf den grünen Flächen-Pfeil klicken → dahinterliegender Körper wird gewählt; ohne `Alt` lässt sich der Pfeil wie gewohnt ziehen.
+
 ## Fehler melden
 
 ```
