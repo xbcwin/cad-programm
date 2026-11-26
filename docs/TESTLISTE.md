@@ -3031,6 +3031,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Einfach- und Profi-Oberfläche, Befehlssuche, GeomCheck, Rückgängig/Wiederherstellen, Hilfetexte, Erklärungen und DE/EN-Texte geprüft (Klicktest `[A-196]`)
 - [ ] **Von Hand**: Im Browser ein DN25-Rohr mit Bogen, T-Stück und Flansch sowie einen GT2-Riemen um zwei Zahnriemenscheiben im 3D-Bild optisch prüfen.
 
+## Bibliothek: Logo aus SVG und RAL-Farben (Auto [A-194], BI-24, BI-25)
+- [x] SVG-Logo (`svgLogo`, `SvgLogo`): Standard-Symbol und kleine `.svg`-Datei mit Loch bauen in Einfach und Profi als erhabener Körper (`relief`), auf abgerundeter Platte (`emboss` / `deboss`) und als Prägung auf einer Körperfläche ohne Geometriefehler (Klicktest `[A-194]`)
+- [x] RAL-Farbtafel (`RalColors`): Suche nach `3020` / `Verkehrsrot` im Dialog `#ral-picker-dlg` setzt Körperfarbe `#bb1e10` (`it.ral = '3020'`) samt `#item-ral-badge`, Flächenfarbe und Rückgängig/Wiederherstellen (Klicktest `[A-194]`)
+- [x] Befehlssuche (`svgLogo`, `ral-colors`), Speichern/Laden, Hilfetexte (`HELP.svgLogo`, `HELP.ralColors`), Erklärungen und DE/EN-Texte geprüft (Klicktest `[A-194]`)
+- [ ] **Von Hand**: Im Browser ein eigenes Vereins- oder Firmen-Logo als `.svg` laden, einmal auf einer Platte vertieft und einmal als Prägung auf einen Quader setzen sowie im 3D-Bild mit RAL 3020 Verkehrsrot und RAL 7016 Anthrazitgrau einfärben.
+
 ## Fehler melden
 
 ```

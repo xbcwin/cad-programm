@@ -599,6 +599,9 @@ const Panels = (() => {
       const bcBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-barcode', 'data-help': 'barcode', 'data-tip': T('tool.fly.barcodeTip') });
       bcBtn.innerHTML = icon('barcode') + esc(T('tool.fly.barcode'));
       bcBtn.onclick = () => { Actions.addPart(LIBMAP.barcode, libDefaults(LIBMAP.barcode)); closeFlyout(); };
+      const svgBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-svg-logo', 'data-help': 'svgLogo', 'data-tip': T('tool.fly.svgLogoTip') });
+      svgBtn.innerHTML = icon('svgLogo') + esc(T('tool.fly.svgLogo'));
+      svgBtn.onclick = () => { Actions.addPart(LIBMAP.svgLogo, libDefaults(LIBMAP.svgLogo)); closeFlyout(); };
       const spBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-std-pipe', 'data-help': 'stdPipe', 'data-tip': T('tool.fly.stdPipeTip') });
       spBtn.innerHTML = icon('stdPipe') + esc(T('tool.fly.stdPipe'));
       spBtn.onclick = () => { Actions.addPart(LIBMAP.stdPipe, libDefaults(LIBMAP.stdPipe)); closeFlyout(); };
@@ -617,7 +620,7 @@ const Panels = (() => {
       const scBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-std-chain', 'data-help': 'stdChain', 'data-tip': T('tool.fly.stdChainTip') });
       scBtn.innerHTML = icon('stdChain') + esc(T('tool.fly.stdChain'));
       scBtn.onclick = () => { Actions.addPart(LIBMAP.stdChain, libDefaults(LIBMAP.stdChain)); closeFlyout(); };
-      stepRow.append(mpBtn, pcBtn, mpkBtn, bhBtn, phBtn, rkBtn, tsBtn, dfBtn, encBtn, npBtn, qrBtn, bcBtn, spBtn, peBtn, ptBtn, pfBtn, sbBtn, scBtn);
+      stepRow.append(mpBtn, pcBtn, mpkBtn, bhBtn, phBtn, rkBtn, tsBtn, dfBtn, encBtn, npBtn, qrBtn, bcBtn, svgBtn, spBtn, peBtn, ptBtn, pfBtn, sbBtn, scBtn);
       el.append(stepRow);
       if (stds.length) {
         el.append(h('h3', { class: 'pro' }, T('fly.stdParts')));
@@ -778,6 +781,18 @@ const Panels = (() => {
     free.addEventListener('change', () => { UI.closePop(); Actions.setBody(itemId, bodyIdx, { color: free.value.toLowerCase() }); });
     row.append(h('label', { class: 'color-free', 'data-tip': T('panel.color.anyTip') }, free));
     box.append(row);
+    if (typeof RalColors !== 'undefined') {
+      const ralBtn = h('button', { type: 'button', class: 'btn small body-ral-btn', 'data-help': 'ralColors' });
+      ralBtn.innerHTML = icon('palette') + esc(T('ral.openBtn'));
+      ralBtn.onclick = () => {
+        UI.closePop();
+        RalColors.openDialog({
+          currentColor: curColor,
+          onPick: (entry) => Actions.setBody(itemId, bodyIdx, { color: entry.hex }),
+        });
+      };
+      box.append(ralBtn);
+    }
     if (hasOwnColor) {
       const rst = h('button', { type: 'button', class: 'btn ghost small body-color-reset' });
       rst.innerHTML = icon('undo') + esc(T('left.tree.bodyColorOwn'));
@@ -2043,7 +2058,7 @@ const Panels = (() => {
       const b = h('button', { type: 'button', class: 'btn small' }, l); b.onclick = () => Actions.align(null, m); ar.append(b);
     }
     al.append(ar); w.append(al);
-    w.append(colorSection((c) => App.change('Farbe geändert', (doc) => { for (const f of found) { const tgt = Model.find(doc, f.item.id).item; if (c) { tgt.color = c; tgt.colorSet = true; } else delete tgt.colorSet; } }), found[0].item.color, found.some((f) => f.item.colorSet)));
+    w.append(colorSection((c, ralEntry) => App.change('Farbe geändert', (doc) => { for (const f of found) { const tgt = Model.find(doc, f.item.id).item; if (c) { tgt.color = c; tgt.colorSet = true; const r = ralEntry || (typeof RalColors !== 'undefined' ? RalColors.byHex(c) : null); if (r) tgt.ral = r.code; else delete tgt.ral; } else { delete tgt.colorSet; delete tgt.ral; } } }), found[0].item.color, found.some((f) => f.item.colorSet)));
     body.append(w);
   }
   // Formschritt mit Modus: eigener Körper oder mit einem früheren Körper verrechnen (nur Teile ganz oben im Verlauf)
@@ -2076,14 +2091,35 @@ const Panels = (() => {
   function colorSection(onPick, cur, set, it) {
     const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('panel.color.title')));
     const row = h('div', { class: 'colors' });
-    for (const c of COLORS) { const b = h('button', { type: 'button', 'aria-label': c.n, 'data-tip': c.n, 'aria-pressed': c.c === cur ? 'true' : 'false', style: { background: c.c } }); b.onclick = () => onPick(c.c); row.append(b); }
+    for (const c of COLORS) { const b = h('button', { type: 'button', 'aria-label': c.n, 'data-tip': c.n, 'aria-pressed': c.c === cur ? 'true' : 'false', style: { background: c.c } }); b.onclick = () => onPick(c.c, null); row.append(b); }
     const free = h('input', { type: 'color', id: 'item-color', value: /^#[0-9a-f]{6}$/i.test(cur || '') ? cur : '#2f9e91', 'aria-label': T('panel.color.own'), 'data-tip': T('panel.color.own') });
-    free.addEventListener('change', () => onPick(free.value.toLowerCase()));
+    free.addEventListener('change', () => onPick(free.value.toLowerCase(), null));
     row.append(h('label', { class: 'color-free', 'data-tip': T('panel.color.anyTip') }, free));
     sec.append(row);
+    if (typeof RalColors !== 'undefined') {
+      const curHex = typeof cur === 'string' ? cur.trim().toLowerCase() : '';
+      let ralHit = it && it.ral ? RalColors.byCode(it.ral) : null;
+      if (ralHit && curHex && ralHit.hex !== curHex) ralHit = null;
+      if (!ralHit && curHex && set !== false) ralHit = RalColors.byHex(curHex);
+      const ralRow = h('div', { class: 'ral-row' });
+      const ralBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-ral-picker', 'data-help': 'ralColors' });
+      ralBtn.innerHTML = icon('palette') + esc(T('ral.openBtn'));
+      ralBtn.onclick = () => RalColors.openDialog({
+        currentColor: cur,
+        currentRal: ralHit ? ralHit.code : null,
+        onPick: (entry) => { onPick(entry.hex, entry); renderRight(); },
+      });
+      ralRow.append(ralBtn);
+      if (ralHit) {
+        ralRow.append(h('span', { id: 'item-ral-badge', class: 'ral-active-badge' },
+          h('i', { style: { background: ralHit.hex } }),
+          h('span', null, `${ralHit.ral} · ${RalColors.labelOf(ralHit)}`)));
+      }
+      sec.append(ralRow);
+    }
     const L = it ? Viewer.lookOf(it.mat || (App.doc.settings && App.doc.settings.material)) : null;
     if (L && L.nat) {
-      if (set) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'item-color-mat' }); b.innerHTML = icon('undo') + esc(T('panel.color.fromMat')); b.onclick = () => onPick(null); sec.append(h('div', { class: 'btn-row' }, b)); }
+      if (set) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'item-color-mat' }); b.innerHTML = icon('undo') + esc(T('panel.color.fromMat')); b.onclick = () => onPick(null, null); sec.append(h('div', { class: 'btn-row' }, b)); }
       else sec.append(h('div', { class: 'hint-box' }, T('panel.color.matHint', { mat: it.mat || App.doc.settings.material })));
     }
     return sec;
@@ -2708,6 +2744,33 @@ const Panels = (() => {
             bars: m.barCount, mods: m.totalModules,
             w: Units.fmtLenU(m.outerW, 1), h: Units.fmtLenU(m.outerH, 1), totalH: Units.fmtLenU(m.totalH, 2),
           }) }));
+        } else if (def.lib === 'svgLogo' && typeof svgLogoMetrics === 'function') {
+          const rp = { ...Model.resolveP(it.p, V), svg: it.p.svg, fileName: it.p.fileName };
+          const m = svgLogoMetrics(rp);
+          sec.append(h('div', { id: 'p-svglogo-hint', class: 'hint-box', html: T('panel.item.svgLogoHint', {
+            src: esc(m.sourceLabel),
+            lw: Units.fmtLenU(m.logoW, 1), lh: Units.fmtLenU(m.logoH, 1),
+            ow: Units.fmtLenU(m.outerW, 1), oh: Units.fmtLenU(m.outerH, 1), totalH: Units.fmtLenU(m.totalH, 2),
+            cnt: m.regionsCount,
+          }) }));
+          const fileInp = h('input', { type: 'file', id: 'lp-svglogo-file', accept: '.svg,image/svg+xml', style: { display: 'none' } });
+          fileInp.onchange = () => {
+            const f = fileInp.files && fileInp.files[0];
+            if (f && typeof SvgLogo !== 'undefined') SvgLogo.loadFileIntoItem(it.id, f);
+            fileInp.value = '';
+          };
+          const row = h('div', { class: 'btn-row' });
+          const loadBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-svglogo-load', 'data-help': 'svgLogo' });
+          loadBtn.innerHTML = icon('folder') + esc(T('svgLogo.loadBtn'));
+          loadBtn.onclick = () => fileInp.click();
+          const pasteBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-svglogo-paste', 'data-help': 'svgLogo' });
+          pasteBtn.innerHTML = icon('svgLogo') + esc(T('svgLogo.pasteBtn'));
+          pasteBtn.onclick = () => SvgLogo.openPasteDialog(it.id);
+          const embBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-svglogo-emboss', 'data-help': 'svgLogo' });
+          embBtn.innerHTML = icon('emboss') + esc(T('svgLogo.embossBtn'));
+          embBtn.onclick = () => SvgLogo.startEmbossFromItem(it.id);
+          row.append(loadBtn, pasteBtn, embBtn);
+          sec.append(fileInp, row);
         } else if (def.lib === 'timingPulley' && typeof timingPulleyMetrics === 'function') {
           const rp = Model.resolveP(it.p, V);
           const m = timingPulleyMetrics(rp);
@@ -3558,7 +3621,7 @@ const Panels = (() => {
       w.append(ks);
     }
     if (!isMoveOnly) {
-      w.append(colorSection((c) => App.change(c ? 'Farbe geändert' : 'Farbe vom Werkstoff', (doc) => { const tgt = Model.find(doc, it.id).item; if (c) { tgt.color = c; tgt.colorSet = true; } else delete tgt.colorSet; }), it.color, !!it.colorSet, it));
+      w.append(colorSection((c, ralEntry) => App.change(c ? 'Farbe geändert' : 'Farbe vom Werkstoff', (doc) => { const tgt = Model.find(doc, it.id).item; if (c) { tgt.color = c; tgt.colorSet = true; const r = ralEntry || (typeof RalColors !== 'undefined' ? RalColors.byHex(c) : null); if (r) tgt.ral = r.code; else delete tgt.ral; } else { delete tgt.colorSet; delete tgt.ral; } }), it.color, !!it.colorSet, it));
       // Farbe der gewählten Fläche(n)
       const sfs = !isRef ? (App.faces || []).filter((x) => x.id === it.id).map((x) => {
         const r = App.results.get(x.id);
@@ -3582,6 +3645,23 @@ const Panels = (() => {
         free.addEventListener('change', () => setFace(free.value.toLowerCase()));
         row.append(h('label', { class: 'color-free', 'data-tip': T('panel.color.anyTip') }, free));
         fsec.append(row);
+        if (typeof RalColors !== 'undefined') {
+          const fRalHit = cur ? RalColors.byHex(cur.col) : null;
+          const fRalRow = h('div', { class: 'ral-row' });
+          const fRalBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-face-ral-picker', 'data-help': 'ralColors' });
+          fRalBtn.innerHTML = icon('palette') + esc(T('ral.openBtn'));
+          fRalBtn.onclick = () => RalColors.openDialog({
+            currentColor: cur ? cur.col : null,
+            onPick: (entry) => { setFace(entry.hex); renderRight(); },
+          });
+          fRalRow.append(fRalBtn);
+          if (fRalHit) {
+            fRalRow.append(h('span', { id: 'face-ral-badge', class: 'ral-active-badge' },
+              h('i', { style: { background: fRalHit.hex } }),
+              h('span', null, `${fRalHit.ral} · ${RalColors.labelOf(fRalHit)}`)));
+          }
+          fsec.append(fRalRow);
+        }
         if (cur) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'face-color-off' }); b.innerHTML = icon('undo') + esc(T('panel.faceCol.remove')); b.onclick = () => setFace(null); fsec.append(h('div', { class: 'btn-row' }, b)); }
         w.append(fsec);
       }

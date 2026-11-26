@@ -1104,6 +1104,10 @@ const Model = (() => {
             o.p.spec = qrCodeSpec(o.p, { asHole: it.role === 'hole' });
           } else if (o.p.lib === 'barcode' && typeof barcodeSpec === 'function') {
             o.p.spec = barcodeSpec(o.p, { asHole: it.role === 'hole' });
+          } else if (o.p.lib === 'svgLogo' && typeof svgLogoSpec === 'function') {
+            const rawP = { ...o.p, svg: it.p && typeof it.p.svg === 'string' ? it.p.svg : undefined, fileName: it.p && typeof it.p.fileName === 'string' ? it.p.fileName : undefined };
+            o.p.spec = svgLogoSpec(rawP, { asHole: it.role === 'hole' });
+            delete o.p.svg;
           } else if (o.p.lib === 'timingPulley' && typeof timingPulleyMetrics === 'function') {
             o.p.spec = timingPulleyMetrics(o.p);
           } else if (o.p.lib === 'sprocket' && typeof sprocketMetrics === 'function') {
@@ -2759,6 +2763,7 @@ const Model = (() => {
         if (L === 'nameplate') { const m = typeof nameplateMetrics === 'function' ? nameplateMetrics(p) : { w: 60, h: 30, totalH: 3.2 }; return [-m.w / 2, -m.h / 2, 0, m.w / 2, m.h / 2, m.totalH]; }
         if (L === 'qrCode') { const m = typeof qrCodeMetrics === 'function' ? qrCodeMetrics(p) : { outerW: 36, outerH: 36, totalH: 2.8 }; return [-m.outerW / 2, -m.outerH / 2, 0, m.outerW / 2, m.outerH / 2, m.totalH]; }
         if (L === 'barcode') { const m = typeof barcodeMetrics === 'function' ? barcodeMetrics(p) : { outerW: 50, outerH: 24, totalH: 2.8 }; return [-m.outerW / 2, -m.outerH / 2, 0, m.outerW / 2, m.outerH / 2, m.totalH]; }
+        if (L === 'svgLogo') { const m = typeof svgLogoMetrics === 'function' ? svgLogoMetrics(p) : { outerW: 30, outerH: 30, totalH: 2 }; return [-m.outerW / 2, -m.outerH / 2, 0, m.outerW / 2, m.outerH / 2, m.totalH]; }
         if (L === 'timingPulley') { const m = typeof timingPulleyMetrics === 'function' ? timingPulleyMetrics(p) : { outerD: 16, totalH: 14 }; const r = m.outerD / 2; return [-r, -r, 0, r, r, m.totalH]; }
         if (L === 'sprocket') { const m = typeof sprocketMetrics === 'function' ? sprocketMetrics(p) : { da: 66, totalH: 7.2 }; const r = m.da / 2; return [-r, -r, 0, r, r, m.totalH]; }
         if (L === 'pullHandle') { const m = typeof pullHandleMetrics === 'function' ? pullHandleMetrics(p) : { outerW: 108, outerD: 12, outerH: 35 }; return [-m.outerW / 2, -m.outerD / 2, 0, m.outerW / 2, m.outerD / 2, m.outerH]; }
@@ -3083,6 +3088,7 @@ const Model = (() => {
         if (L === 'nameplate' && typeof nameplateMetrics === 'function') { const m = nameplateMetrics(p); return `${f(m.w)} × ${f(m.h)}${u} · ${m.mode === 'deboss' ? 'vertieft' : 'erhaben'}`; }
         if (L === 'qrCode' && typeof qrCodeMetrics === 'function') { const m = qrCodeMetrics(p); return `V${m.version} (${m.modules}×${m.modules}) · ${f(m.outerW)}${u}`; }
         if (L === 'barcode' && typeof barcodeMetrics === 'function') { const m = barcodeMetrics(p); return `${m.formatLabel} · ${f(m.outerW)} × ${f(m.outerH)}${u}`; }
+        if (L === 'svgLogo' && typeof svgLogoMetrics === 'function') { const m = svgLogoMetrics(p); return `${f(m.outerW)} × ${f(m.outerH)}${u} · ${m.mode === 'deboss' ? 'vertieft' : m.mode === 'emboss' ? 'Platte + erhaben' : 'erhaben'}`; }
         if (L === 'timingPulley' && typeof timingPulleyMetrics === 'function') { const m = timingPulleyMetrics(p); return `${m.profile} · ${m.z} Z · Ø ${f(m.dp)}${u}`; }
         if (L === 'sprocket' && typeof sprocketMetrics === 'function') { const m = sprocketMetrics(p); return `${m.chainLabelShort} · ${m.z} Z · Ø ${f(m.dp)}${u}`; }
         if (L === 'pullHandle' && typeof pullHandleMetrics === 'function') { const m = pullHandleMetrics(p); return `${f(m.holeDist)} × ${f(m.height)} · Ø ${f(m.gripD)}${u}`; }

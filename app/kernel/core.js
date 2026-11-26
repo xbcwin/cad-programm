@@ -5079,6 +5079,31 @@ export function createKernel(R, oc) {
     const bars = rects.map((r) => R.makeBox([r.x0, r.y0, zBot], [r.x1, r.y1, zTop]));
     return batchPlateRelief(plate, bars, mode);
   }
+  function buildSvgLogo(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const regions = Array.isArray(sp.regions) ? sp.regions : [];
+    if (!regions.length) throw new Error('SVG-Logo: Keine geschlossene Kontur vorhanden.');
+    const mode = sp.mode === 'emboss' || sp.mode === 'deboss' ? sp.mode : 'relief';
+    const effDepth = pos(sp.effDepth, pos(p.depth, 2));
+
+    if (mode === 'relief') {
+      const z0 = sp.asHole ? -effDepth : 0;
+      const dz = sp.asHole ? (effDepth + LIFT) : effDepth;
+      const solids = extrudeRegionsZ(regions, z0, dz);
+      if (!solids.length) throw new Error('SVG-Logo: Aus den Konturen konnte kein Körper gebaut werden.');
+      return solids.length === 1 ? solids[0] : R.makeCompound(solids);
+    }
+
+    const outerW = pos(sp.outerW, 38);
+    const outerH = pos(sp.outerH, 38);
+    const baseH = pos(sp.baseH, pos(p.baseH, 2));
+    const cornerR = Math.max(0, num(sp.cornerR, num(p.cornerR, 2)));
+    const plate = makeRoundedRectPlate(outerW, outerH, baseH, cornerR);
+    const z0 = mode === 'deboss' ? baseH + 0.05 : baseH - 0.05;
+    const dz = mode === 'deboss' ? -(effDepth + 0.05) : effDepth + 0.05;
+    const solids = extrudeRegionsZ(regions, z0, dz);
+    return batchPlateRelief(plate, solids, mode);
+  }
   function buildStdORing(p) {
     const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
     const d1 = pos(sp.d1, pos(p.d1, 20));
@@ -5315,6 +5340,7 @@ export function createKernel(R, oc) {
     if (lib === 'nameplate') return buildNameplate(p);
     if (lib === 'qrCode') return buildQrCode(p);
     if (lib === 'barcode') return buildBarcode(p);
+    if (lib === 'svgLogo') return buildSvgLogo(p);
     if (lib === 'stdPipe') return buildStdPipe(p);
     if (lib === 'pipeElbow') return buildPipeElbow(p);
     if (lib === 'pipeTee') return buildPipeTee(p);
