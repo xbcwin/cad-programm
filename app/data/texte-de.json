@@ -5371,6 +5371,7 @@
   "ral.pickedToast": "{code} ({name}) gewählt",
   "ral.selectBodyFirst": "Wähl zuerst mindestens einen Körper aus, um ihm eine RAL-Farbe zu geben.",
   "ral.approxHint": "Hinweis: Digitale sRGB-Näherungswerte nach RAL Classic (D65); Monitore zeigen Töne leicht unterschiedlich.",
+  "sk.panel.fontSingle": "Einlinig (Gravur)",
   "kind.deleteFace": "Fläche löschen",
   "ctx.deleteFaces": "Flächen löschen",
   "ctx.deleteFaceTip": "Gewählte Fläche löschen und die Lücke durch Verlängern der Nachbarflächen schließen (Profi)",

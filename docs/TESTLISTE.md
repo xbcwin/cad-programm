@@ -3059,6 +3059,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Unterdrücken, Rückgängig/Wiederherstellen, Fehlerfall bei unheilbarer Außenwand, `Store.validateProject()`, `Explain.local()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-199]`)
 - [ ] **Von Hand**: Im Browser im Profi-Modus an einem Bauteil mit Bohrungen, Sackloch und abgerundeten Kanten per Klick oder Rechtsklick „Fläche löschen“ wählen und die geheilte Geometrie prüfen.
 
+## Einlinien-Schrift im Text-Werkzeug (Auto [A-202], SK-49)
+- [x] Schriftart „Einlinig (Gravur)“ (`gravur`) wird in Einfach und Profi aus `app/data/schrift-einlinig.json` lokal ohne Netzzugriff geladen (`SK.isSingleLineFont('gravur')`) (Klicktest `[A-202]`)
+- [x] Text „AB“ in „Einlinig (Gravur)“ erzeugt ausschließlich offene Kurven (`SK.textContours` mit `open: true`, `SK.chains`) und keine geschlossenen Umrisse (`SK.loops` und `SK.regions` leer) (Klicktest `[A-202]`)
+- [x] Rückgängig (`Strg+Z`) entfernt den gesetzten Einlinien-Text vollständig; „In Kurven umwandeln“ behält offene Linien ohne geschlossene Flächen (Klicktest `[A-202]`)
+- [ ] **Von Hand**: Im Browser eine Skizze starten, im Text-Werkzeug „Einlinig (Gravur)“ wählen, einen Satz mit Umlauten und Ziffern setzen und das Linienbild im 2D-Fenster prüfen.
+
 ## Fehler melden
 
 ```

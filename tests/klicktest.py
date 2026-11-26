@@ -41690,6 +41690,117 @@ def t_a199_flaeche_loeschen_heilen(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a202_einlinien_schrift(p):
+    """[A-202] Einlinien-Schrift „Einlinig (Gravur)“ im Text-Werkzeug (SK-49)."""
+    try:
+        # 1. Einfach- und Profi-Modus: Schriftart „Einlinig (Gravur)“ vorhanden und lokal ladbar
+        sketch_xy(p)
+        p.ev("ViewPrefs.setLevel('simple'); Panels.renderRight();")
+        p.pg.keyboard.press('b'); p.wait(250)
+        simple_opts = p.ev("return [...document.querySelectorAll('#tx-font option')].map(o => [o.value, o.textContent])")
+        p.pg.select_option('#tx-font', 'gravur'); p.wait(400)
+        loaded = p.ev("""return (async () => {
+          await SK.loadFont('gravur');
+          return {
+            loaded: SK.isFontLoaded('gravur'),
+            singleFn: SK.isSingleLineFont('gravur'),
+            singleFlag: !!(SK.FONTS.gravur && SK.FONTS.gravur.singleLine),
+            txtFont: Sketch.state.txt.font,
+          };
+        })()""")
+        p.ev("ViewPrefs.setLevel('pro'); Panels.renderRight();"); p.wait(200)
+        pro_opts = p.ev("return [...document.querySelectorAll('#tx-font option')].map(o => o.value)")
+        ok1 = (
+            ['gravur', 'Einlinig (Gravur)'] in simple_opts
+            and 'gravur' in pro_opts
+            and loaded['loaded'] and loaded['singleFn'] and loaded['singleFlag']
+            and loaded['txtFont'] == 'gravur'
+        )
+
+        # 2. Text „AB“ mit „Einlinig (Gravur)“ -> nur offene Kurven, keine geschlossenen Umrisse
+        p.pg.fill('#tx-s', 'AB')
+        p.pg.fill('#tx-h', '10'); p.pg.press('#tx-h', 'Enter'); p.wait(150)
+        cx, cy = to_screen(p, 0, 0)
+        p.pg.mouse.click(cx, cy); p.wait(350)
+        ab_res = SS(p, """
+          const e = S.ents[0];
+          const cs = e ? SK.textContours(e) : [];
+          const loops = SK.loops(S.ents);
+          const regs = SK.regions(S.ents);
+          const chains = SK.chains(S.ents);
+          const tb = e ? SK.textBox(e) : null;
+          const allOpen = cs.length >= 5 && cs.every(c => c.length >= 1 && c.open === true && SK.d2(c[0].a, c[c.length - 1].b) > 0.1);
+          const totalLen = chains.reduce((s, ch) => s + ch.len, 0);
+          return {
+            n: S.ents.length,
+            type: e && e.type,
+            s: e && e.s,
+            font: e && e.font,
+            contourCount: cs.length,
+            allOpen,
+            loopCount: loops.length,
+            regCount: regs.length,
+            chainCount: chains.length,
+            totalLen,
+            tb,
+          };
+        """)
+        ok2 = (
+            ab_res['n'] == 1 and ab_res['type'] == 'text' and ab_res['s'] == 'AB' and ab_res['font'] == 'gravur'
+            and ab_res['allOpen'] and ab_res['loopCount'] == 0 and ab_res['regCount'] == 0
+            and ab_res['chainCount'] == ab_res['contourCount'] and ab_res['totalLen'] > 25
+            and ab_res['tb'] is not None and 9.5 <= ab_res['tb']['h'] <= 10.5 and ab_res['tb']['w'] > 8
+        )
+
+        # 3. Rückgängig entfernt den Text
+        p.pg.keyboard.press('Control+z'); p.wait(400)
+        undo_res = SS(p, "return { n: S.ents.length, loops: SK.loops(S.ents).length, chains: SK.chains(S.ents).length }")
+        ok3 = undo_res['n'] == 0 and undo_res['loops'] == 0 and undo_res['chains'] == 0
+
+        # 4. #se-font Umschalten (Inter vs. Gravur), „In Kurven umwandeln“, lokale Datei & DE/EN-Schlüssel
+        p.pg.mouse.click(cx, cy); p.wait(350)
+        se_val0 = p.ev("return document.querySelector('#se-font') && document.querySelector('#se-font').value")
+        p.pg.select_option('#se-font', 'inter'); p.wait(350)
+        inter_regs = p.ev("return (async () => { await SK.loadFont('inter'); return SK.regions(Sketch.state.ents).length; })()")
+        p.pg.select_option('#se-font', 'gravur'); p.wait(250)
+        back_res = SS(p, "return { regs: SK.regions(S.ents).length, loops: SK.loops(S.ents).length }")
+
+        p.pg.locator('#se-text-curves').click(); p.wait(400)
+        conv_res = SS(p, "return { types: [...new Set(S.ents.map(e => e.type))], n: S.ents.length, loops: SK.loops(S.ents).length, regs: SK.regions(S.ents).length }")
+        p.pg.keyboard.press('Control+z'); p.wait(350)
+        conv_undo = SS(p, "return S.ents.length === 1 && S.ents[0].type === 'text' && S.ents[0].font === 'gravur'")
+
+        meta = p.ev("""return (async () => {
+          const [fJson, de, en] = await Promise.all([
+            fetch('data/schrift-einlinig.json').then(r => r.json()),
+            fetch('data/texte-de.json').then(r => r.json()),
+            fetch('data/texte-en.json').then(r => r.json()),
+          ]);
+          const glyphs = fJson.glyphs || {};
+          const req = ['A', 'B', 'Ä', 'Ö', 'Ü', 'ß', '0', '9'];
+          const hasAll = req.every(ch => glyphs[ch] && glyphs[ch].p && !glyphs[ch].p.includes('Z'));
+          const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+          const i18nMatch = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+          return {
+            singleLine: !!fJson.singleLine,
+            glyphCount: Object.keys(glyphs).length,
+            hasAll,
+            hasSingleKey: !!de['sk.panel.fontSingle'] && !!en['sk.panel.fontSingle'],
+            i18nMatch,
+          };
+        })()""")
+        ok4 = (
+            se_val0 == 'gravur' and inter_regs >= 2 and back_res['regs'] == 0 and back_res['loops'] == 0
+            and conv_res['types'] == ['line'] and conv_res['n'] >= 5 and conv_res['loops'] == 0 and conv_res['regs'] == 0
+            and conv_undo
+            and meta['singleLine'] and meta['glyphCount'] >= 120 and meta['hasAll']
+            and meta['hasSingleKey'] and meta['i18nMatch']
+        )
+        return [ok1, ok2, ok3, ok4]
+    finally:
+        p.ev("try { if (Sketch.active) Sketch.cancel(true); ViewPrefs.setLevel('pro'); } catch (_) {}")
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -42005,6 +42116,7 @@ TESTS = [
     ('[A-197] STEP-Teile aus Hersteller-Katalogen einsortieren (BI-29)', t_a197_step_katalog_bibliothek),
     ('[A-194] Bibliothek: Logo aus SVG und RAL-Farben (BI-24, BI-25)', t_a194_svg_logo_ral_farben),
     ('[A-199] Direkt bearbeiten: Fläche löschen und Lücke heilen (DB-03)', t_a199_flaeche_loeschen_heilen),
+    ('[A-202] Einlinien-Schrift: „AB“ mit Einlinig (Gravur) nur offene Kurven / keine geschlossenen Umrisse / Rückgängig', t_a202_einlinien_schrift),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -5371,6 +5371,7 @@
   "ral.pickedToast": "Selected {code} ({name})",
   "ral.selectBodyFirst": "Select at least one body first to assign a RAL color.",
   "ral.approxHint": "Note: Digital sRGB approximations for RAL Classic (D65); screens vary slightly.",
+  "sk.panel.fontSingle": "Single-line (Engraving)",
   "kind.deleteFace": "Delete face",
   "ctx.deleteFaces": "Delete faces",
   "ctx.deleteFaceTip": "Delete selected face and heal the gap by extending neighboring faces (Pro)",
