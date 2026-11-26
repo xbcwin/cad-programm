@@ -550,6 +550,16 @@
     "wozu": "Ändert Fasenwinkel, schräge Kanten oder Grundformen schnell direkt am fertigen Körper – auch bei importierten Teilen ohne Skizze.",
     "achtung": "Der Versatz muss kleiner bleiben als die Breite der Nachbarflächen, sonst würden diese zu null schrumpfen."
   },
+  "editHole": {
+    "was": "Ändert den Durchmesser einer vorhandenen zylindrischen Bohrung (Durchgangs- oder Sackloch) direkt am Körper – auch ohne Skizze.",
+    "wozu": "Passt Löcher an importierten STEP-, IGES- oder BREP-Teilen sowie an fertigen Körpern schnell auf andere Schrauben- oder Passmaße an.",
+    "achtung": "Wird das Loch zu groß für die umgebende Wandstärke oder schneidet es den Körper auseinander, meldet der Kern einen Fehler."
+  },
+  "editFillet": {
+    "was": "Ändert den Radius einer bestehenden Kantenrundung direkt am fertigen Körper (wahlweise inklusive anschließender gleicher Rundungen).",
+    "wozu": "Vergrößert oder verkleinert Rundungen an importierten STEP-, IGES- oder BREP-Teilen ohne Skizzen- oder Verlaufs-Historie.",
+    "achtung": "Ist der neue Radius größer als die angrenzenden Flächen erlauben, wähle einen etwas kleineren Radius."
+  },
   "simplify": {
     "was": "Entfernt an einem Körper automatisch kleine Rundungen, Fasen und Löcher bis zu einer wählbaren Maximalgröße in einem einzigen Schritt.",
     "wozu": "Bereinigt fertige oder importierte Teile für schnelle Simulationen, 3D-Druck, Baugruppen oder als Vorbereitung für weitere Änderungen.",
@@ -564,5 +574,25 @@
     "was": "Macht eine automatisch erkannte Bohrung, Rundung oder Tasche in einem importierten Bauteil als eigenen Verlaufsschritt direkt bearbeitbar.",
     "wozu": "Erlaubt das nachträgliche Ändern von Lochdurchmesser, Bohrungstiefe, Taschentiefe oder Rundungsradius an fremden STEP-, IGES- oder BREP-Teilen.",
     "achtung": "Jeder erkannte Schritt bleibt im Verlauf unterdrückbar, rückgängig machbar und lässt sich jederzeit auf sein ursprüngliches Maß zurücksetzen."
+  },
+  "tSlotProfile": {
+    "was": "Erzeugt ein Alu-Nutprofil der Baureihe 20, 30, 40 oder 45 (Nut 6, 8 oder 10) mit echten T-Nuten und Kernbohrungen.",
+    "wozu": "Grundbaustein für verwindungssteife Aluminium-Gestelle, 3D-Drucker-Rahmen, Einhausungen und Vorrichtungen.",
+    "achtung": "Über die Knöpfe rechts im Eigenschaften-Panel setzt du passende Winkel, Nutensteine und Endkappen direkt bündig und ohne Durchdringung ans Profil."
+  },
+  "tSlotBracket": {
+    "was": "Erzeugt einen 90°-Profil-Winkel mit Verstärkungsrippen, zwei Durchgangsbohrungen und optionalen Zentriernasen.",
+    "wozu": "Verbindet zwei Alu-Nutprofile rechtwinklig miteinander.",
+    "achtung": "Achte darauf, dass die Baureihe des Winkels (20, 30, 40 oder 45) zum Nutprofil passt; über „Winkel ans Profil setzen“ richtet er sich automatisch bündig aus."
+  },
+  "tSlotNut": {
+    "was": "Erzeugt einen T-förmigen Nutenstein mit Gewinde-Kernbohrung passend zur Nut 6, 8 oder 10.",
+    "wozu": "Verankert Winkel, Platten oder Anbauteile mit Schrauben in der Nut eines Alu-Nutprofils.",
+    "achtung": "Bei sehr schmaler Nut (Nut 6) werden große Gewinde automatisch auf den zulässigen Steg begrenzt."
+  },
+  "tSlotEndCap": {
+    "was": "Erzeugt eine abgeschrägte Abdeckkappe mit Haltezapfen für die Stirnseite eines Alu-Nutprofils.",
+    "wozu": "Schließt scharfe Sägekanten von Alu-Nutprofilen sauber und verletzungssicher ab.",
+    "achtung": "Für Doppelprofile (z. B. 20×40 oder 40×80) besitzt die Endkappe automatisch zwei passende Haltezapfen."
   }
 }

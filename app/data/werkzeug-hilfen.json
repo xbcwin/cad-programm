@@ -2213,5 +2213,35 @@
     "tip": "Bohrungen, Rundungen und Taschen in einem importierten Teil erkennen und bearbeitbar machen (Profi)",
     "hilfe": "Durchsucht im Profi-Modus ein importiertes STEP-, IGES- oder BREP-Teil nach Bohrungen, Kantenrundungen und Taschen und legt für jede erkannte Form einen eigenen Schritt im Verlauf an. Dort lassen sich Durchmesser, Tiefe, Durchgang oder Rundungsradius direkt ändern – auch mit Formeln.",
     "tipp": "Ideal, wenn ein fremdes STEP-Teil z. B. etwas größere Schraubenlöcher oder einen größeren Kantenradius bekommen soll, ohne es neu zu zeichnen."
+  },
+  "editHole": {
+    "tip": "Loch-Durchmesser direkt ändern – auch an importierten STEP-Teilen (Profi)",
+    "hilfe": "Klick im Profi-Modus auf die Innenfläche eines Lochs (Durchgangs- oder Sackloch, auch an importierten STEP-/BREP-Teilen) und tippe den gewünschten neuen Durchmesser (oder eine Formel) ein. Tracery passt die Bohrung direkt auf das neue Maß an.",
+    "tipp": "Wenn der Durchmesser direkt nach dem Klick markiert ist, tippe einfach die neue Zahl (z. B. 8) ein und drücke Enter."
+  },
+  "editFillet": {
+    "tip": "Rundungs-Radius direkt ändern – auch an importierten STEP-Teilen (Profi)",
+    "hilfe": "Klick im Profi-Modus auf eine abgerundete Kantenfläche (auch an importierten STEP-/BREP-Teilen) und gib den neuen Radius ein. Tracery stellt die ursprüngliche scharfe Kante vorübergehend her und rundet sie mit dem neuen Radius neu ab.",
+    "tipp": "Mit eingeschaltetem „Zusammenhängende Kanten einbeziehen“ ändern sich alle gleich großen, anschließenden Rundungen in einem Zug mit."
+  },
+  "tSlotProfile": {
+    "tip": "Alu-Nutprofil der Baureihen 20, 30, 40 oder 45 (Nut 6/8/10) mit Nuten und Kernbohrung",
+    "hilfe": "Erzeugt ein Aluminium-Systemprofil mit echten T-Nuten (Baureihe 20 mit Nut 6, Baureihe 30/40 mit Nut 8, Baureihe 45 mit Nut 10) und Mittelbohrung(en) in Einzel- oder Doppelbreite (z. B. 20×20 oder 20×40). Rechts kannst du mit einem Klick passende Winkel, Nutensteine und Endkappen direkt ans Profil setzen.",
+    "tipp": "Für Rahmen und Gestelle wählst du erst das Profil und setzt Winkel, Nutensteine und Endkappen direkt über die Knöpfe im Eigenschaften-Panel ohne Durchdringung an."
+  },
+  "tSlotBracket": {
+    "tip": "90°-Eckwinkel mit Seitenrippen für Alu-Nutprofile (Baureihe 20, 30, 40, 45)",
+    "hilfe": "Erzeugt einen passenden Eckverbinder mit Verstärkungsrippen, Durchgangslöchern und optionalen Zentriernasen für die jeweilige Profil-Baureihe. Ist schon ein Nutprofil im Projekt, setzt der Knopf „Winkel ans Profil setzen“ ihn bündig an die Profilseite.",
+    "tipp": "Schenkellänge, Breite und Bohrungsdurchmesser lassen sich bei Bedarf rechts im Eigenschaften-Panel einzeln anpassen."
+  },
+  "tSlotNut": {
+    "tip": "Nutenstein mit Gewindebohrung passend für Nut 6, 8 oder 10",
+    "hilfe": "Erzeugt einen T-förmigen Nutenstein mit passender Kernbohrung (M4 bis M8) für die gewählte Profil-Baureihe. Ist ein Nutprofil vorhanden, schiebt „Nutenstein in Profil-Nut setzen“ ihn direkt passgenau in die Hinterschnitt-Nut.",
+    "tipp": "Mit „Passend zur Nut“ wählt Tracery automatisch das gängige Gewinde zur Baureihe (M5 bei 20, M6 bei 30, M8 bei 40/45)."
+  },
+  "tSlotEndCap": {
+    "tip": "Abdeckkappe mit Haltezapfen für Alu-Nutprofile (20×20 bis 45×90)",
+    "hilfe": "Erzeugt eine Kunststoff-Endkappe mit abgeschrägten Ecken und passenden Press-Zapfen für die Stirnseite der Alu-Nutprofile. Mit „Endkappe aufs Profil setzen“ sitzt sie bündig auf dem Profilende.",
+    "tipp": "Die Zapfen greifen genau in die Kernbohrung(en) des gewählten Profils und schließen die Schnittkante sauber ab."
   }
 }

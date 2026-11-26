@@ -42141,6 +42141,355 @@ def t_a203_gravieren(p):
         p.ev("try { Features.stopEngrave(); ViewPrefs.setLevel('pro'); } catch (_) {}")
 
 
+def t_a200_loch_rundung_import(p):
+    """[A-200] Direkt bearbeiten: Loch und Rundung an Importteilen ändern (DB-05, DB-06)."""
+    def wait_done(n=45):
+        for _ in range(n):
+            p.wait(500)
+            if p.ev("return !App.busy && App.results.size >= App.doc.items.filter(i=>!i.hidden && !i.suppressed && !App.mergedInto(i.id)).length"):
+                break
+        p.wait(400)
+
+    try:
+        # 1. Einfach- vs. Profi-Sichtbarkeit, Befehlssuche, Kontextleiste & Rechtsklick-Menü
+        p.empty()
+        p.ev("ViewPrefs.setLevel('simple')"); p.wait(200)
+        simple_cmds = p.ev("return [Commands.search('Loch-Durchmesser ändern').length, Commands.search('Rundungs-Radius ändern').length]")
+        p.ev("ViewPrefs.setLevel('pro')"); p.wait(200)
+        pro_cmds = p.ev("return [Commands.search('Loch-Durchmesser ändern').length, Commands.search('Rundungs-Radius ändern').length]")
+
+        # Quader 20x20x20 mit Loch Ø6 (durch) und oberer Kantenrundung R2
+        p.ev("""App.change('Quader mit Loch und Rundung', (doc) => {
+          const box = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Gehaeuse' });
+          box.finishes = [{ id: 'f_top', type: 'fillet', r: 2, edges: [{ a: [-10, -10, 20], b: [10, -10, 20], m: [0, -10, 20], l: 20 }] }];
+          const hole = Model.newItem('cylinder', { d: 6, h: 30 }, { name: 'Loch', t: { x: 0, y: 0, z: -5, rx: 0, ry: 0, rz: 0 } });
+          hole.op = { type: 'cut', target: box.id };
+          doc.items.push(box, hole);
+        })""")
+        wait_done()
+        # Export als STEP -> Importteil erzeugen
+        p.pg.evaluate("""async () => {
+          const {Kernel, Model, App} = window.__M;
+          const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+          window.__a200Step = new File([new Uint8Array(r.data)], 'ImportTeil200.step');
+        }""")
+        p.wait(500)
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.pg.evaluate("() => window.__M.Start.importCAD(window.__a200Step)")
+        wait_done()
+
+        # Prüfen: Loch-Knöpfe nur auf Lochfläche, Rundungs-Knöpfe nur auf Rundungsfläche, und nur im Profi-Modus
+        p.ev("""(() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const hi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === true && Math.abs(f.r - 3) < 0.05);
+          App.select([it.id], { face: { id: it.id, faceIdx: hi } });
+        })()"""); p.wait(200)
+        p.ev("ViewPrefs.setLevel('simple')"); p.wait(200)
+        simple_hole_btn = p.ev("return !!document.querySelector('#ctx-edit-hole')?.offsetParent")
+        p.ev("ViewPrefs.setLevel('pro')"); p.wait(200)
+        pro_hole_btns = p.ev("return [!!document.querySelector('#ctx-edit-hole')?.offsetParent, !!document.querySelector('#ctx-edit-fillet')?.offsetParent]")
+
+        # Rundungsfläche wählen (R2 am oberen vorderen Rand) + Rechtsklick-Menü prüfen
+        fillet_pt = p.ev("""return (() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === false && Math.abs(f.r - 2) < 0.05);
+          App.select([it.id], { face: { id: it.id, faceIdx: fi } });
+          return r.data.faces[fi].c;
+        })()"""); p.wait(200)
+        pro_fillet_btns = p.ev("return [!!document.querySelector('#ctx-edit-fillet')?.offsetParent, !!document.querySelector('#ctx-edit-hole')?.offsetParent]")
+        p.ev("Viewer.setView('iso', false)"); p.wait(400)
+        fx, fy = world_screen(p, fillet_pt[0], fillet_pt[1], fillet_pt[2])
+        p.pg.mouse.click(fx, fy, button='right'); p.wait(250)
+        cm_fillet = p.ev("return [!!document.querySelector('#cm-edit-fillet') && !document.querySelector('#cm-edit-fillet').hidden, !!document.querySelector('#cm-edit-hole') && !document.querySelector('#cm-edit-hole').hidden]")
+        p.pg.keyboard.press('Escape'); p.wait(150)
+
+        # Außen-Zylinder (nicht konkav, voller Umfang) -> weder Loch noch Rundung
+        p.ev("""(() => {
+          window.__a200Fake = Features.isHoleFaceInfo({ t: 'CYLINDRE', r: 10, concave: false, uSpan: 6.283 });
+          window.__a200FakeF = Features.isFilletFaceInfo({ t: 'CYLINDRE', r: 10, concave: false, uSpan: 6.283 });
+        })()""")
+        fake_chk = p.ev("return [window.__a200Fake, window.__a200FakeF]")
+        ok1 = bool(
+            simple_cmds == [0, 0]
+            and pro_cmds[0] >= 1 and pro_cmds[1] >= 1
+            and not simple_hole_btn
+            and pro_hole_btns == [True, False]
+            and pro_fillet_btns == [True, False]
+            and cm_fillet == [True, False]
+            and fake_chk == [False, False]
+        )
+
+        # 2. Importiertes STEP-Teil: Loch Ø6 -> Ø8 ändern, Messen zeigt 8, Verkleinern Ø4, Formel, Unterdrücken & Undo/Redo
+        p.ev("""(() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const hi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === true && Math.abs(f.r - 3) < 0.05);
+          App.select([it.id], { face: { id: it.id, faceIdx: hi } });
+        })()"""); p.wait(250)
+        p.pg.locator('#ctx-edit-hole').click(); p.wait(250)
+        p.pg.fill('#eh-d', '8'); p.pg.press('#eh-d', 'Enter')
+        wait_done()
+        hole8 = p.ev("""return (async () => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const holes = (r?.data?.faces || []).filter(f => f.t === 'CYLINDRE' && f.concave === true);
+          const gc = await GeomCheck.run({ silent: true });
+          const ms = await Mass.measure();
+          return {
+            fmt: it.p.fmt,
+            errs: App.errors.length,
+            kinds: App.doc.items.map(x => x.kind),
+            r: holes[0]?.r || 0,
+            allR4: holes.length >= 1 && holes.every(f => Math.abs(f.r - 4.0) < 0.01),
+            gcIssues: (gc.issues || []).length,
+            vol: ms?.parts?.[0]?.volume || 0,
+          };
+        })()""")
+
+        # Messen-Werkzeug auf das geänderte Loch Ø8 anwenden -> Messen zeigt 8
+        p.ev("App.clearSelection(); Viewer.setView('iso', false)"); p.wait(500)
+        p.pg.locator('#t-measure').click(); p.wait(300)
+        hole_screen = None
+        for ang in (135, 120, 150, 90, 180, 45, 225, 315):
+            rad = math.radians(ang)
+            sx, sy = world_screen(p, 4.0 * math.cos(rad), 4.0 * math.sin(rad), 17.5)
+            hit_hole = p.ev("""const [sx, sy] = arg;
+              const hit = Viewer.pick(sx, sy, { solidsOnly: true, noEdges: true });
+              const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+              return !!(fi && fi.t === 'CYLINDRE' && fi.concave === true);""", [sx, sy])
+            if hit_hole:
+                hole_screen = (sx, sy)
+                break
+        if hole_screen:
+            p.pg.mouse.click(hole_screen[0], hole_screen[1]); p.wait(500)
+        meas_res = p.ev("return Measure.result || ''")
+        p.pg.keyboard.press('Escape'); p.wait(200)
+
+        # Verkleinern auf Ø4 und Formel d_loch = 8 testen
+        p.ev("App.select([App.doc.items.find(x => x.kind === 'editHole').id])"); p.wait(250)
+        p.pg.fill('#eh-d', '4'); p.pg.press('#eh-d', 'Enter')
+        wait_done()
+        hole4_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === true)?.r || 0")
+        p.ev("App.change('Maß anlegen', d => { d.params.push({ id: 'p_dloch', name: 'd_loch', expr: '8' }); })"); p.wait(200)
+        p.pg.fill('#eh-d', 'd_loch'); p.pg.press('#eh-d', 'Enter')
+        wait_done()
+        hole_var_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === true)?.r || 0")
+
+        # Unterdrücken & Wieder-Einschalten + Undo/Redo
+        p.ev("Timeline.toggleSuppress(App.doc.items.find(x => x.kind === 'editHole').id)")
+        wait_done()
+        hole_sup_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === true)?.r || 0")
+        p.ev("Timeline.toggleSuppress(App.doc.items.find(x => x.kind === 'editHole').id)")
+        wait_done()
+        hole_unsup_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === true)?.r || 0")
+        p.ev("App.undo()"); wait_done()
+        hole_undo_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === true)?.r || 0")
+        p.ev("App.redo()"); wait_done()
+        hole_redo_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === true)?.r || 0")
+
+        ok2 = bool(
+            hole8['fmt'] == 'step' and hole8['errs'] == 0 and hole8['kinds'] == ['import', 'editHole']
+            and hole8['allR4'] and abs(hole8['r'] - 4.0) < 0.01 and hole8['gcIssues'] == 0
+            and hole_screen is not None and 'Ø 8 mm' in meas_res and '(R 4)' in meas_res
+            and abs(hole4_r - 2.0) < 0.01
+            and abs(hole_var_r - 4.0) < 0.01
+            and abs(hole_sup_r - 3.0) < 0.01
+            and abs(hole_unsup_r - 4.0) < 0.01
+            and abs(hole_undo_r - 3.0) < 0.01
+            and abs(hole_redo_r - 4.0) < 0.01
+        )
+
+        # 3. Am selben STEP-Importteil (mit Loch Ø8): Rundung R2 -> R4 und R1.5, Unterdrücken & Undo/Redo
+        p.ev("""(() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === false && Math.abs(f.r - 2) < 0.05);
+          App.select([it.id], { face: { id: it.id, faceIdx: fi } });
+        })()"""); p.wait(250)
+        p.pg.locator('#ctx-edit-fillet').click(); p.wait(250)
+        p.pg.fill('#ef-r', '4'); p.pg.press('#ef-r', 'Enter')
+        wait_done()
+        fil4 = p.ev("""return (async () => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const fillets = (r?.data?.faces || []).filter(f => f.t === 'CYLINDRE' && f.concave === false);
+          const holes = (r?.data?.faces || []).filter(f => f.t === 'CYLINDRE' && f.concave === true);
+          const gc = await GeomCheck.run({ silent: true });
+          const ms = await Mass.measure();
+          return {
+            errs: App.errors.length,
+            kinds: App.doc.items.map(x => x.kind),
+            r: fillets[0]?.r || 0,
+            holeR: holes[0]?.r || 0,
+            gcIssues: (gc.issues || []).length,
+            vol: ms?.parts?.[0]?.volume || 0,
+          };
+        })()""")
+        p.pg.fill('#ef-r', '1.5'); p.pg.press('#ef-r', 'Enter')
+        wait_done()
+        fil15_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === false)?.r || 0")
+        p.ev("Timeline.toggleSuppress(App.doc.items.find(x => x.kind === 'editFillet').id)")
+        wait_done()
+        fil_sup_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === false)?.r || 0")
+        p.ev("Timeline.toggleSuppress(App.doc.items.find(x => x.kind === 'editFillet').id)")
+        wait_done()
+        fil_unsup_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === false)?.r || 0")
+        p.ev("App.undo()"); wait_done()
+        fil_undo_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === false)?.r || 0")
+        p.ev("App.redo()"); wait_done()
+        fil_redo_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === false)?.r || 0")
+        exp_vol_r4 = 8000.0 - math.pi * 16.0 * 20.0 - (16.0 - math.pi * 4.0) * 20.0
+        ok3 = bool(
+            fil4['errs'] == 0 and fil4['kinds'] == ['import', 'editHole', 'editFillet']
+            and abs(fil4['r'] - 4.0) < 0.01 and abs(fil4['holeR'] - 4.0) < 0.01
+            and fil4['gcIssues'] == 0 and abs(fil4['vol'] - exp_vol_r4) < 2.0
+            and abs(fil15_r - 1.5) < 0.01
+            and abs(fil_sup_r - 2.0) < 0.01
+            and abs(fil_unsup_r - 1.5) < 0.01
+            and abs(fil_undo_r - 2.0) < 0.01
+            and abs(fil_redo_r - 1.5) < 0.01
+        )
+
+        # 4. Sackloch Ø6x10 -> Ø8x10 auf STEP + 4-Kanten-Rundungskette R2 -> R3.5 + Torus-Rundung R2 -> R3
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.ev("""App.change('Sackloch', (doc) => {
+          const box = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' });
+          const cyl = Model.newItem('cylinder', { d: 6, h: 15 }, { name: 'Sackloch', more: { t: { x: 0, y: 0, z: 10, rx: 0, ry: 0, rz: 0 } } });
+          cyl.op = { type: 'cut', target: box.id };
+          doc.items.push(box, cyl);
+        })""")
+        wait_done()
+        p.pg.evaluate("""async () => {
+          const {Kernel, Model, App} = window.__M;
+          const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+          window.__a200BlindStep = new File([new Uint8Array(r.data)], 'Sackloch200.step');
+        }""")
+        p.wait(500)
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.pg.evaluate("() => window.__M.Start.importCAD(window.__a200BlindStep)")
+        wait_done()
+        p.ev("""(() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const hi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === true);
+          Features.editHole({ id: it.id, idx: hi, info: r.data.faces[hi] }, { d: 8 });
+        })()""")
+        wait_done()
+        blind_st = p.ev("""return (async () => {
+          const r = App.results.get(App.doc.items[0].id);
+          const holes = (r?.data?.faces || []).filter(f => f.t === 'CYLINDRE' && f.concave === true);
+          const ms = await Mass.measure();
+          const gc = await GeomCheck.run({ silent: true });
+          return { errs: App.errors.length, r: holes[0]?.r || 0, vol: ms?.parts?.[0]?.volume || 0, gcIssues: (gc.issues || []).length };
+        })()""")
+
+        # 4 obere Kantenrundungen R2 -> Kette auf R3.5 ändern
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.ev("""App.change('Quader 4 Rundungen', (doc) => {
+          const box = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' });
+          box.finishes = [{
+            id: 'f_r4', type: 'fillet', r: 2,
+            edges: [
+              { a: [-10, -10, 20], b: [10, -10, 20], m: [0, -10, 20], l: 20 },
+              { a: [-10, 10, 20], b: [10, 10, 20], m: [0, 10, 20], l: 20 },
+              { a: [-10, -10, 20], b: [-10, 10, 20], m: [-10, 0, 20], l: 20 },
+              { a: [10, -10, 20], b: [10, 10, 20], m: [10, 0, 20], l: 20 },
+            ],
+          }];
+          doc.items.push(box);
+        })""")
+        wait_done()
+        p.ev("""(() => {
+          const box = App.doc.items[0], r = App.results.get(box.id);
+          const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === false);
+          Features.editFillet({ id: box.id, idx: fi, info: r.data.faces[fi] }, { r: 3.5, chain: true });
+        })()""")
+        wait_done()
+        chain_st = p.ev("""return (async () => {
+          const r = App.results.get(App.doc.items[0].id);
+          const fils = (r?.data?.faces || []).filter(f => f.t === 'CYLINDRE' && f.concave === false);
+          const gc = await GeomCheck.run({ silent: true });
+          return { errs: App.errors.length, cnt: fils.length, allR35: fils.length === 4 && fils.every(f => Math.abs(f.r - 3.5) < 0.01), gcIssues: (gc.issues || []).length };
+        })()""")
+
+        # Zylinder Ø20 mit Torus-Kantenrundung R2 -> R3 ändern
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.ev("Actions.addPrimitive('cylinder')")
+        wait_done()
+        p.ev("""App.change('Zylinder-Rundung', (doc) => {
+          const cyl = doc.items[0], r = App.results.get(cyl.id);
+          const edge = r.data.edges.find(e => e.t === 'CIRCLE' && e.c && e.c[2] > 19);
+          cyl.finishes = [{ id: 'f_tor', type: 'fillet', r: 2, edges: [edge] }];
+        })""")
+        wait_done()
+        p.ev("""(() => {
+          const cyl = App.doc.items[0], r = App.results.get(cyl.id);
+          const ti = r.data.faces.findIndex(f => f.t === 'TORUS');
+          Features.editFillet({ id: cyl.id, idx: ti, info: r.data.faces[ti] }, { r: 3 });
+        })()""")
+        wait_done()
+        torus_st = p.ev("""return (async () => {
+          const r = App.results.get(App.doc.items[0].id);
+          const tors = (r?.data?.faces || []).filter(f => f.t === 'TORUS');
+          const gc = await GeomCheck.run({ silent: true });
+          return { errs: App.errors.length, cnt: tors.length, allR3: tors.length >= 1 && tors.every(f => Math.abs(f.r - 3.0) < 0.01), gcIssues: (gc.issues || []).length };
+        })()""")
+        ok4 = bool(
+            blind_st['errs'] == 0 and abs(blind_st['r'] - 4.0) < 0.01 and abs(blind_st['vol'] - (8000.0 - math.pi * 16.0 * 10.0)) < 1.0 and blind_st['gcIssues'] == 0
+            and chain_st['errs'] == 0 and chain_st['allR35'] and chain_st['gcIssues'] == 0
+            and torus_st['errs'] == 0 and torus_st['allR3'] and torus_st['gcIssues'] == 0
+        )
+
+        # 5. Modus ohne Verlauf (noHistory), Validierung, Explain, Hilfetexte, Schritt-Erklärungen & DE/EN
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.pg.evaluate("() => window.__M.Start.importCAD(window.__a200Step)")
+        wait_done()
+        p.ev("""(() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const hi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === true);
+          Features.editHole({ id: it.id, idx: hi, info: r.data.faces[hi] }, { d: 8 });
+          const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === false);
+          Features.editFillet({ id: it.id, idx: fi, info: r.data.faces[fi] }, { r: 4 });
+        })()""")
+        wait_done()
+        meta = p.ev("""return (async () => {
+          const eh = App.doc.items.find(x => x.kind === 'editHole');
+          const ef = App.doc.items.find(x => x.kind === 'editFillet');
+          const exEh = eh ? Explain.local(eh.id) : null;
+          const exEf = ef ? Explain.local(ef.id) : null;
+          const val = Store.validateProject(JSON.parse(await Start.projectPayload()));
+          const [wh, se, de, en] = await Promise.all([
+            fetch('data/werkzeug-hilfen.json').then(x => x.json()),
+            fetch('data/schritt-erklaerungen.json').then(x => x.json()),
+            fetch('data/texte-de.json').then(x => x.json()),
+            fetch('data/texte-en.json').then(x => x.json()),
+          ]);
+          const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+          return {
+            valOk: val.ok && val.errors.length === 0,
+            exOk: !!(exEh && exEh.lines.length && exEf && exEf.lines.length),
+            helpOk: !!(wh.editHole?.tip && wh.editHole?.hilfe && wh.editHole?.tipp && wh.editFillet?.tip && wh.editFillet?.hilfe && wh.editFillet?.tipp),
+            seOk: !!(se.editHole?.was && se.editHole?.wozu && se.editHole?.achtung && se.editFillet?.was && se.editFillet?.wozu && se.editFillet?.achtung),
+            i18nOk: deK.length === enK.length && deK.every((k, i) => k === enK[i]),
+          };
+        })()""")
+        p.pg.evaluate("async () => await window.__M.Timeline.setNoHistory(true)")
+        wait_done()
+        p.ev("""(() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const hi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === true);
+          Features.editHole({ id: it.id, idx: hi, info: r.data.faces[hi] }, { d: 10 });
+        })()""")
+        wait_done()
+        nh_st = p.ev("""
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const holes = (r?.data?.faces || []).filter(f => f.t === 'CYLINDRE' && f.concave === true);
+          return { noHistory: !!App.doc.noHistory, count: App.doc.items.length, errs: App.errors.length, r: holes[0]?.r || 0 };
+        """)
+        ok5 = bool(
+            meta['valOk'] and meta['exOk'] and meta['helpOk'] and meta['seOk'] and meta['i18nOk']
+            and nh_st['noHistory'] and nh_st['count'] == 1 and nh_st['errs'] == 0 and abs(nh_st['r'] - 5.0) < 0.01
+        )
+        return [ok1, ok2, ok3, ok4, ok5]
+    finally:
+        p.ev("try { if (Sketch.active) Sketch.cancel(true); ViewPrefs.setLevel('pro'); } catch (_) {}")
+
+
 def t_vereinfachen_ausrichten(p):
     p.empty()
     try:
@@ -42821,6 +43170,291 @@ def t_a205_formen_erkennen(p):
         p.ev("try { Features.stopPick && Features.stopPick(); ViewPrefs.setLevel('pro'); } catch (_) {}")
 
 
+def t_a208_alu_nutprofile(p):
+    p.empty()
+
+    # 1. Bibliothek -> Profile (Profi & Einfach) + Befehlssuche
+    p.ev("ViewPrefs.setLevel('pro'); Commands.setMode('model');")
+    p.wait(180)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#fly-tslot-tiles [data-lib="tSlotProfile"]', timeout=5000)
+    pro_fly = p.ev("""return (() => {
+      const libs = ['tSlotProfile', 'tSlotBracket', 'tSlotNut', 'tSlotEndCap'];
+      const head = document.querySelector('#fly-tslot-head');
+      const tilesOk = libs.every(l => {
+        const el = document.querySelector(`#fly-tslot-tiles .tile[data-lib="${l}"]`);
+        return !!(el && el.offsetParent !== null && el.getAttribute('data-help') === l);
+      });
+      const queries = ['nutprofil 20', 'nutprofil 30', 'nutprofil 40', 'nutprofil 45', 'profil-winkel', 'nutenstein', 'profil-endkappe'];
+      const cmdOk = queries.every(q => Commands.search(q).length > 0);
+      return {
+        headOk: !!(head && head.offsetParent !== null && /nutprofile/i.test(head.textContent)),
+        tilesOk,
+        cmdOk,
+      };
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.wait(180)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#fly-tslot-simple', timeout=5000)
+    simple_fly = p.ev("""return (() => {
+      const ids = [
+        ['add-tslot-profile', 'tSlotProfile'],
+        ['add-tslot-bracket', 'tSlotBracket'],
+        ['add-tslot-nut', 'tSlotNut'],
+        ['add-tslot-endcap', 'tSlotEndCap'],
+      ];
+      const btnsOk = ids.every(([id, lib]) => {
+        const el = document.getElementById(id);
+        return !!(el && el.offsetParent !== null && el.getAttribute('data-help') === lib);
+      });
+      const tileCnt = [...document.querySelectorAll('.flyout.parts .tile')].filter(t => t.offsetParent !== null).length;
+      return { btnsOk, tileCnt };
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+    ok1 = bool(
+        pro_fly['headOk'] and pro_fly['tilesOk'] and pro_fly['cmdOk']
+        and simple_fly['btnsOk'] and simple_fly['tileCnt'] == 5
+    )
+
+    # 2. Nutprofil 20x20, Länge 300 einfügen -> Querschnitt hat 4 Nuten & 1 Kernbohrung
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#fly-tslot-tiles [data-lib="tSlotProfile"]', timeout=5000)
+    p.pg.locator('#fly-tslot-tiles [data-lib="tSlotProfile"]').click()
+    warte_rechnen(p, 45)
+    prof_res = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const m = await Mass.measure({ ensure: true });
+      const pm = Mass.partOf(m, it.id);
+      const ki = Model.kernelItem(it);
+      const expVol = (ki && ki.p && ki.p.spec && ki.p.spec.volume) || 0;
+      const r = App.results.get(it.id);
+      const b = r && r.data && r.data.bbox;
+      const faces = (r && r.data && r.data.faces) || [];
+      const slotFloors = faces.filter(f => {
+        if (!f || f.t !== 'PLANE' || !Array.isArray(f.c) || !Array.isArray(f.n)) return false;
+        const [cx, cy, cz] = f.c, [nx, ny, nz] = f.n;
+        const onX = Math.abs(Math.abs(cx) - 4.0) < 0.05 && Math.abs(cy) < 0.05 && Math.abs(Math.abs(nx) - 1) < 0.05;
+        const onY = Math.abs(Math.abs(cy) - 4.0) < 0.05 && Math.abs(cx) < 0.05 && Math.abs(Math.abs(ny) - 1) < 0.05;
+        return Math.abs(cz - 150) < 0.5 && Math.abs(nz) < 0.05 && (onX || onY);
+      });
+      const lipFaces = faces.filter(f => {
+        if (!f || f.t !== 'PLANE' || !Array.isArray(f.c) || !Array.isArray(f.n)) return false;
+        const [cx, cy, cz] = f.c, [nx, ny, nz] = f.n;
+        const onX = Math.abs(Math.abs(cx) - 8.2) < 0.05 && Math.abs(Math.abs(cy) - 4.1) < 0.2 && Math.abs(Math.abs(nx) - 1) < 0.05;
+        const onY = Math.abs(Math.abs(cy) - 8.2) < 0.05 && Math.abs(Math.abs(cx) - 4.1) < 0.2 && Math.abs(Math.abs(ny) - 1) < 0.05;
+        return Math.abs(cz - 150) < 0.5 && Math.abs(nz) < 0.05 && (onX || onY);
+      });
+      const bores = faces.filter(f => f && f.t === 'CYLINDRE' && Math.abs((f.r || 0) - 2.5) < 0.05);
+      const hint = document.querySelector('#p-tslot-hint')?.textContent || '';
+      return {
+        errs: App.errors.length,
+        lib: it && it.p && it.p.lib,
+        size: it && it.p && it.p.size,
+        len: it && it.p && it.p.length,
+        mat: it && it.mat,
+        vol: pm ? pm.volume : 0,
+        expVol,
+        dx: b ? b[3] - b[0] : 0,
+        dy: b ? b[4] - b[1] : 0,
+        dz: b ? b[5] - b[2] : 0,
+        slotFloorCount: slotFloors.length,
+        lipFaceCount: lipFaces.length,
+        boreCount: bores.length,
+        hint,
+      };
+    })()""")
+    ok2 = bool(
+        prof_res['errs'] == 0
+        and prof_res['lib'] == 'tSlotProfile' and prof_res['size'] == '20x20'
+        and abs(prof_res['len'] - 300) < 1e-3 and prof_res['mat'] == 'Alu 6061'
+        and prof_res['expVol'] > 0 and abs(prof_res['vol'] - prof_res['expVol']) / prof_res['expVol'] < 0.01
+        and abs(prof_res['dx'] - 20) < 0.1 and abs(prof_res['dy'] - 20) < 0.1 and abs(prof_res['dz'] - 300) < 0.1
+        and prof_res['slotFloorCount'] == 4 and prof_res['lipFaceCount'] == 8 and prof_res['boreCount'] == 1
+        and '4 Nuten' in prof_res['hint'] and 'Nut 6' in prof_res['hint']
+    )
+
+    # 3. Winkel 20, Nutenstein & Endkappe ans Profil setzen (0 Durchdringungen) + separates Teil andocken
+    p.pg.wait_for_selector('#btn-add-tslot-bracket', timeout=5000)
+    p.pg.locator('#btn-add-tslot-bracket').click()
+    warte_rechnen(p, 45)
+    br_res = p.ev("""return (async () => {
+      const prof = App.doc.items[0], br = App.doc.items[1];
+      const wb = (id) => { const b = Actions.worldBox(id); return b ? [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] : null; };
+      const bp = wb(prof.id), bb = wb(br.id);
+      const clash = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      return {
+        errs: App.errors.length,
+        count: App.doc.items.length,
+        lib: br && br.p && br.p.lib,
+        series: br && br.p && br.p.series,
+        bp, bb,
+        clashes: (clash.pairs || []).length,
+        clashErrs: (clash.errors || []).length,
+        hint: document.querySelector('#p-tslot-bracket-hint')?.textContent || '',
+      };
+    })()""")
+
+    p.ev("App.select([App.doc.items[0].id]);")
+    p.pg.wait_for_selector('#btn-add-tslot-nut', timeout=5000)
+    p.pg.locator('#btn-add-tslot-nut').click()
+    warte_rechnen(p, 45)
+
+    p.ev("App.select([App.doc.items[0].id]);")
+    p.pg.wait_for_selector('#btn-add-tslot-cap', timeout=5000)
+    p.pg.locator('#btn-add-tslot-cap').click()
+    warte_rechnen(p, 45)
+
+    acc_res = p.ev("""return (async () => {
+      const wb = (id) => { const b = Actions.worldBox(id); return b ? [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] : null; };
+      const bNut = wb(App.doc.items[2].id);
+      const bCap = wb(App.doc.items[3].id);
+      const clash = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      return {
+        errs: App.errors.length,
+        count: App.doc.items.length,
+        bNut, bCap,
+        checked: clash.checkedCount,
+        clashes: (clash.pairs || []).length,
+        clashErrs: (clash.errors || []).length,
+      };
+    })()""")
+
+    # Separaten Winkel einfügen, wegschieben und über Button ans Profil setzen
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#fly-tslot-tiles [data-lib="tSlotBracket"]', timeout=5000)
+    p.pg.locator('#fly-tslot-tiles [data-lib="tSlotBracket"]').click()
+    warte_rechnen(p, 45)
+    p.ev("""
+      App.change('Winkel verschieben', (doc) => { doc.items[4].t.x = 120; });
+      App.select([App.doc.items[4].id]);
+    """)
+    warte_rechnen(p, 35)
+    p.pg.wait_for_selector('#btn-snap-tslot-bracket', timeout=5000)
+    p.pg.locator('#btn-snap-tslot-bracket').click()
+    warte_rechnen(p, 45)
+    snap_res = p.ev("""return (() => {
+      const b = Actions.worldBox(App.doc.items[4].id);
+      return {
+        errs: App.errors.length,
+        minX: b ? b.min.x : 0,
+        maxX: b ? b.max.x : 0,
+        minZ: b ? b.min.z : 0,
+      };
+    })()""")
+
+    ok3 = bool(
+        br_res['errs'] == 0 and br_res['count'] == 2 and br_res['lib'] == 'tSlotBracket' and br_res['series'] == '20'
+        and br_res['bp'] and br_res['bb']
+        and abs(br_res['bb'][0] - br_res['bp'][3]) < 0.05
+        and abs((br_res['bb'][3] - br_res['bb'][0]) - 20) < 0.1
+        and abs((br_res['bb'][4] - br_res['bb'][1]) - 18) < 0.1
+        and abs((br_res['bb'][5] - br_res['bb'][2]) - 20) < 0.1
+        and br_res['clashes'] == 0 and br_res['clashErrs'] == 0
+        and 'Nut 6' in br_res['hint']
+        and acc_res['errs'] == 0 and acc_res['count'] == 4
+        and acc_res['bNut'] and acc_res['bNut'][0] > 4.0 and acc_res['bNut'][3] < 10.0
+        and acc_res['bCap'] and abs(acc_res['bCap'][5] - 302.5) < 0.05 and abs(acc_res['bCap'][2] - 294.0) < 0.05
+        and acc_res['checked'] == 4 and acc_res['clashes'] == 0 and acc_res['clashErrs'] == 0
+        and snap_res['errs'] == 0 and abs(snap_res['minX'] - 10.0) < 0.05 and abs(snap_res['minZ']) < 0.05
+    )
+
+    # 4. Alle Baureihen 20, 30, 40, 45 (Nut 6/8/10) inkl. 20x40 (6 Nuten) & Zubehör + GeomCheck = 0 Fehler
+    p.ev("""
+      App.change('Alle Nutprofile und Zubehör', (doc) => {
+        const defs = [
+          ['tSlotProfile', { size: '20x20', length: 120 }],
+          ['tSlotProfile', { size: '20x40', length: 120 }],
+          ['tSlotProfile', { size: '30x30', length: 120 }],
+          ['tSlotProfile', { size: '40x40', length: 120 }],
+          ['tSlotProfile', { size: '45x45', length: 120 }],
+          ['tSlotBracket', { series: '30', guides: 'nein' }],
+          ['tSlotBracket', { series: '40', guides: 'ja' }],
+          ['tSlotBracket', { series: '45', guides: 'nein' }],
+          ['tSlotNut', { series: '30', thread: 'M6' }],
+          ['tSlotNut', { series: '40', thread: 'M8' }],
+          ['tSlotNut', { series: '45', thread: 'M8' }],
+          ['tSlotEndCap', { size: '30x30' }],
+          ['tSlotEndCap', { size: '40x40' }],
+          ['tSlotEndCap', { size: '45x45' }],
+        ];
+        doc.items = defs.map(([lib, params], i) => {
+          const it = Model.newItem('part', { lib, ...params }, { name: lib + '_' + i });
+          it.t.x = i * 90;
+          return it;
+        });
+      });
+    """)
+    warte_rechnen(p, 60)
+    all_res = p.ev("""return (async () => {
+      const items = App.doc.items;
+      const m = await Mass.measure({ ensure: true });
+      const profVols = [];
+      for (const it of items) {
+        if (it.p.lib !== 'tSlotProfile') continue;
+        const pm = Mass.partOf(m, it.id);
+        const ki = Model.kernelItem(it);
+        const exp = (ki && ki.p && ki.p.spec && ki.p.spec.volume) || 0;
+        profVols.push({ size: it.p.size, vol: pm ? pm.volume : 0, exp });
+      }
+      const r20x40 = App.results.get(items[1].id);
+      const faces20x40 = (r20x40 && r20x40.data && r20x40.data.faces) || [];
+      const bores20x40 = faces20x40.filter(f => f && f.t === 'CYLINDRE' && Math.abs((f.r || 0) - 2.5) < 0.05).length;
+      const b40Br = App.results.get(items[6].id)?.data?.bbox;
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        count: items.length,
+        profVols,
+        bores20x40,
+        b40BrMinX: b40Br ? b40Br[0] : 0,
+        gcIssues: gc.issues.length,
+        gcChecked: gc.checkedCount,
+      };
+    })()""")
+    ok4 = bool(
+        all_res['errs'] == 0 and all_res['count'] == 14
+        and all(v['exp'] > 0 and abs(v['vol'] - v['exp']) / v['exp'] < 0.01 for v in all_res['profVols'])
+        and all_res['bores20x40'] == 2
+        and all_res['b40BrMinX'] < -2.5
+        and all_res['gcIssues'] == 0 and all_res['gcChecked'] == 14
+    )
+
+    # 5. Undo/Redo, Validierung, Hilfen, Erklärungen & DE/EN-Texte
+    p.ev("App.undo();")
+    warte_rechnen(p, 40)
+    undo_len = p.ev("return App.doc.items.length")
+    p.ev("App.redo();")
+    warte_rechnen(p, 40)
+    redo_len = p.ev("return App.doc.items.length")
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const keys = ['tSlotProfile', 'tSlotBracket', 'tSlotNut', 'tSlotEndCap'];
+      const hOk = keys.every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const sOk = keys.every(k => se[k] && se[k].was && se[k].wozu && se[k].achtung);
+      const exp = Explain.local(App.doc.items[0].id);
+      const expOk = !!(exp && exp.lines && exp.lines.some(l => l.k === 'was' && l.t.includes('Alu-Nutprofil')));
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { valOk: !!(val && val.ok), hOk, sOk, expOk, i18nOk };
+    })()""")
+    ok5 = bool(undo_len == 5 and redo_len == 14 and meta['valOk'] and meta['hOk'] and meta['sOk'] and meta['expOk'] and meta['i18nOk'])
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -43139,9 +43773,11 @@ TESTS = [
     ('[A-202] Einlinien-Schrift: „AB“ mit Einlinig (Gravur) nur offene Kurven / keine geschlossenen Umrisse / Rückgängig', t_a202_einlinien_schrift),
     ('[A-204] Direkt bearbeiten: Fläche ersetzen und Kante verschieben (DB-04, DB-07)', t_a204_flaeche_ersetzen_kante_verschieben),
     ('[A-203] Einlinien-Schrift gravieren: „AB“ 0,5 mm tief, 0,4 mm breit auf Quader / Einfach & Profi / Bearbeiten / Rückgängig', t_a203_gravieren),
+    ('[A-200] Direkt bearbeiten: Loch und Rundung an Importteilen ändern (DB-05, DB-06)', t_a200_loch_rundung_import),
     ('[A-206] Direkt bearbeiten: Vereinfachen und Körper an Körper ausrichten', t_vereinfachen_ausrichten),
     ('[A-207] Profile, Schritt 1: Profil-Sammlung (PR-01)', t_a207_profil_sammlung),
     ('[A-205] Direkt bearbeiten: Formen in Importteilen erkennen (DB-08)', t_a205_formen_erkennen),
+    ('[A-208] Profile, Schritt 2: Alu-Nutprofile mit Zubehör (PR-02)', t_a208_alu_nutprofile),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

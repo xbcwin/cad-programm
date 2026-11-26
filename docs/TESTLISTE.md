@@ -3078,6 +3078,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Rückgängig (`Strg+Z`) stellt das exakte Ausgangsvolumen wieder her; auch komplexe Zeichen (`Se3`) gravieren fehlerfrei (Klicktest `[A-203]`)
 - [ ] **Von Hand**: Im Browser eine ebene Fläche eines Körpers anklicken, „Gravieren“ wählen, während der Eingabe die 3D-Linienvorschau prüfen und eine mehrzeilige bzw. gedrehte Gravur auf einem 3D-Druckteil begutachten.
 
+## Direkt bearbeiten: Loch und Rundung an Importteilen ändern (Auto [A-200], DB-05, DB-06)
+- [x] Profi-Sichtbarkeit, Befehlssuche (`edit-hole`, `edit-fillet`), Kontextleiste (`#ctx-edit-hole`, `#ctx-edit-fillet`) und Rechtsklick-Menü (`#cm-edit-hole`, `#cm-edit-fillet` nur an Loch- bzw. Rundungsflächen im Profi-Modus) (Klicktest `[A-200]`)
+- [x] Importiertes STEP-Teil mit Loch Ø 6 mm und Kantenrundung R 2 mm: Loch per Klick auf Ø 8 mm ändern (Messen zeigt `Ø 8 mm`, 0 Geometriefehler), Verkleinern auf Ø 4 mm, Formel `d_loch = 8`, Unterdrücken und Rückgängig/Wiederherstellen (Klicktest `[A-200]`)
+- [x] Am selben STEP-Importteil mit Loch Ø 8 mm: Kantenrundung R 2 mm auf R 4 mm (und R 1,5 mm) ändern bei erhaltenem Loch Ø 8 mm, Unterdrücken und Rückgängig/Wiederherstellen (Klicktest `[A-200]`)
+- [x] Sackloch Ø 6 × 10 mm → Ø 8 × 10 mm am STEP-Teil, 4-Kanten-Rundungskette R 2 → R 3,5 mm, Torus-Rundung am Zylinder R 2 → R 3 mm, Modus ohne Verlauf (`noHistory`), `Store.validateProject()`, `Explain.local()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-200]`)
+- [ ] **Von Hand**: Im Browser im Profi-Modus ein eigenes STEP-Teil mit Bohrungen und verrundeten Kanten importieren, direkt im 3D-Bild ein Loch im Durchmesser und eine Rundung im Radius ändern und per Messen kontrollieren.
+
 ## Direkt bearbeiten: Vereinfachen und Körper an Körper ausrichten (Auto [A-206], DB-09, DB-10)
 - [x] Profi-Sichtbarkeit (`simplify`, `align-faces` nur im Profi-Modus), `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-206]`)
 - [x] Quader 20×20×10 mit Rundung R1 und Durchgangsloch Ø2: `Features.simplify` bis 3 mm entfernt beide Details, Flächenzahl sinkt von 8 auf 6 ebene Flächen (`4000,0 mm³`, `GeomCheck` = 0 Fehler), Eigenschaften-Panel `#simp-max`/`#simp-fillets`/`#simp-chamfers`/`#simp-holes` sichtbar (Klicktest `[A-206]`)
@@ -3098,6 +3105,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Ändern der `Ø 6 mm`-Bohrung über `#rec-dia` auf `Ø 10 mm` und `Ø 4 mm` sowie der `R 3 mm`-Rundung über `#rec-radius` auf `R 5 mm` wirkt exakt am Körper (`GeomCheck` = 0 Fehler); auch Sackloch (`Ø 5 mm`, `T 6 mm`) und Tasche (`16 × 10 mm`, `T 4 mm` → `7 mm`) werden erkannt und bearbeitet (Klicktest `[A-205]`)
 - [x] Unterdrücken/Aktivieren, Zurücksetzen und Rückgängig stellen den Ausgangskörper sauber wieder her (Klicktest `[A-205]`)
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine fremde STEP-Datei mit Bohrungen, Rundungen und Taschen importieren, über Rechtsklick auf den Körper in der 3D-Ansicht „Formen erkennen“ starten und Maße über die neuen Verlaufsschritte anpassen.
+
+## Profile, Schritt 2: Alu-Nutprofile mit Zubehör (Auto [A-208], PR-02)
+- [x] Unter „Bibliothek → Profile“ sind „Alu-Nutprofile & Zubehör“ (Alu-Nutprofil, Profil-Winkel, Nutenstein, Profil-Endkappe) in **Einfach** und **Profi** sichtbar sowie über die Befehlssuche einfügbar (Klicktest `[A-208]`)
+- [x] Nutprofil 20×20, Länge 300 mm einfügen ergibt geschlossenen B-Rep-Körper (`20 × 20 × 300 mm`, exaktes Volumen < 1 % Abweichung) mit 4 echten T-Nuten (4 Nutböden, 8 Lippenflanken) und 1 Mittelbohrung Ø 5 mm (Klicktest `[A-208]`)
+- [x] Winkel 20, Nutenstein 20 und Endkappe 20×20 setzen sich per 1-Klick-Knopf (und ein separat eingefügter Winkel per „Winkel ans Profil setzen“) bündig ans Profil mit 0 Durchdringungen im `clashes`-Check (Klicktest `[A-208]`)
+- [x] Alle Baureihen 20, 30, 40, 45 (Nut 6/8/10) inkl. Doppelprofil 20×40 (2 Bohrungen) und Zubehör (inkl. Winkel mit Zentriernasen) bestehen `GeomCheck` = 0 Fehler; Rückgängig/Wiederherstellen, Validierung, Hilfen, Erklärungen und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-208]`)
+- [ ] **Von Hand**: Im Browser im Einfach- und Profi-Modus ein Alu-Nutprofil 30×30 oder 40×40 einfügen, Winkel, Nutenstein und Endkappe per Knopf ans Profil setzen und im 3D-Blick (auch im Schnitt) prüfen.
 
 ## Fehler melden
 

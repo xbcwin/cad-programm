@@ -308,6 +308,10 @@ const Snap = (() => {
     pipeFlange: 'Flanschmitte',
     stdBelt: 'Riemenmitte',
     stdChain: 'Kettenmitte',
+    tSlotProfile: 'Profilachse',
+    tSlotBracket: 'Winkel-Ecke',
+    tSlotNut: 'Nutenstein-Mitte',
+    tSlotEndCap: 'Endkappe-Mitte',
   };
   let dockDrag = null;
 

@@ -10,7 +10,7 @@ const Assembly = (() => {
     return !!(it && it.partRef && typeof it.partRef.docId === 'string' && it.partRef.docId);
   }
   function isStepMod(it) {
-    return !it || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'directFace' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'simplify' || it.kind === 'mirrorStep' || it.kind === 'deleteBody' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new'));
+    return !it || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'directFace' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'editHole' || it.kind === 'editFillet' || it.kind === 'simplify' || it.kind === 'mirrorStep' || it.kind === 'deleteBody' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new'));
   }
   function canOpenInTab(it, doc = App.doc) {
     if (!it || it.kind === 'ref') return false;
@@ -1462,7 +1462,7 @@ const Assembly = (() => {
   }
 
   // ================= Schrauben automatisch einsetzen (BG-23) =================
-  const NORM_FASTENER_LIBS = new Set(['stdScrew', 'stdNut', 'stdWasher', 'stdPin', 'stdKey', 'stdBearing', 'stdSleeve', 'stdORing', 'stdShaftSeal', 'stdCompSpring', 'stdExtSpring', 'shaftCollar', 'shaftCoupling', 'stdPipe', 'pipeElbow', 'pipeTee', 'pipeFlange', 'stdBelt', 'stdChain']);
+  const NORM_FASTENER_LIBS = new Set(['stdScrew', 'stdNut', 'stdWasher', 'stdPin', 'stdKey', 'stdBearing', 'stdSleeve', 'stdORing', 'stdShaftSeal', 'stdCompSpring', 'stdExtSpring', 'shaftCollar', 'shaftCoupling', 'stdPipe', 'pipeElbow', 'pipeTee', 'pipeFlange', 'stdBelt', 'stdChain', 'tSlotProfile', 'tSlotNut', 'tSlotEndCap']);
   function isNormFastener(it) {
     return !!(it && it.kind === 'part' && it.p && NORM_FASTENER_LIBS.has(it.p.lib));
   }
