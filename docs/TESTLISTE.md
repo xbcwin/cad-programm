@@ -3092,6 +3092,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Alle 7 Profilarten bauen mit `GeomCheck` = 0 Fehlern und korrektem Volumen; Rückgängig/Wiederherstellen, Projekt-Validierung, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-207]`)
 - [ ] **Von Hand**: Im Browser im Einfach- und Profi-Modus über „Bauteile → Profile“ ein I-Träger- und ein Rundrohr-Profil auf eine Körperfläche ziehen und verschiedene Normgrößen durchschalten.
 
+## Direkt bearbeiten: Formen in Importteilen erkennen (Auto [A-205], DB-08)
+- [x] Profi-Sichtbarkeit (`recognize-features` und `#tm-recognize-features` nur im Profi-Modus), `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-205]`)
+- [x] Importiertes STEP-Teil mit 2 Durchgangsbohrungen (`Ø 6 mm`, `Ø 8 mm`) und 1 Rundung (`R 3 mm`): Rechtsklick → „Formen erkennen“ listet 2 Bohrungen und 1 Rundung mit exakten Maßen als bearbeitbare Schritte im Verlauf und in der Zeitleiste (Klicktest `[A-205]`)
+- [x] Ändern der `Ø 6 mm`-Bohrung über `#rec-dia` auf `Ø 10 mm` und `Ø 4 mm` sowie der `R 3 mm`-Rundung über `#rec-radius` auf `R 5 mm` wirkt exakt am Körper (`GeomCheck` = 0 Fehler); auch Sackloch (`Ø 5 mm`, `T 6 mm`) und Tasche (`16 × 10 mm`, `T 4 mm` → `7 mm`) werden erkannt und bearbeitet (Klicktest `[A-205]`)
+- [x] Unterdrücken/Aktivieren, Zurücksetzen und Rückgängig stellen den Ausgangskörper sauber wieder her (Klicktest `[A-205]`)
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine fremde STEP-Datei mit Bohrungen, Rundungen und Taschen importieren, über Rechtsklick auf den Körper in der 3D-Ansicht „Formen erkennen“ starten und Maße über die neuen Verlaufsschritte anpassen.
+
 ## Fehler melden
 
 ```

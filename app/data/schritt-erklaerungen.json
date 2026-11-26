@@ -559,5 +559,10 @@
     "was": "Erzeugt einen Profilstab nach Norm (Vierkantrohr, Rundrohr, L-, U-, T-, I-Profil oder Flachstahl) mit gewähltem Querschnitt und Länge.",
     "wozu": "Baut Rahmen, Gestelle, Maschinenunterbauten, Streben und Stahlbau-Konstruktionen mit echten DIN-/EN-Querschnitten.",
     "achtung": "Profilart, Normgröße und Länge lassen sich jederzeit rechts im Eigenschaften-Panel umschalten oder durch eigene Maße überschreiben."
+  },
+  "recognizedFeature": {
+    "was": "Macht eine automatisch erkannte Bohrung, Rundung oder Tasche in einem importierten Bauteil als eigenen Verlaufsschritt direkt bearbeitbar.",
+    "wozu": "Erlaubt das nachträgliche Ändern von Lochdurchmesser, Bohrungstiefe, Taschentiefe oder Rundungsradius an fremden STEP-, IGES- oder BREP-Teilen.",
+    "achtung": "Jeder erkannte Schritt bleibt im Verlauf unterdrückbar, rückgängig machbar und lässt sich jederzeit auf sein ursprüngliches Maß zurücksetzen."
   }
 }

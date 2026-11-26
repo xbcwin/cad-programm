@@ -80,6 +80,7 @@ self.onmessage = async (ev) => {
     else if (cmd === 'checkImport') result = kernel.checkImport(args.p, args);
     else if (cmd === 'healImport') result = kernel.healImport(args.p, args);
     else if (cmd === 'buildEnvelope') result = kernel.buildEnvelope(args.scene, args.opts);
+    else if (cmd === 'recognizeFeatures') result = kernel.recognizeFeatures(args);
     else throw new Error('Unbekannter Befehl: ' + cmd);
     const tl = [];
     // nur große Arrays übertragen (Kopien sind in der Nutzlast schon neu)

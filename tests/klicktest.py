@@ -42604,6 +42604,223 @@ def t_a207_profil_sammlung(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a205_formen_erkennen(p):
+    """[A-205] Direkt bearbeiten: Löcher, Rundungen und Taschen in Importteilen erkennen (DB-08)."""
+    p.empty()
+    try:
+        # 1. Profi vs. Einfach (Befehlssuche + Kontextmenüs), Hilfen, Erklärungen & DE/EN-Schlüssel
+        p.ev("ViewPrefs.setLevel('pro');")
+        p.wait(150)
+        cmd_pro = p.ev("return Commands.search('formen erkennen').some(c => c.id === 'recognize-features')")
+        p.ev("ViewPrefs.setLevel('simple');")
+        p.wait(150)
+        cmd_simple = p.ev("return Commands.search('formen erkennen').some(c => c.id === 'recognize-features')")
+        p.ev("ViewPrefs.setLevel('pro');")
+        p.wait(150)
+        meta = p.ev("""return (async () => {
+          const [wh, se, de, en] = await Promise.all([
+            fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+            fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+            fetch('data/texte-de.json').then(r => r.json()),
+            fetch('data/texte-en.json').then(r => r.json()),
+          ]);
+          const hOk = !!(wh.recognizeFeatures && wh.recognizeFeatures.tip && wh.recognizeFeatures.hilfe && wh.recognizeFeatures.tipp);
+          const sOk = !!(se.recognizedFeature && se.recognizedFeature.was && se.recognizedFeature.wozu && se.recognizedFeature.achtung);
+          const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+          const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+          return { hOk, sOk, i18nOk };
+        })()""")
+        ok1 = bool(cmd_pro and not cmd_simple and meta['hOk'] and meta['sOk'] and meta['i18nOk'])
+
+        # 2. STEP-Teil mit 2 Durchgangsbohrungen (Ø 6 mm, Ø 8 mm) und 1 Rundung (R 3 mm) erzeugen & importieren
+        p.ev("""App.change('STEP-Quellteil', (doc) => {
+          const box = Model.newItem('box', { w: 40, d: 30, h: 10 }, { name: 'Platte' });
+          box.finishes = [{ id: 'f_r3', type: 'fillet', r: 3, edges: [{ a: [-20, -15, 0], b: [-20, -15, 10], m: [-20, -15, 5], l: 10 }] }];
+          const h1 = Model.newItem('cylinder', { d: 6, h: 14 }, { name: 'Loch6' });
+          h1.t = { x: -6, y: 2, z: -2, rx: 0, ry: 0, rz: 0 };
+          h1.op = { type: 'cut', target: box.id };
+          const h2 = Model.newItem('cylinder', { d: 8, h: 14 }, { name: 'Loch8' });
+          h2.t = { x: 10, y: 2, z: -2, rx: 0, ry: 0, rz: 0 };
+          h2.op = { type: 'cut', target: box.id };
+          doc.items.push(box, h1, h2);
+        })""")
+        warte_rechnen(p, 50)
+        orig_vol = p.ev("""return (async () => {
+          const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+          window.__a205Step = new File([new Uint8Array(r.data)], 'Platte_2L_1R.step');
+          const m = await Mass.measure({ ensure: true });
+          return m?.parts?.[0]?.volume || 0;
+        })()""")
+        p.ev("App.setDoc(Model.newDoc());"); p.wait(250)
+        p.pg.evaluate("() => window.__M.Start.importCAD(window.__a205Step)")
+        warte_rechnen(p, 45)
+        imp_id = p.ev("return App.doc.items[0]?.id || ''")
+
+        # In Einfach ausgeblendet, in Profi über Rechtsklick auf das Importteil -> „Formen erkennen“
+        p.ev("ViewPrefs.setLevel('simple');"); p.wait(150)
+        p.pg.locator(f'.tree .node[data-id="{imp_id}"]').click(button='right'); p.wait(200)
+        simple_has_rec = p.ev("return !!document.querySelector('#tm-recognize-features')")
+        p.pg.keyboard.press('Escape'); p.wait(100)
+        p.ev("ViewPrefs.setLevel('pro');"); p.wait(150)
+
+        p.pg.locator(f'.tree .node[data-id="{imp_id}"]').click(button='right'); p.wait(250)
+        p.pg.locator('#tm-recognize-features').click()
+        warte_rechnen(p, 45)
+        rec2 = p.ev("""return (() => {
+          const steps = App.doc.items.filter(x => x.kind === 'recognizedFeature');
+          const holes = steps.filter(x => x.p?.featType === 'hole').sort((a, b) => a.p.d - b.p.d);
+          const fillets = steps.filter(x => x.p?.featType === 'fillet');
+          const chips = document.querySelectorAll('.tl-chip[data-kind="recognizedFeature"]').length;
+          const treeRows = [...document.querySelectorAll('#left-body .node .nm')].map(n => n.textContent);
+          const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+          const exp = holes[0] ? Explain.local(holes[0].id) : null;
+          return {
+            errs: App.errors.length,
+            total: steps.length,
+            holes: holes.map(h => ({ id: h.id, d: h.p.d, depth: h.p.depth, through: !!h.p.through })),
+            fillets: fillets.map(f => ({ id: f.id, r: f.p.r })),
+            chips,
+            treeHasNames: treeRows.some(t => /Bohrung/i.test(t)) && treeRows.some(t => /Rundung/i.test(t)),
+            valOk: !!(val && val.ok && val.errors.length === 0),
+            expOk: !!(exp && exp.lines && exp.lines.some(l => l.k === 'op' && l.t.includes('Bohrung'))),
+          };
+        })()""")
+        exp_orig_vol = 40 * 30 * 10 - ((1 - math.pi / 4) * 3 * 3 * 10) - math.pi * 3 * 3 * 10 - math.pi * 4 * 4 * 10
+        ok2 = bool(
+            not simple_has_rec and rec2['errs'] == 0 and rec2['total'] == 3
+            and len(rec2['holes']) == 2 and len(rec2['fillets']) == 1
+            and abs(rec2['holes'][0]['d'] - 6.0) < 0.05 and rec2['holes'][0]['through']
+            and abs(rec2['holes'][1]['d'] - 8.0) < 0.05 and rec2['holes'][1]['through']
+            and abs(rec2['fillets'][0]['r'] - 3.0) < 0.05
+            and rec2['chips'] == 3 and rec2['treeHasNames'] and rec2['valOk'] and rec2['expOk']
+            and abs(orig_vol - exp_orig_vol) < 1.0
+        )
+
+        # 3. Bohrung Ø 6 mm über #rec-dia auf Ø 10 mm vergrößern und danach auf Ø 4 mm verkleinern
+        hole6_id = rec2['holes'][0]['id']
+        p.ev(f"App.select(['{hole6_id}']);"); p.wait(200)
+        p.pg.wait_for_selector('#rec-dia', timeout=5000)
+        p.pg.fill('#rec-dia', '10'); p.pg.press('#rec-dia', 'Enter')
+        warte_rechnen(p, 50)
+        st3_big = p.ev("""return (async () => {
+          const m = await Mass.measure({ ensure: true });
+          const gc = await GeomCheck.run({ silent: true });
+          const faces = App.results.get(App.doc.items[0].id)?.data?.faces || [];
+          const cylRs = faces.filter(f => f.t === 'CYLINDRE' && f.r > 0).map(f => f.r);
+          return {
+            errs: App.errors.length,
+            vol: m?.parts?.[0]?.volume || 0,
+            gcBad: gc.issues.filter(x => x.s === 'bad').length,
+            hasR5: cylRs.some(r => Math.abs(r - 5.0) < 0.05),
+            hasReset: !!document.querySelector('#rec-reset'),
+          };
+        })()""")
+        exp_vol_10 = exp_orig_vol - math.pi * (5 * 5 - 3 * 3) * 10
+        p.pg.fill('#rec-dia', '4'); p.pg.press('#rec-dia', 'Enter')
+        warte_rechnen(p, 50)
+        st3_small = p.ev("""return (async () => {
+          const m = await Mass.measure({ ensure: true });
+          const faces = App.results.get(App.doc.items[0].id)?.data?.faces || [];
+          const cylRs = faces.filter(f => f.t === 'CYLINDRE' && f.r > 0).map(f => f.r);
+          return {
+            errs: App.errors.length,
+            vol: m?.parts?.[0]?.volume || 0,
+            hasR2: cylRs.some(r => Math.abs(r - 2.0) < 0.05),
+          };
+        })()""")
+        exp_vol_4 = exp_orig_vol + math.pi * (3 * 3 - 2 * 2) * 10
+        ok3 = bool(
+            st3_big['errs'] == 0 and st3_big['gcBad'] == 0 and st3_big['hasR5'] and st3_big['hasReset']
+            and abs(st3_big['vol'] - exp_vol_10) < 1.5
+            and st3_small['errs'] == 0 and st3_small['hasR2']
+            and abs(st3_small['vol'] - exp_vol_4) < 1.5
+        )
+
+        # 4. Rundung R 3 mm auf R 5 mm ändern + Tasche & Sackloch im STEP-Teil erkennen und Tiefe ändern
+        fillet_id = rec2['fillets'][0]['id']
+        p.ev(f"App.select(['{fillet_id}']);"); p.wait(200)
+        p.pg.wait_for_selector('#rec-radius', timeout=5000)
+        p.pg.fill('#rec-radius', '5'); p.pg.press('#rec-radius', 'Enter')
+        warte_rechnen(p, 50)
+        st4_fil = p.ev("""return (async () => {
+          const m = await Mass.measure({ ensure: true });
+          const faces = App.results.get(App.doc.items[0].id)?.data?.faces || [];
+          const cylRs = faces.filter(f => f.t === 'CYLINDRE' && f.r > 0).map(f => f.r);
+          return { errs: App.errors.length, vol: m?.parts?.[0]?.volume || 0, hasR5Fillet: cylRs.some(r => Math.abs(r - 5.0) < 0.05) };
+        })()""")
+        exp_vol_r5 = exp_vol_4 - ((1 - math.pi / 4) * (5 * 5 - 3 * 3) * 10)
+
+        # Neues STEP-Teil mit Sackloch (Ø 5, T 6) und Tasche (16 × 10, T 4)
+        p.ev("App.setDoc(Model.newDoc());"); p.wait(200)
+        p.ev("""App.change('STEP-Teil mit Tasche und Sackloch', (doc) => {
+          const box = Model.newItem('box', { w: 40, d: 30, h: 12 }, { name: 'Gehaeuse' });
+          const pocket = Model.newItem('box', { w: 16, d: 10, h: 6 }, { name: 'Tasche' });
+          pocket.t = { x: -8, y: 0, z: 8, rx: 0, ry: 0, rz: 0 };
+          pocket.op = { type: 'cut', target: box.id };
+          const blind = Model.newItem('cylinder', { d: 5, h: 8 }, { name: 'Sackloch' });
+          blind.t = { x: 10, y: 0, z: 6, rx: 0, ry: 0, rz: 0 };
+          blind.op = { type: 'cut', target: box.id };
+          doc.items.push(box, pocket, blind);
+        })""")
+        warte_rechnen(p, 50)
+        p.ev("""return (async () => {
+          const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+          window.__a205Step2 = new File([new Uint8Array(r.data)], 'Tasche_Sackloch.step');
+        })()""")
+        p.ev("App.setDoc(Model.newDoc());"); p.wait(200)
+        p.pg.evaluate("() => window.__M.Start.importCAD(window.__a205Step2)")
+        warte_rechnen(p, 45)
+        p.ev("return Features.recognizeFeatures(App.doc.items[0].id)")
+        warte_rechnen(p, 45)
+        rec4 = p.ev("""return (async () => {
+          const steps = App.doc.items.filter(x => x.kind === 'recognizedFeature');
+          const hole = steps.find(x => x.p?.featType === 'hole');
+          const pocket = steps.find(x => x.p?.featType === 'pocket');
+          const m = await Mass.measure({ ensure: true });
+          return {
+            errs: App.errors.length,
+            hole: hole ? { id: hole.id, d: hole.p.d, depth: hole.p.depth, through: !!hole.p.through } : null,
+            pocket: pocket ? { id: pocket.id, depth: pocket.p.depth, length: pocket.p.length, width: pocket.p.width, through: !!pocket.p.through } : null,
+            vol: m?.parts?.[0]?.volume || 0,
+          };
+        })()""")
+        # Tasche von 4 mm auf 7 mm vertiefen (Delta Volumen = -16*10*3 = -480 mm³)
+        pocket_id = rec4['pocket']['id']
+        p.ev(f"App.select(['{pocket_id}']);"); p.wait(200)
+        p.pg.wait_for_selector('#rec-depth', timeout=5000)
+        p.pg.fill('#rec-depth', '7'); p.pg.press('#rec-depth', 'Enter')
+        warte_rechnen(p, 50)
+        vol_after_pocket = p.ev("return Mass.measure({ ensure: true }).then(m => m?.parts?.[0]?.volume || 0)")
+        ok4 = bool(
+            st4_fil['errs'] == 0 and st4_fil['hasR5Fillet'] and abs(st4_fil['vol'] - exp_vol_r5) < 1.5
+            and rec4['errs'] == 0 and rec4['hole'] and rec4['pocket']
+            and abs(rec4['hole']['d'] - 5.0) < 0.05 and not rec4['hole']['through'] and abs(rec4['hole']['depth'] - 6.0) < 0.05
+            and abs(rec4['pocket']['depth'] - 4.0) < 0.05 and not rec4['pocket']['through']
+            and abs(rec4['pocket']['length'] - 16.0) < 0.1 and abs(rec4['pocket']['width'] - 10.0) < 0.1
+            and abs((rec4['vol'] - vol_after_pocket) - 480.0) < 1.5
+        )
+
+        # 5. Unterdrücken, Wieder-Aktivieren & Rückgängig/Wiederherstellen
+        p.ev(f"Timeline.toggleSuppress('{pocket_id}');")
+        warte_rechnen(p, 40)
+        vol_sup = p.ev("return Mass.measure({ ensure: true }).then(m => m?.parts?.[0]?.volume || 0)")
+        p.ev(f"Timeline.toggleSuppress('{pocket_id}');")
+        warte_rechnen(p, 40)
+        vol_unsup = p.ev("return Mass.measure({ ensure: true }).then(m => m?.parts?.[0]?.volume || 0)")
+        p.ev("App.undo(); App.undo(); App.undo();")
+        warte_rechnen(p, 40)
+        vol_undo = p.ev("return Mass.measure({ ensure: true }).then(m => m?.parts?.[0]?.volume || 0)")
+        ok5 = bool(
+            abs(vol_sup - rec4['vol']) < 1.0
+            and abs(vol_unsup - vol_after_pocket) < 1.0
+            and abs(vol_undo - rec4['vol']) < 1.0
+        )
+
+        return [ok1, ok2, ok3, ok4, ok5]
+    finally:
+        p.ev("try { Features.stopPick && Features.stopPick(); ViewPrefs.setLevel('pro'); } catch (_) {}")
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -42924,6 +43141,7 @@ TESTS = [
     ('[A-203] Einlinien-Schrift gravieren: „AB“ 0,5 mm tief, 0,4 mm breit auf Quader / Einfach & Profi / Bearbeiten / Rückgängig', t_a203_gravieren),
     ('[A-206] Direkt bearbeiten: Vereinfachen und Körper an Körper ausrichten', t_vereinfachen_ausrichten),
     ('[A-207] Profile, Schritt 1: Profil-Sammlung (PR-01)', t_a207_profil_sammlung),
+    ('[A-205] Direkt bearbeiten: Formen in Importteilen erkennen (DB-08)', t_a205_formen_erkennen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

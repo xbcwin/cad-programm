@@ -2208,5 +2208,10 @@
     "tip": "Norm-Profil (Vierkantrohr, Rundrohr, L-, U-, T-, I-Profil oder Flachstahl) in wählbarer Länge",
     "hilfe": "Erzeugt ein Konstruktionsprofil mit genormtem Querschnitt (Vierkantrohr, Rundrohr, L-Profil, U-Profil, T-Profil, I-Träger oder Flachstahl) und beliebiger Länge. Im Eigenschaften-Panel kannst du jederzeit zwischen allen Profilarten, den passenden Normgrößen oder eigenen Maßen wechseln.",
     "tipp": "Wähle „Eigene Maße“ bei Normgröße (oder gib direkt Breite, Höhe oder Wandstärke ein), um Sonderprofile außerhalb der Standardtabelle zu erzeugen."
+  },
+  "recognizeFeatures": {
+    "tip": "Bohrungen, Rundungen und Taschen in einem importierten Teil erkennen und bearbeitbar machen (Profi)",
+    "hilfe": "Durchsucht im Profi-Modus ein importiertes STEP-, IGES- oder BREP-Teil nach Bohrungen, Kantenrundungen und Taschen und legt für jede erkannte Form einen eigenen Schritt im Verlauf an. Dort lassen sich Durchmesser, Tiefe, Durchgang oder Rundungsradius direkt ändern – auch mit Formeln.",
+    "tipp": "Ideal, wenn ein fremdes STEP-Teil z. B. etwas größere Schraubenlöcher oder einen größeren Kantenradius bekommen soll, ohne es neu zu zeichnen."
   }
 }

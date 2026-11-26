@@ -10237,7 +10237,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'directFace' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'simplify' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'directFace' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'simplify' || it.kind === 'recognizedFeature' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -14270,6 +14270,783 @@ export function createKernel(R, oc) {
     return comp;
   }
 
+  // ---------- Formen in Importteilen erkennen & bearbeiten (DB-08) ----------
+  function rfRound(v, d = 3) {
+    const f = 10 ** d;
+    return Math.round(Number(v || 0) * f) / f;
+  }
+  function rfR6Arr(a) {
+    return Array.isArray(a) ? a.map((v) => Math.round(Number(v || 0) * 1e6) / 1e6) : null;
+  }
+  function rfFaceSpec(g, fi) {
+    const info = g.faceInfos[fi] || {};
+    const spec = {
+      c: rfR6Arr(info.c || [0, 0, 0]),
+      n: info.n ? rfR6Arr(info.n) : null,
+      t: g.faceTypes[fi],
+    };
+    if (info.r > 0) spec.r = rfRound(info.r, 4);
+    return spec;
+  }
+  function rfFaceUVSpanU(fObj) {
+    try {
+      const uv = fObj.UVBounds;
+      return Math.min(2 * Math.PI, Math.abs(uv.uMax - uv.uMin));
+    } catch (_) {
+      return 2 * Math.PI;
+    }
+  }
+  function rfFaceAxialExtent(g, fi, origin, dir) {
+    let tMin = Infinity, tMax = -Infinity;
+    const pts = [];
+    for (const ei of g.faceEdges[fi]) {
+      const eg = g.edgesList[ei];
+      if (!eg) continue;
+      if (eg.a) pts.push(eg.a);
+      if (eg.b) pts.push(eg.b);
+      if (eg.mid) pts.push(eg.mid);
+      if (Array.isArray(eg.pts)) for (const p of eg.pts) pts.push(p);
+    }
+    try {
+      for (const ed of g.fObjs[fi].edges) {
+        for (const t of [0, 0.25, 0.5, 0.75, 1]) pts.push(vec(ed.pointAt(t)));
+      }
+    } catch (_) {}
+    for (const p of pts) {
+      const q = dot(sub(p, origin), dir);
+      if (q < tMin) tMin = q;
+      if (q > tMax) tMax = q;
+    }
+    return [tMin, tMax];
+  }
+  function rfMergeBBox(a, b) {
+    if (!a) return b ? b.slice() : null;
+    if (!b) return a.slice();
+    return [
+      Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2]),
+      Math.max(a[3], b[3]), Math.max(a[4], b[4]), Math.max(a[5], b[5]),
+    ];
+  }
+  function recognizeFeaturesOnSolid(solidShape) {
+    const out = [];
+    let g = null;
+    try {
+      g = buildFaceEdgeGraph(solidShape);
+      const claimed = new Set();
+      const solidSpan = bboxMaxDim(g.solidBb);
+
+      // 1. Bohrungen (konkave Zylinderflächen mit ~360° Gesamtumfang, ggf. gesplittet + Bodenfläche)
+      const cylCandidates = [];
+      for (let fi = 0; fi < g.nF; fi++) {
+        if (g.faceTypes[fi] !== 'CYLINDRE') continue;
+        const info = g.faceInfos[fi];
+        if (!info || !(info.r > 0) || !Array.isArray(info.axis) || info.axis.length < 6) continue;
+        const o = info.axis.slice(0, 3);
+        const d = norm(info.axis.slice(3, 6));
+        const pt = sampleFaceInterior(g.fObjs[fi], g.allFaces[fi]) || info.c;
+        const nrm = pt ? simplifyFaceNormalAt(g, fi, pt) : null;
+        if (!pt || !nrm) continue;
+        const rel = sub(pt, o);
+        const radial = sub(rel, mul(d, dot(rel, d)));
+        if (dot(radial, nrm) >= -0.1) continue; // nur nach innen gewölbt (Bohrung)
+        const uSpan = rfFaceUVSpanU(g.fObjs[fi]);
+        const [tMin, tMax] = rfFaceAxialExtent(g, fi, o, d);
+        if (!isFinite(tMin) || !isFinite(tMax) || tMax - tMin <= 1e-4) continue;
+        cylCandidates.push({ fi, r: info.r, o, d, uSpan, tMin, tMax });
+      }
+
+      const holeGroups = [];
+      const cylUsed = new Set();
+      for (let i = 0; i < cylCandidates.length; i++) {
+        if (cylUsed.has(i)) continue;
+        const base = cylCandidates[i];
+        const members = [base];
+        cylUsed.add(i);
+        let gTMin = base.tMin, gTMax = base.tMax;
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (let j = 0; j < cylCandidates.length; j++) {
+            if (cylUsed.has(j)) continue;
+            const c = cylCandidates[j];
+            const rTol = Math.max(0.05, Math.min(base.r, c.r) * 0.05);
+            if (Math.abs(base.r - c.r) > rTol) continue;
+            const dp = dot(base.d, c.d);
+            if (Math.abs(dp) < 0.998) continue;
+            const diffO = sub(c.o, base.o);
+            const perp = sub(diffO, mul(base.d, dot(diffO, base.d)));
+            if (len(perp) > rTol) continue;
+            const [cTMin, cTMax] = rfFaceAxialExtent(g, c.fi, base.o, base.d);
+            if (cTMax < gTMin - 0.1 || cTMin > gTMax + 0.1) continue;
+            cylUsed.add(j);
+            members.push(c);
+            gTMin = Math.min(gTMin, cTMin);
+            gTMax = Math.max(gTMax, cTMax);
+            changed = true;
+          }
+        }
+        const totalU = members.reduce((s, m) => s + m.uSpan, 0);
+        if (totalU < Math.PI * 1.85) continue;
+        const r = members.reduce((s, m) => s + m.r, 0) / members.length;
+        const faceSet = new Set(members.map((m) => m.fi));
+
+        // Prüfe Enden (tMin, tMax) auf Sackloch-Boden (Ebene oder Kegelspitze)
+        let capAtMin = false, capAtMax = false;
+        for (const fi of [...faceSet]) {
+          for (const ei of g.faceEdges[fi]) {
+            const eg = g.edgesList[ei];
+            if (!eg || eg.t !== 'CIRCLE') continue;
+            for (const nfi of eg.faces) {
+              if (faceSet.has(nfi)) continue;
+              const nft = g.faceTypes[nfi];
+              const ninfo = g.faceInfos[nfi];
+              if (nft === 'PLANE' && ninfo && Array.isArray(ninfo.n)) {
+                if (Math.abs(dot(norm(ninfo.n), base.d)) > 0.99 && bboxMaxDim(g.faceBBoxes[nfi]) <= 2 * r + 0.25) {
+                  const tc = dot(sub(ninfo.c, base.o), base.d);
+                  if (Math.abs(tc - gTMin) <= 0.15) capAtMin = true;
+                  if (Math.abs(tc - gTMax) <= 0.15) capAtMax = true;
+                  faceSet.add(nfi);
+                }
+              } else if (nft === 'CONE') {
+                let maxCR = 0;
+                for (const cei of g.faceEdges[nfi]) {
+                  const ceg = g.edgesList[cei];
+                  if (ceg && ceg.t === 'CIRCLE' && ceg.r > 0) maxCR = Math.max(maxCR, ceg.r);
+                }
+                if (maxCR <= r + 0.1) {
+                  const [cMin, cMax] = rfFaceAxialExtent(g, nfi, base.o, base.d);
+                  if (cMin < gTMin + 0.15 && Math.abs(cMax - gTMin) < 0.25) capAtMin = true;
+                  if (cMax > gTMax - 0.15 && Math.abs(cMin - gTMax) < 0.25) capAtMax = true;
+                  gTMin = Math.min(gTMin, cMin);
+                  gTMax = Math.max(gTMax, cMax);
+                  faceSet.add(nfi);
+                }
+              }
+            }
+          }
+        }
+        if (capAtMin && capAtMax) continue; // geschlossener Hohlraum, keine Bohrung
+
+        const depth = gTMax - gTMin;
+        if (!(depth > 0.05)) continue;
+        let origin, axisDir, through;
+        if (capAtMin || capAtMax) {
+          through = false;
+          if (capAtMax) {
+            origin = add(base.o, mul(base.d, gTMin));
+            axisDir = base.d.slice();
+          } else {
+            origin = add(base.o, mul(base.d, gTMax));
+            axisDir = mul(base.d, -1);
+          }
+        } else {
+          through = true;
+          const pMin = add(base.o, mul(base.d, gTMin));
+          const pMax = add(base.o, mul(base.d, gTMax));
+          const pickMax = (pMax[2] > pMin[2] + 1e-4)
+            || (Math.abs(pMax[2] - pMin[2]) <= 1e-4 && pMax[1] > pMin[1] + 1e-4)
+            || (Math.abs(pMax[2] - pMin[2]) <= 1e-4 && Math.abs(pMax[1] - pMin[1]) <= 1e-4 && pMax[0] >= pMin[0]);
+          if (pickMax) {
+            origin = pMax;
+            axisDir = mul(base.d, -1);
+          } else {
+            origin = pMin;
+            axisDir = base.d.slice();
+          }
+        }
+        const center = add(origin, mul(axisDir, depth * 0.5));
+        const faceIndices = [...faceSet].sort((a, b) => a - b);
+        for (const fi of faceIndices) claimed.add(fi);
+        holeGroups.push({
+          featType: 'hole',
+          d: rfRound(2 * r, 3),
+          origD: rfRound(2 * r, 3),
+          depth: rfRound(depth, 3),
+          origDepth: rfRound(depth, 3),
+          through,
+          origThrough: through,
+          origin: rfR6Arr(origin),
+          axis: rfR6Arr(norm(axisDir)),
+          center: rfR6Arr(center),
+          faces: faceIndices.map((fi) => rfFaceSpec(g, fi)),
+        });
+      }
+
+      // 2. Taschen (innere Konturen auf ebener Wirtsfläche mit konkaver Kavität)
+      const pocketGroups = [];
+      const seenPocketKeys = new Set();
+      for (const iw of g.innerWires) {
+        const hostFi = iw.hostFi;
+        if (claimed.has(hostFi)) continue;
+        const hostN = simplifyFaceNormalAt(g, hostFi);
+        if (!hostN) continue;
+        const wirePts = [];
+        let maxLineLen = -1, uAxis = null;
+        for (const ei of iw.edgeIndices) {
+          const eg = g.edgesList[ei];
+          if (!eg) continue;
+          if (eg.a) wirePts.push(eg.a);
+          if (eg.b) wirePts.push(eg.b);
+          if (eg.mid) wirePts.push(eg.mid);
+          if (Array.isArray(eg.pts)) for (const p of eg.pts) wirePts.push(p);
+          if (eg.t === 'LINE' && eg.a && eg.b) {
+            const dLen = len(sub(eg.b, eg.a));
+            if (dLen > maxLineLen) {
+              maxLineLen = dLen;
+              uAxis = norm(sub(eg.b, eg.a));
+            }
+          }
+        }
+        if (!wirePts.length) continue;
+        let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+        for (const p of wirePts) {
+          minX = Math.min(minX, p[0]); minY = Math.min(minY, p[1]); minZ = Math.min(minZ, p[2]);
+          maxX = Math.max(maxX, p[0]); maxY = Math.max(maxY, p[1]); maxZ = Math.max(maxZ, p[2]);
+        }
+        const wireCenter = [(minX + maxX) * 0.5, (minY + maxY) * 0.5, (minZ + maxZ) * 0.5];
+
+        const comp = new Set();
+        const queue = [];
+        let valid = true;
+        for (const ei of iw.edgeIndices) {
+          const eg = g.edgesList[ei];
+          if (!eg) continue;
+          for (const fi of eg.faces) {
+            if (fi === hostFi || comp.has(fi)) continue;
+            if (claimed.has(fi)) { valid = false; break; }
+            comp.add(fi);
+            queue.push(fi);
+          }
+          if (!valid) break;
+        }
+        if (!valid || comp.size < 2) continue;
+
+        while (queue.length && valid) {
+          const u = queue.shift();
+          for (const ei of g.faceEdges[u]) {
+            const eg = g.edgesList[ei];
+            if (!eg) continue;
+            for (const v of eg.faces) {
+              if (v === u || comp.has(v)) continue;
+              const vInner = g.innerEdgesByFace.get(v);
+              if (vInner && vInner.has(ei)) continue;
+              if (claimed.has(v)) { valid = false; break; }
+              comp.add(v);
+              queue.push(v);
+            }
+            if (!valid) break;
+          }
+        }
+        if (!valid || comp.size < 2) continue;
+
+        for (const u of comp) {
+          for (const ei of g.faceEdges[u]) {
+            const eg = g.edgesList[ei];
+            if (!eg) continue;
+            for (const v of eg.faces) {
+              if (comp.has(v)) continue;
+              const vInner = g.innerEdgesByFace.get(v);
+              if (!vInner || !vInner.has(ei)) { valid = false; break; }
+            }
+            if (!valid) break;
+          }
+          if (!valid) break;
+        }
+        if (!valid) continue;
+
+        let sx = 0, sy = 0, sz = 0, cnt = 0;
+        for (const fi of comp) {
+          const c = g.faceInfos[fi] && g.faceInfos[fi].c;
+          if (c) { sx += c[0]; sy += c[1]; sz += c[2]; cnt++; }
+        }
+        if (!cnt || dot(sub([sx / cnt, sy / cnt, sz / cnt], wireCenter), hostN) >= -1e-4) continue;
+
+        const floorFaces = [];
+        let wallCount = 0, goodWalls = 0;
+        let maxDepth = 0;
+        for (const fi of comp) {
+          const ft = g.faceTypes[fi];
+          const info = g.faceInfos[fi];
+          if (ft === 'PLANE' && info && Array.isArray(info.n)) {
+            const nF = norm(info.n);
+            const dn = dot(nF, hostN);
+            if (dn > 0.99 && info.c) {
+              floorFaces.push(fi);
+              const dFloor = dot(sub(wireCenter, info.c), hostN);
+              if (dFloor > maxDepth) maxDepth = dFloor;
+              continue;
+            }
+            wallCount++;
+            if (Math.abs(dn) < 0.15) goodWalls++;
+          } else if (ft === 'CYLINDRE' && info && Array.isArray(info.axis)) {
+            const dAx = norm(info.axis.slice(3, 6));
+            wallCount++;
+            if (Math.abs(dot(dAx, hostN)) > 0.99) goodWalls++;
+          } else {
+            wallCount++;
+          }
+          for (const ei of g.faceEdges[fi]) {
+            const eg = g.edgesList[ei];
+            if (!eg) continue;
+            for (const p of [eg.a, eg.b, eg.mid]) {
+              if (!p) continue;
+              const dp = dot(sub(wireCenter, p), hostN);
+              if (dp > maxDepth) maxDepth = dp;
+            }
+          }
+        }
+        if (!(maxDepth > 0.05) || !wallCount || goodWalls < wallCount * 0.7) continue;
+
+        // Öffnungsmaße in Wirts-Ebene bestimmen
+        if (!uAxis || Math.abs(dot(uAxis, hostN)) > 0.9) {
+          const tmp = Math.abs(hostN[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0];
+          uAxis = norm(cross(hostN, tmp));
+        } else {
+          uAxis = norm(sub(uAxis, mul(hostN, dot(uAxis, hostN))));
+        }
+        const vAxis = norm(cross(hostN, uAxis));
+        let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
+        for (const p of wirePts) {
+          const rel = sub(p, wireCenter);
+          const u = dot(rel, uAxis), v = dot(rel, vAxis);
+          if (u < uMin) uMin = u; if (u > uMax) uMax = u;
+          if (v < vMin) vMin = v; if (v > vMax) vMax = v;
+        }
+        const spanU = Math.max(0, uMax - uMin);
+        const spanV = Math.max(0, vMax - vMin);
+        const pocketL = Math.max(spanU, spanV);
+        const pocketW = Math.min(spanU, spanV);
+
+        const sorted = [...comp].sort((a, b) => a - b);
+        const key = sorted.join(',');
+        if (seenPocketKeys.has(key)) continue;
+        seenPocketKeys.add(key);
+        for (const fi of sorted) claimed.add(fi);
+        const pCenter = add(wireCenter, mul(hostN, -maxDepth * 0.5));
+        pocketGroups.push({
+          featType: 'pocket',
+          depth: rfRound(maxDepth, 3),
+          origDepth: rfRound(maxDepth, 3),
+          through: !floorFaces.length,
+          width: rfRound(pocketW, 3),
+          length: rfRound(pocketL, 3),
+          hostPlane: { o: rfR6Arr(wireCenter), n: rfR6Arr(hostN) },
+          floorFace: floorFaces.length ? rfFaceSpec(g, floorFaces[0]) : null,
+          center: rfR6Arr(pCenter),
+          faces: sorted.map((fi) => rfFaceSpec(g, fi)),
+        });
+      }
+
+      // 3. Kantenrundungen (Zylinder-/Torus-/Ecken-Verrundungen mit Radius)
+      const maxFilletR = Math.max(50, solidSpan * 0.45);
+      const filletFaces = new Set();
+      for (let fi = 0; fi < g.nF; fi++) {
+        if (claimed.has(fi)) continue;
+        const ft = g.faceTypes[fi];
+        const info = g.faceInfos[fi];
+        if (ft === 'CYLINDRE') {
+          if (!(info && info.r > 0 && info.r <= maxFilletR)) continue;
+          if (rfFaceUVSpanU(g.fObjs[fi]) >= Math.PI * 1.85) continue;
+        } else if (ft === 'TORUS') {
+          if (!(info && info.r > 0 && info.r <= maxFilletR)) continue;
+        } else {
+          continue;
+        }
+        const tanNeighbors = [];
+        for (const ei of g.faceEdges[fi]) {
+          const eg = g.edgesList[ei];
+          if (!eg) continue;
+          const nF = simplifyFaceNormalAt(g, fi, eg.mid);
+          if (!nF) continue;
+          for (const nfi of eg.faces) {
+            if (nfi === fi) continue;
+            const nN = simplifyFaceNormalAt(g, nfi, eg.mid);
+            if (!nN) continue;
+            if (dot(nF, nN) > 0.92) tanNeighbors.push({ nfi, ei, mid: eg.mid, nN });
+          }
+        }
+        const distinctNeighbors = new Set(tanNeighbors.map((x) => x.nfi));
+        if (distinctNeighbors.size < 2) continue;
+        let hasOpposite = false;
+        for (let a = 0; a < tanNeighbors.length && !hasOpposite; a++) {
+          for (let b = a + 1; b < tanNeighbors.length; b++) {
+            if (tanNeighbors[a].nfi !== tanNeighbors[b].nfi && dot(tanNeighbors[a].nN, tanNeighbors[b].nN) < 0.995) {
+              hasOpposite = true;
+              break;
+            }
+          }
+        }
+        if (hasOpposite) filletFaces.add(fi);
+      }
+      // Ecken-Übergänge an Rundungen einbeziehen
+      let addedCorner = true;
+      while (addedCorner) {
+        addedCorner = false;
+        for (let fi = 0; fi < g.nF; fi++) {
+          if (claimed.has(fi) || filletFaces.has(fi)) continue;
+          const ft = g.faceTypes[fi];
+          const info = g.faceInfos[fi];
+          if (ft === 'SPHERE') {
+            if (!(info && info.r > 0 && info.r <= maxFilletR)) continue;
+          } else if (ft === 'TORUS' || ft === 'BSPLINE') {
+            if (bboxMaxDim(g.faceBBoxes[fi]) > maxFilletR * 2.6 + 0.02) continue;
+          } else {
+            continue;
+          }
+          let adj = 0;
+          for (const ei of g.faceEdges[fi]) {
+            const eg = g.edgesList[ei];
+            if (!eg) continue;
+            for (const nfi of eg.faces) {
+              if (nfi !== fi && filletFaces.has(nfi)) { adj++; break; }
+            }
+          }
+          if (adj >= 2) {
+            filletFaces.add(fi);
+            addedCorner = true;
+          }
+        }
+      }
+
+      const filletGroups = [];
+      const fVisited = new Set();
+      for (const start of filletFaces) {
+        if (fVisited.has(start)) continue;
+        const startR = (g.faceInfos[start] && g.faceInfos[start].r) || 0;
+        const comp = [], q = [start];
+        fVisited.add(start);
+        while (q.length) {
+          const u = q.shift();
+          comp.push(u);
+          const uR = (g.faceInfos[u] && g.faceInfos[u].r) || startR;
+          for (const ei of g.faceEdges[u]) {
+            const eg = g.edgesList[ei];
+            if (!eg) continue;
+            for (const v of eg.faces) {
+              if (!filletFaces.has(v) || fVisited.has(v)) continue;
+              const vR = g.faceInfos[v] && g.faceInfos[v].r;
+              if (uR > 0 && vR > 0 && Math.abs(uR - vR) > Math.max(0.05, Math.min(uR, vR) * 0.05)) continue;
+              fVisited.add(v);
+              q.push(v);
+            }
+          }
+        }
+        const radii = comp.map((fi) => g.faceInfos[fi] && g.faceInfos[fi].r).filter((rv) => rv > 0);
+        if (!radii.length) continue;
+        const avgR = radii.reduce((a, b) => a + b, 0) / radii.length;
+        let gbb = null;
+        let cx = 0, cy = 0, cz = 0, cc = 0;
+        for (const fi of comp) {
+          gbb = rfMergeBBox(gbb, g.faceBBoxes[fi]);
+          const c = g.faceInfos[fi] && g.faceInfos[fi].c;
+          if (c) { cx += c[0]; cy += c[1]; cz += c[2]; cc++; }
+        }
+        const fCenter = cc ? [cx / cc, cy / cc, cz / cc] : [0, 0, 0];
+        comp.sort((a, b) => a - b);
+        filletGroups.push({
+          featType: 'fillet',
+          r: rfRound(avgR, 3),
+          origR: rfRound(avgR, 3),
+          faceCount: comp.length,
+          center: rfR6Arr(fCenter),
+          bbox: gbb ? rfR6Arr(gbb) : null,
+          faces: comp.map((fi) => rfFaceSpec(g, fi)),
+        });
+      }
+
+      const cmpNum = (a, b) => a - b;
+      const cmpVec = (a, b) => cmpNum((a && a[0]) || 0, (b && b[0]) || 0) || cmpNum((a && a[1]) || 0, (b && b[1]) || 0) || cmpNum((a && a[2]) || 0, (b && b[2]) || 0);
+      holeGroups.sort((a, b) => cmpNum(a.d, b.d) || cmpVec(a.origin, b.origin));
+      filletGroups.sort((a, b) => cmpNum(a.r, b.r) || cmpVec(a.center, b.center));
+      pocketGroups.sort((a, b) => cmpNum(a.depth, b.depth) || cmpVec(a.center, b.center));
+      out.push(...holeGroups, ...filletGroups, ...pocketGroups);
+    } finally {
+      freeFaceEdgeGraph(g);
+    }
+    return out;
+  }
+  function recognizeFeatures(args = {}) {
+    let shape = args.key ? cacheGet(args.key) : null;
+    if (!shape && args.scene) {
+      ingestBlobs(args.scene);
+      const errors = [];
+      const evalRes = evaluate(args.scene, {}, {});
+      if (args.key) shape = cacheGet(args.key);
+      if (!shape && evalRes && Array.isArray(evalRes.nodes)) {
+        const nd = evalRes.nodes.find((n) => n && n.id === args.id);
+        if (nd && nd.key) shape = cacheGet(nd.key);
+      }
+      if (!shape) {
+        const solidsList = evaluateShapes(args.scene, errors);
+        const found = solidsList.find((s) => s.id === args.id);
+        if (found) shape = found.shape;
+      }
+    }
+    if (!shape) throw new Error('Formen erkennen: Das Bauteil ist noch nicht berechnet.');
+    const solids = shape.solids;
+    const features = [];
+    if (solids.length <= 1) {
+      features.push(...recognizeFeaturesOnSolid(shape));
+    } else {
+      for (const sol of solids) features.push(...recognizeFeaturesOnSolid(sol));
+    }
+    const counts = {
+      holes: features.filter((f) => f.featType === 'hole').length,
+      fillets: features.filter((f) => f.featType === 'fillet').length,
+      pockets: features.filter((f) => f.featType === 'pocket').length,
+    };
+    return { features, counts };
+  }
+  function rfMatchCoaxialHoleFaces(sol, origin, axis, origR) {
+    let g = null;
+    const indices = new Set();
+    try {
+      g = buildFaceEdgeGraph(sol);
+      const rTol = Math.max(0.05, origR * 0.08);
+      for (let fi = 0; fi < g.nF; fi++) {
+        if (g.faceTypes[fi] !== 'CYLINDRE') continue;
+        const info = g.faceInfos[fi];
+        if (!info || !(info.r > 0) || Math.abs(info.r - origR) > rTol || !Array.isArray(info.axis)) continue;
+        const fo = info.axis.slice(0, 3), fd = norm(info.axis.slice(3, 6));
+        if (Math.abs(dot(fd, axis)) < 0.995) continue;
+        const diff = sub(fo, origin);
+        const perp = sub(diff, mul(axis, dot(diff, axis)));
+        if (len(perp) > rTol) continue;
+        const pt = sampleFaceInterior(g.fObjs[fi], g.allFaces[fi]) || info.c;
+        const nrm = pt ? simplifyFaceNormalAt(g, fi, pt) : null;
+        if (pt && nrm) {
+          const rel = sub(pt, fo);
+          const radial = sub(rel, mul(fd, dot(rel, fd)));
+          if (dot(radial, nrm) >= -0.1) continue;
+        }
+        indices.add(fi);
+      }
+      // Bodenfläche bei Sackloch ergänzen
+      for (const fi of [...indices]) {
+        for (const ei of g.faceEdges[fi]) {
+          const eg = g.edgesList[ei];
+          if (!eg || eg.t !== 'CIRCLE') continue;
+          for (const nfi of eg.faces) {
+            if (indices.has(nfi)) continue;
+            const nft = g.faceTypes[nfi], ninfo = g.faceInfos[nfi];
+            if (nft === 'PLANE' && ninfo && Array.isArray(ninfo.n) && Math.abs(dot(norm(ninfo.n), axis)) > 0.99 && bboxMaxDim(g.faceBBoxes[nfi]) <= 2 * origR + 0.3) {
+              indices.add(nfi);
+            } else if (nft === 'CONE' && bboxMaxDim(g.faceBBoxes[nfi]) <= 2 * origR + 0.3) {
+              indices.add(nfi);
+            }
+          }
+        }
+      }
+    } finally {
+      freeFaceEdgeGraph(g);
+    }
+    return indices;
+  }
+  function buildRecognizedFeatureOnSolid(sol, p, topo, tid, stepId) {
+    const featType = p.featType;
+    if (featType === 'hole') {
+      const origD = Math.max(0.1, num(p.origD, num(p.d, 6)));
+      const newD = num(p.d, origD);
+      const origDepth = Math.max(0.1, num(p.origDepth, num(p.depth, 10)));
+      const newDepth = num(p.depth, origDepth);
+      const isThrough = !!p.through;
+      const wasThrough = !!p.origThrough;
+      if (!(newD > 0.05) || !isFinite(newD)) throw new Error('Bohrung: Der Durchmesser muss größer als 0,05 mm sein.');
+      if (!isThrough && (!(newDepth > 0.05) || !isFinite(newDepth))) throw new Error('Bohrung: Die Tiefe muss größer als 0,05 mm sein.');
+      if (Math.abs(newD - origD) < 1e-4 && isThrough === wasThrough && (isThrough || Math.abs(newDepth - origDepth) < 1e-4)) {
+        return sol.clone();
+      }
+      const origin = Array.isArray(p.origin) && p.origin.length >= 3 ? p.origin : [0, 0, 0];
+      const axis = Array.isArray(p.axis) && p.axis.length >= 3 ? norm(p.axis) : [0, 0, -1];
+      const specs = Array.isArray(p.faces) ? p.faces.filter((fc) => fc && Array.isArray(fc.c)) : [];
+      const { fArr, indices } = resolveDeleteFaceMatch(sol, specs, topo, tid);
+      for (const fx of fArr) safeDelete(fx);
+      const geoIndices = rfMatchCoaxialHoleFaces(sol, origin, axis, origD * 0.5);
+      for (const gi of geoIndices) indices.add(gi);
+      if (!indices.size) throw new Error('Bohrung: Die erkannten Bohrungsflächen konnten nicht wiedergefunden werden.');
+
+      let healed = null;
+      try {
+        healed = deleteFacesHealSolid(sol, [...indices]);
+      } catch (err) {
+        if (newD > origD && isThrough && wasThrough) {
+          healed = sol.clone();
+        } else {
+          throw err;
+        }
+      }
+      const cutPad = Math.max(0.5, Math.min(2.0, Math.max(origDepth, newDepth) * 0.1));
+      const start = add(origin, mul(axis, -cutPad));
+      const cylLen = isThrough ? (Math.max(origDepth, newDepth) + 2 * cutPad) : (newDepth + cutPad);
+      let cyl = null, res = null;
+      try {
+        cyl = R.makeCylinder(newD * 0.5, cylLen, start, axis);
+        res = healed.cut(cyl);
+        if (!res || !R.isShape3D(res) || !(R.measureVolume(res) > 1e-6)) {
+          throw new Error('Bohrung: Die geänderte Bohrung ergibt keinen gültigen Körper.');
+        }
+        const out = res; res = null;
+        return out;
+      } finally {
+        safeDelete(cyl);
+        safeDelete(res);
+        safeDelete(healed);
+      }
+    }
+
+    if (featType === 'fillet') {
+      const origR = Math.max(0.05, num(p.origR, num(p.r, 1)));
+      const newR = num(p.r, origR);
+      if (!isFinite(newR) || newR < 0) throw new Error('Rundung: Der Radius darf nicht negativ sein.');
+      if (Math.abs(newR - origR) < 1e-4) return sol.clone();
+      const specs = Array.isArray(p.faces) ? p.faces.filter((fc) => fc && Array.isArray(fc.c)) : [];
+      const { fArr, indices } = resolveDeleteFaceMatch(sol, specs, topo, tid);
+      for (const fx of fArr) safeDelete(fx);
+      if (!indices.size) {
+        let g = null;
+        try {
+          g = buildFaceEdgeGraph(sol);
+          const bb = Array.isArray(p.bbox) && p.bbox.length >= 6 ? p.bbox : null;
+          const pad = origR * 0.5 + 0.5;
+          for (let fi = 0; fi < g.nF; fi++) {
+            const info = g.faceInfos[fi];
+            if (!info || !(info.r > 0) || Math.abs(info.r - origR) > Math.max(0.05, origR * 0.08)) continue;
+            if (bb && info.c) {
+              if (info.c[0] < bb[0] - pad || info.c[0] > bb[3] + pad || info.c[1] < bb[1] - pad || info.c[1] > bb[4] + pad || info.c[2] < bb[2] - pad || info.c[2] > bb[5] + pad) continue;
+            }
+            indices.add(fi);
+          }
+        } finally {
+          freeFaceEdgeGraph(g);
+        }
+      }
+      if (!indices.size) throw new Error('Rundung: Die erkannten Rundungsflächen konnten nicht wiedergefunden werden.');
+
+      const solEdges = [];
+      for (const e of sol.edges) {
+        try {
+          solEdges.push({ m: vec(e.pointAt(0.5)), a: vec(e.startPoint), b: vec(e.endPoint), l: e.length });
+        } catch (_) {}
+        safeDelete(e);
+      }
+
+      const healed = deleteFacesHealSolid(sol, [...indices]);
+      if (!(newR > 0.01)) return healed;
+
+      const expPad = origR * 1.6 + 0.6;
+      const bb = Array.isArray(p.bbox) && p.bbox.length >= 6 ? p.bbox : null;
+      const specCenters = specs.map((s) => s.c);
+      const healedEdges = [];
+      const restoredEdges = [];
+      let bld = null, res = null, chk = null;
+      try {
+        for (const e of healed.edges) {
+          healedEdges.push(e);
+          let em, ea, eb, el;
+          try {
+            em = vec(e.pointAt(0.5));
+            ea = vec(e.startPoint);
+            eb = vec(e.endPoint);
+            el = e.length;
+          } catch (_) {
+            continue;
+          }
+          const existed = solEdges.some((se) => (
+            Math.abs(se.l - el) < 0.2
+            && len(sub(se.m, em)) < 0.1
+            && ((len(sub(se.a, ea)) < 0.1 && len(sub(se.b, eb)) < 0.1) || (len(sub(se.a, eb)) < 0.1 && len(sub(se.b, ea)) < 0.1))
+          ));
+          if (existed) continue;
+          let inRegion = false;
+          if (bb) {
+            inRegion = em[0] >= bb[0] - expPad && em[0] <= bb[3] + expPad
+              && em[1] >= bb[1] - expPad && em[1] <= bb[4] + expPad
+              && em[2] >= bb[2] - expPad && em[2] <= bb[5] + expPad;
+          } else if (specCenters.length) {
+            inRegion = specCenters.some((c) => len(sub(c, em)) <= origR * 2.5 + 2.0);
+          } else {
+            inRegion = true;
+          }
+          if (inRegion) restoredEdges.push(e);
+        }
+        if (!restoredEdges.length) throw new Error('Rundung: Keine wiederhergestellte Kante für den neuen Radius gefunden.');
+        bld = new oc.BRepFilletAPI_MakeFillet(healed.wrapped, oc.ChFi3d_FilletShape.ChFi3d_Rational);
+        for (const e of restoredEdges) bld.Add(newR, e.wrapped);
+        bld.Build();
+        res = R.cast(bld.Shape());
+        if (!res || !R.isShape3D(res) || !(R.measureVolume(res) > 1e-6)) {
+          throw new Error(`Rundung: Der Radius ${String(rfRound(newR, 2)).replace('.', ',')} mm passt an dieser Kante nicht.`);
+        }
+        chk = new oc.BRepCheck_Analyzer(res.wrapped);
+        if (!chk.IsValid()) {
+          throw new Error(`Rundung: Der Radius ${String(rfRound(newR, 2)).replace('.', ',')} mm erzeugt eine ungültige Form.`);
+        }
+        const out = res; res = null;
+        return out;
+      } finally {
+        if (chk) try { chk.delete(); } catch (_) {}
+        if (bld) try { bld.delete(); } catch (_) {}
+        for (const e of healedEdges) safeDelete(e);
+        safeDelete(res);
+        safeDelete(healed);
+      }
+    }
+
+    if (featType === 'pocket') {
+      if (p.through) return sol.clone();
+      const origDepth = Math.max(0.1, num(p.origDepth, num(p.depth, 4)));
+      const newDepth = num(p.depth, origDepth);
+      if (!(newDepth > 0.05) || !isFinite(newDepth)) throw new Error('Tasche: Die Tiefe muss größer als 0,05 mm sein.');
+      if (Math.abs(newDepth - origDepth) < 1e-4) return sol.clone();
+      const ff = p.floorFace;
+      if (!ff || !Array.isArray(ff.c)) throw new Error('Tasche: Der Taschenboden konnte nicht ermittelt werden.');
+      const fArr = [];
+      try {
+        for (const fx of sol.faces) fArr.push(fx);
+        const byRef = resolveFaceRef({ ...ff, tol: 0.25 }, fArr, topo, tid, true);
+        let floorObj = byRef.find((fx) => fx.geomType === 'PLANE') || byRef[0] || null;
+        if (!floorObj) {
+          let best = null, bd = Infinity;
+          for (const fx of fArr) {
+            if (fx.geomType !== 'PLANE') continue;
+            const c = vec(fx.center);
+            const d = len(sub(c, ff.c));
+            if (Array.isArray(ff.n)) {
+              try {
+                const nv = fx.normalAt();
+                if (nv.x * ff.n[0] + nv.y * ff.n[1] + nv.z * ff.n[2] < 0.9) continue;
+              } catch (_) { continue; }
+            }
+            if (d < bd) { bd = d; best = fx; }
+          }
+          if (best && bd < 2.0) floorObj = best;
+        }
+        if (!floorObj) throw new Error('Tasche: Der Taschenboden wurde am Körper nicht gefunden.');
+        const offset = origDepth - newDepth; // negativ = tiefer schneiden, positiv = flacher auftragen
+        const res = applyDirectFace(sol, topo, floorObj, { mode: 'offset', offset }, tid, stepId);
+        freeTopoMap(res.topo);
+        return res.shape;
+      } finally {
+        for (const fx of fArr) safeDelete(fx);
+      }
+    }
+
+    return sol.clone();
+  }
+  function buildRecognizedFeatureOn(baseShape, p, topo = null, tid = null, stepId = null) {
+    if (!p || !p.featType) return baseShape.clone();
+    const solids = baseShape.solids;
+    if (solids.length <= 1) return buildRecognizedFeatureOnSolid(baseShape, p, topo, tid, stepId);
+    const outSolids = [];
+    for (const sol of solids) {
+      outSolids.push(buildRecognizedFeatureOnSolid(sol, p, topo, tid, stepId));
+    }
+    if (outSolids.length === 1) return outSolids[0];
+    const comp = R.makeCompound(outSolids);
+    for (const s of outSolids) safeDelete(s);
+    return comp;
+  }
+
   // ---------- Fläche ersetzen (DB-04) & Kante verschieben (DB-07) ----------
   function makeOrientedPlaneFace(o, n, span) {
     const nn = norm(n);
@@ -17409,6 +18186,72 @@ export function createKernel(R, oc) {
           if (track) track.rebuilt.add(it.id);
           try {
             next = buildSimplifyOn(src.shape, { maxSize, fillets, chamfers, holes }, src.topo, src.it.id);
+            nextTopo = ensureTopoComplete(next, createTopoMap(), tid);
+            cachePut(k, next, null, null, null, nextTopo);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'recognizedFeature') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Erkannte Form: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        let bakedSet = bakedHoles.get(tid);
+        const priorHoles = [];
+        for (let hi = 0; hi < i; hi++) {
+          const he = evald[hi];
+          if (!he || he.it.role !== 'hole' || !he.shape || consumed.has(he.it.id)) continue;
+          if (bakedSet && bakedSet.has(he.it.id)) continue;
+          if (src.wb && he.wb && bboxHit(he.wb, src.wb)) priorHoles.push(he);
+        }
+        if (priorHoles.length) {
+          const inv = matInvRigid(src.m);
+          const rels = priorHoles.map((h) => matMul(inv, h.it.m));
+          const kHole = keyOf([src.key, 'bakeHoles', priorHoles.map((h, idx) => [h.key, rels[idx].map(r6)])]);
+          const ceH = cacheEntry(kHole);
+          let hShape = ceH ? ceH.shape : null, hTopo = ceH ? ceH.topo : null;
+          if (!hShape) {
+            try {
+              const moved = priorHoles.map((h, idx) => {
+                const tr = applyMatrixWithTopo(h.shape, rels[idx], h.topo || null, h.it.id);
+                return { shape: tr.shape, topo: tr.topo, selfId: h.it.id };
+              });
+              const tool = fuseAllWithTopo(moved, true, 'BH');
+              const br = boolWithTopo('cut', src.shape, src.topo || null, src.it.id, tool.shape, tool.topo, null, 'BHCut');
+              safeDelete(tool.shape); freeTopoMap(tool.topo);
+              hShape = br.shape; hTopo = br.topo;
+              cachePut(kHole, hShape, null, null, null, hTopo);
+            } catch (_) {
+              hShape = null;
+            }
+          }
+          if (hShape) {
+            if (!bakedSet) { bakedSet = new Set(); bakedHoles.set(tid, bakedSet); }
+            for (const h of priorHoles) bakedSet.add(h.it.id);
+            src.shape = hShape; src.topo = hTopo; src.key = kHole; src.wb = bboxTransform(bboxCached(kHole, hShape), src.m);
+            bodies.set(tid, src);
+          }
+        }
+        const k = keyOf([src.key, 'recognizedFeature', p]);
+        const ceRF = cacheEntry(k);
+        let next = ceRF ? ceRF.shape : null, nextTopo = ceRF ? ceRF.topo : null;
+        if (!next) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            next = buildRecognizedFeatureOn(src.shape, p, src.topo, src.it.id, it.id);
             nextTopo = ensureTopoComplete(next, createTopoMap(), tid);
             cachePut(k, next, null, null, null, nextTopo);
           } catch (err) {
@@ -22660,5 +23503,5 @@ export function createKernel(R, oc) {
     }
   }
 
-  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, exportSingleBody, measure, minDistance, project, clashes, clearances, holeWalls, faceLoopsOf, faceGridOf, sectionOf, silhouetteOf, faceIntersectOf, checkGeometry, checkSymmetry, compareSolids, checkImport, healImport, buildEnvelope, getStats, resetStats, clearCache, _cache: cache };
+  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, exportSingleBody, measure, minDistance, project, clashes, clearances, holeWalls, faceLoopsOf, faceGridOf, sectionOf, silhouetteOf, faceIntersectOf, checkGeometry, checkSymmetry, compareSolids, checkImport, healImport, buildEnvelope, recognizeFeatures, getStats, resetStats, clearCache, _cache: cache };
 }
