@@ -549,5 +549,10 @@
     "was": "Verschiebt eine gerade Körperkante um einen vorgegebenen Abstand oder Vektor und kippt die beiden ebenen Nachbarflächen entsprechend mit.",
     "wozu": "Ändert Fasenwinkel, schräge Kanten oder Grundformen schnell direkt am fertigen Körper – auch bei importierten Teilen ohne Skizze.",
     "achtung": "Der Versatz muss kleiner bleiben als die Breite der Nachbarflächen, sonst würden diese zu null schrumpfen."
+  },
+  "simplify": {
+    "was": "Entfernt an einem Körper automatisch kleine Rundungen, Fasen und Löcher bis zu einer wählbaren Maximalgröße in einem einzigen Schritt.",
+    "wozu": "Bereinigt fertige oder importierte Teile für schnelle Simulationen, 3D-Druck, Baugruppen oder als Vorbereitung für weitere Änderungen.",
+    "achtung": "Einzelne Detail-Arten (Rundungen, Fasen, Löcher) lassen sich rechts im Eigenschaften-Panel gezielt ein- oder ausschalten; der Schritt bleibt immer unterdrückbar und rückgängig machbar."
   }
 }

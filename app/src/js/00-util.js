@@ -708,6 +708,8 @@ const IC = {
   deleteFace: '<rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="currentColor" opacity=".16"/><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="12" cy="12" r="4" stroke-dasharray="2.2 1.6"/><path d="M10 10l4 4M14 10l-4 4" />',
   replaceFace: '<path d="M4 15l8 4 8-4-8-4z" opacity=".4" stroke-dasharray="2.2 1.8"/><path d="M4 9l8 4 8-4-8-4z" fill="currentColor" opacity=".25"/><path d="M4 9l8 4 8-4-8-4zM12 13v6" /><path d="M9.5 16.5L12 19l2.5-2.5" />',
   moveEdge: '<path d="M4 17l5-10h11l-5 10z" fill="currentColor" opacity=".15"/><path d="M4 17l5-10h11M4 17h11l5-10" opacity=".5"/><path d="M9 7h11" stroke-width="2.2"/><path d="M12 4.5 9 7l3 2.5" />',
+  simplify: '<rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="currentColor" opacity=".14"/><path d="M3.5 9.5a5 5 0 0 1 5-5H19a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z" opacity=".45" stroke-dasharray="2.2 1.6"/><path d="M3.5 4.5h17v15h-17z"/><circle cx="14.5" cy="12" r="2.6" stroke-dasharray="1.8 1.4" opacity=".6"/><path d="M12.7 10.2l3.6 3.6M16.3 10.2l-3.6 3.6" />',
+  alignFaces: '<rect x="3" y="5" width="7" height="14" rx="1.2" fill="currentColor" opacity=".18"/><rect x="3" y="5" width="7" height="14" rx="1.2"/><rect x="14" y="5" width="7" height="14" rx="1.2" fill="currentColor" opacity=".28"/><rect x="14" y="5" width="7" height="14" rx="1.2"/><path d="M10 5v14M14 5v14" stroke-width="2.1"/><path d="M13 12h-2.5M12 10.2 10.2 12l1.8 1.8" />',
   helix: '<path d="M6 6.5c0-1.9 2.7-3 6-3s6 1.1 6 3-2.7 3-6 3-6 1.1-6 3 2.7 3 6 3 6 1.1 6 3-2.7 3-6 3-6-1.1-6-3" /><path d="M6 6.5c0 1.4 1.6 2.3 4 2.8 M18 12.5c0 1.4-1.6 2.3-4 2.8" opacity=".45"/>',
   stretch: '<path d="M3 7h11v10H3z" opacity=".45"/><path d="M10 4h8v16h-8z" stroke-dasharray="2.5 2"/><path d="M14 12h7M18 9l3 3-3 3"/>',
   patternFill: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="16" r="1.4" fill="currentColor" stroke="none"/>',
@@ -2985,6 +2987,16 @@ const HELP = {
   "tip": "Gerade Kante verschieben – die beiden Nachbarflächen kippen mit (Profi)",
   "hilfe": "Verschiebt im Profi-Modus eine gerade Kante zwischen zwei ebenen Flächen entlang der Winkelhalbierenden, einer Achse (X/Y/Z), einer Flächen-Normalen oder frei in X/Y/Z. Beide Nachbarflächen kippen um ihre gegenüberliegende Kante automatisch mit – auch an importierten Teilen.",
   "tipp": "Du kannst im Feld „Abstand“ auch Formeln wie „breite/4“ eingeben; mit „Richtung“ legst du fest, ob die Kante schräg oder nur in Z bzw. X/Y wandert."
+ },
+ "simplify": {
+  "tip": "Kleine Rundungen, Fasen und Löcher bis zu einer Größe automatisch entfernen (Profi)",
+  "hilfe": "Erkennt im Profi-Modus kleine Rundungen, Fasen und Löcher unterhalb der gewählten Größe an einem Körper (auch an importierten STEP-/BREP-Teilen) und entfernt sie in einem einzigen Verlaufsschritt. Jede Detail-Art lässt sich rechts einzeln ein- oder ausschalten.",
+  "tipp": "Perfekt zum schnellen Aufräumen vor einer Prüfung oder für einen sauberen 3D-Druck ohne winzige Fasen; zum Zurückholen einfach den Schritt unterdrücken."
+ },
+ "alignFaces": {
+  "tip": "Zwei Flächen anklicken – der zweite Körper legt sich bündig an den ersten an (Profi)",
+  "hilfe": "Richtet im Profi-Modus einen Körper über zwei gewählte ebene oder zylindrische Flächen direkt am ersten Körper aus – ohne dauerhafte Gelenk-Verbindung. Wähle oben in der Leiste zwischen „Gegenüber (berührend)“ und „Bündig (gleiche Seite)“ sowie optional einen Abstand.",
+  "tipp": "Ideal zum schnellen Stapeln oder Bündigsetzen beim Modellieren; willst du, dass beide Körper später zusammenbleiben, nutze stattdessen eine feste Verbindung."
  }
 };
 

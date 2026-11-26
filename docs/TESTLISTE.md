@@ -3078,6 +3078,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Rückgängig (`Strg+Z`) stellt das exakte Ausgangsvolumen wieder her; auch komplexe Zeichen (`Se3`) gravieren fehlerfrei (Klicktest `[A-203]`)
 - [ ] **Von Hand**: Im Browser eine ebene Fläche eines Körpers anklicken, „Gravieren“ wählen, während der Eingabe die 3D-Linienvorschau prüfen und eine mehrzeilige bzw. gedrehte Gravur auf einem 3D-Druckteil begutachten.
 
+## Direkt bearbeiten: Vereinfachen und Körper an Körper ausrichten (Auto [A-206], DB-09, DB-10)
+- [x] Profi-Sichtbarkeit (`simplify`, `align-faces` nur im Profi-Modus), `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-206]`)
+- [x] Quader 20×20×10 mit Rundung R1 und Durchgangsloch Ø2: `Features.simplify` bis 3 mm entfernt beide Details, Flächenzahl sinkt von 8 auf 6 ebene Flächen (`4000,0 mm³`, `GeomCheck` = 0 Fehler), Eigenschaften-Panel `#simp-max`/`#simp-fillets`/`#simp-chamfers`/`#simp-holes` sichtbar (Klicktest `[A-206]`)
+- [x] Teil mit Rundung R1, Fase 1 mm, Loch Ø2 und Loch Ø6: Vereinfachen bis 3 mm entfernt R1, Fase 1 mm und Ø2, behält aber Ø6 (Flächenzahl sinkt von 10 auf 7); Unterdrücken und Rückgängig stellen den Ursprung her (Klicktest `[A-206]`)
+- [x] Ausrichten über Flächen: Würfel B (verschoben und gedreht) legt sich über `Place.alignFaces` bündig an Würfel A (Abstand `0 mm`, Mitten deckend, Gegennormale), Abstand `5 mm`, Bündig-Modus (`flush`), interaktive Leiste `#align-faces-bar`, Rückgängig und Sperrschutz bei festgesetztem Körper geprüft (Klicktest `[A-206]`)
+- [ ] **Von Hand**: Im Browser im Profi-Modus an einem importierten oder gerundeten Teil mit kleinen Fasen/Bohrungen „Vereinfachen“ testen sowie zwei verschobene Körper über „Ausrichten über Flächen“ per Zwei-Flächen-Klick bündig aneinander setzen.
+
 ## Fehler melden
 
 ```

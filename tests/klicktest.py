@@ -42141,6 +42141,249 @@ def t_a203_gravieren(p):
         p.ev("try { Features.stopEngrave(); ViewPrefs.setLevel('pro'); } catch (_) {}")
 
 
+def t_vereinfachen_ausrichten(p):
+    p.empty()
+    try:
+        # 1. Profi vs. Einfach (Befehlssuche), Hilfen, Erklärungen & DE/EN-Schlüssel
+        p.ev("ViewPrefs.setLevel('pro');")
+        p.wait(150)
+        cmd_pro = p.ev("""
+          return {
+            simp: Commands.search('vereinfachen').some(c => c.id === 'simplify'),
+            align: Commands.search('ausrichten über').some(c => c.id === 'align-faces'),
+          };
+        """)
+        p.ev("ViewPrefs.setLevel('simple');")
+        p.wait(150)
+        cmd_simple = p.ev("""
+          return {
+            simp: Commands.search('vereinfachen').some(c => c.id === 'simplify'),
+            align: Commands.search('ausrichten über').some(c => c.id === 'align-faces'),
+          };
+        """)
+        p.ev("ViewPrefs.setLevel('pro');")
+        p.wait(150)
+        meta = p.ev("""return (async () => {
+          const [wh, se, de, en] = await Promise.all([
+            fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+            fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+            fetch('data/texte-de.json').then(r => r.json()),
+            fetch('data/texte-en.json').then(r => r.json()),
+          ]);
+          const hOk = !!(wh.simplify && wh.simplify.tip && wh.simplify.hilfe && wh.simplify.tipp
+            && wh.alignFaces && wh.alignFaces.tip && wh.alignFaces.hilfe && wh.alignFaces.tipp);
+          const sOk = !!(se.simplify && se.simplify.was && se.simplify.wozu && se.simplify.achtung);
+          const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+          const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+          return { hOk, sOk, i18nOk };
+        })()""")
+        ok1 = bool(
+            cmd_pro['simp'] and cmd_pro['align']
+            and not cmd_simple['simp'] and not cmd_simple['align']
+            and meta['hOk'] and meta['sOk'] and meta['i18nOk']
+        )
+
+        # 2. DB-09: Teil mit Rundung R1 und Loch Ø2 -> Vereinfachen bis 3 mm entfernt beide, Flächenzahl sinkt
+        p.ev("""App.change('Quader R1 und Loch Ø2', (doc) => {
+          const box = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Teil' });
+          box.finishes = [{ id: 'f_r1', type: 'fillet', r: 1, edges: [{ a: [-10, -10, 10], b: [10, -10, 10], m: [0, -10, 10], l: 20 }] }];
+          const hole = Model.newItem('cylinder', { d: 2, h: 14 }, { name: 'Loch2' });
+          hole.t = { x: 0, y: 0, z: -2, rx: 0, ry: 0, rz: 0 };
+          hole.op = { type: 'cut', target: box.id };
+          doc.items.push(box, hole);
+        })""")
+        warte_rechnen(p, 45)
+        before_fc = p.ev("return App.results.get(App.doc.items[0].id)?.data?.faces?.length || 0")
+        p.ev("Features.simplify(App.doc.items[0].id, { maxSize: 3 });")
+        warte_rechnen(p, 45)
+        st2 = p.ev("""return (async () => {
+          const box = App.doc.items[0];
+          const step = App.doc.items.find(x => x.kind === 'simplify');
+          const r = App.results.get(box.id);
+          const faces = r?.data?.faces || [];
+          const ms = await Mass.measure();
+          const gc = await GeomCheck.run({ silent: true });
+          const val = Store.validateProject(JSON.parse(await Start.projectPayload()));
+          const exp = step ? Explain.local(step.id) : null;
+          return {
+            errs: App.errors.length,
+            faces: faces.length,
+            allPlanes: faces.length === 6 && faces.every(f => f.t === 'PLANE'),
+            vol: ms?.parts?.[0]?.volume || 0,
+            gcBad: gc.issues.filter(x => x.s === 'bad').length,
+            valOk: val.ok && val.errors.length === 0,
+            expOk: !!(exp && exp.lines && exp.lines.some(l => l.k === 'op')),
+            uiMax: !!document.querySelector('#simp-max'),
+            uiFil: !!document.querySelector('#simp-fillets'),
+            uiCha: !!document.querySelector('#simp-chamfers'),
+            uiHol: !!document.querySelector('#simp-holes'),
+            uiCnt: document.querySelector('#simp-faces-count')?.textContent?.trim() || '',
+          };
+        })()""")
+        ok2 = bool(
+            before_fc == 8 and st2['errs'] == 0 and st2['faces'] == 6 and st2['faces'] < before_fc
+            and st2['allPlanes'] and abs(st2['vol'] - 4000.0) < 0.5 and st2['gcBad'] == 0
+            and st2['valOk'] and st2['expOk']
+            and st2['uiMax'] and st2['uiFil'] and st2['uiCha'] and st2['uiHol'] and st2['uiCnt'] == '6'
+        )
+
+        # 3. DB-09 Selektivität: R1 + Fase 1 + Loch Ø2 + Loch Ø6 -> bis 3 mm behält Ø6; Unterdrücken & Undo
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.ev("""App.change('Teil mit R1, Fase 1, Ø2 und Ø6', (doc) => {
+          const box = Model.newItem('box', { w: 24, d: 24, h: 12 }, { name: 'Block' });
+          box.finishes = [
+            { id: 'f_r1', type: 'fillet', r: 1, edges: [{ a: [-12, -12, 12], b: [12, -12, 12], m: [0, -12, 12], l: 24 }] },
+            { id: 'f_c1', type: 'chamfer', r: 1, edges: [{ a: [-12, 12, 12], b: [12, 12, 12], m: [0, 12, 12], l: 24 }] },
+          ];
+          const h2 = Model.newItem('cylinder', { d: 2, h: 16 }, { name: 'Loch2' });
+          h2.t = { x: -5, y: 0, z: -2, rx: 0, ry: 0, rz: 0 };
+          h2.op = { type: 'cut', target: box.id };
+          const h6 = Model.newItem('cylinder', { d: 6, h: 16 }, { name: 'Loch6' });
+          h6.t = { x: 5, y: 0, z: -2, rx: 0, ry: 0, rz: 0 };
+          h6.op = { type: 'cut', target: box.id };
+          doc.items.push(box, h2, h6);
+        })""")
+        warte_rechnen(p, 45)
+        fc3_before = p.ev("return App.results.get(App.doc.items[0].id)?.data?.faces?.length || 0")
+        p.ev("Features.simplify(App.doc.items[0].id, { maxSize: 3 });")
+        warte_rechnen(p, 45)
+        st3 = p.ev("""return (() => {
+          const faces = App.results.get(App.doc.items[0].id)?.data?.faces || [];
+          const cyls = faces.filter(f => f.t === 'CYLINDRE');
+          return {
+            errs: App.errors.length,
+            faces: faces.length,
+            cylCount: cyls.length,
+            cylR: cyls[0]?.r || 0,
+          };
+        })()""")
+        p.ev("Timeline.toggleSuppress(App.doc.items.find(x => x.kind === 'simplify').id);")
+        warte_rechnen(p, 45)
+        fc3_sup = p.ev("return App.results.get(App.doc.items[0].id)?.data?.faces?.length || 0")
+        p.ev("App.undo(); App.undo();")
+        warte_rechnen(p, 45)
+        fc3_undo = p.ev("return { cnt: App.doc.items.filter(x => x.kind === 'simplify').length, faces: App.results.get(App.doc.items[0].id)?.data?.faces?.length || 0 }")
+        ok3 = bool(
+            fc3_before == 10 and st3['errs'] == 0 and st3['faces'] == 7
+            and st3['cylCount'] == 1 and abs(st3['cylR'] - 3.0) < 0.05
+            and fc3_sup == 10 and fc3_undo['cnt'] == 0 and fc3_undo['faces'] == 10
+        )
+
+        # 4. DB-10: Ausrichten über Flächen legt Würfel B bündig an Würfel A (Abstand 0)
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.ev("""App.change('Zwei Würfel', (doc) => {
+          const a = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Wuerfel A' });
+          const b = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Wuerfel B' });
+          b.t = { x: 60, y: 25, z: 10, rx: 0, ry: 20, rz: 35 };
+          doc.items.push(a, b);
+        })""")
+        warte_rechnen(p, 45)
+        r4_ok = p.ev("""return (() => {
+          const a = App.doc.items[0], b = App.doc.items[1];
+          const ra = App.results.get(a.id), rb = App.results.get(b.id);
+          const idxA = ra.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[0] > 0.99);
+          const idxB = rb.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[0] < -0.99);
+          const r = Place.alignFaces(
+            { id: a.id, idx: idxA, info: ra.data.faces[idxA] },
+            { id: b.id, idx: idxB, info: rb.data.faces[idxB] }
+          );
+          return !!(r && r.ok);
+        })()""")
+        warte_rechnen(p, 30)
+        res4 = p.ev("""return (() => {
+          const a = App.doc.items[0], b = App.doc.items[1];
+          const ra = App.results.get(a.id), rb = App.results.get(b.id);
+          const idxA = ra.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[0] > 0.99);
+          const idxB = rb.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[0] < -0.99);
+          const boxA = Actions.worldBox(a.id), boxB = Actions.worldBox(b.id);
+          const Wa = Model.worldMatrix(App.doc, a.id).elements, Wb = Model.worldMatrix(App.doc, b.id).elements;
+          const xfPt = (e, v) => [e[0]*v[0]+e[4]*v[1]+e[8]*v[2]+e[12], e[1]*v[0]+e[5]*v[1]+e[9]*v[2]+e[13], e[2]*v[0]+e[6]*v[1]+e[10]*v[2]+e[14]];
+          const xfDir = (e, v) => {
+            const x = e[0]*v[0]+e[4]*v[1]+e[8]*v[2], y = e[1]*v[0]+e[5]*v[1]+e[9]*v[2], z = e[2]*v[0]+e[6]*v[1]+e[10]*v[2];
+            const l = Math.hypot(x, y, z) || 1; return [x/l, y/l, z/l];
+          };
+          const nAw = xfDir(Wa, ra.data.faces[idxA].n);
+          const nBw = xfDir(Wb, rb.data.faces[idxB].n);
+          const cAw = xfPt(Wa, ra.data.faces[idxA].c);
+          const cBw = xfPt(Wb, rb.data.faces[idxB].c);
+          return {
+            ok: true,
+            errs: App.errors.length,
+            gapX: Math.abs(boxB.min.x - boxA.max.x),
+            dy: Math.abs(cBw[1] - cAw[1]),
+            dz: Math.abs(cBw[2] - cAw[2]),
+            dot: nAw[0]*nBw[0] + nAw[1]*nBw[1] + nAw[2]*nBw[2],
+          };
+        })()""")
+        ok4 = bool(
+            r4_ok and res4['errs'] == 0
+            and res4['gapX'] < 1e-3 and res4['dy'] < 1e-3 and res4['dz'] < 1e-3
+            and res4['dot'] < -0.999
+        )
+
+        # 5. DB-10: Abstand 5 mm, Bündig-Modus (flush), interaktive Leiste, Rückgängig & Sperrschutz
+        p.ev("""(() => {
+          const a = App.doc.items[0], b = App.doc.items[1];
+          const ra = App.results.get(a.id), rb = App.results.get(b.id);
+          const idxA = ra.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[0] > 0.99);
+          const idxB = rb.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[0] < -0.99);
+          Place.alignFaces(
+            { id: a.id, idx: idxA, info: ra.data.faces[idxA] },
+            { id: b.id, idx: idxB, info: rb.data.faces[idxB] },
+            { offset: 5 }
+          );
+        })()""")
+        warte_rechnen(p, 30)
+        gap5 = p.ev("return Actions.worldBox(App.doc.items[1].id).min.x - Actions.worldBox(App.doc.items[0].id).max.x;")
+        p.ev("""(() => {
+          const a = App.doc.items[0], b = App.doc.items[1];
+          const ra = App.results.get(a.id), rb = App.results.get(b.id);
+          const idxA = ra.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[0] > 0.99);
+          const idxB = rb.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[0] < -0.99);
+          Place.alignFaces(
+            { id: a.id, idx: idxA, info: ra.data.faces[idxA] },
+            { id: b.id, idx: idxB, info: rb.data.faces[idxB] },
+            { mode: 'flush' }
+          );
+        })()""")
+        warte_rechnen(p, 30)
+        res5 = p.ev("""return (() => {
+          const a = App.doc.items[0], b = App.doc.items[1];
+          const ra = App.results.get(a.id), rb = App.results.get(b.id);
+          const idxA = ra.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[0] > 0.99);
+          const idxB = rb.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[0] < -0.99);
+          const flushDiff = Math.abs(Actions.worldBox(b.id).max.x - Actions.worldBox(a.id).max.x);
+          const Wb = Model.worldMatrix(App.doc, b.id).elements, Wa = Model.worldMatrix(App.doc, a.id).elements;
+          const xfDir = (e, v) => {
+            const x = e[0]*v[0]+e[4]*v[1]+e[8]*v[2], y = e[1]*v[0]+e[5]*v[1]+e[9]*v[2], z = e[2]*v[0]+e[6]*v[1]+e[10]*v[2];
+            const l = Math.hypot(x, y, z) || 1; return [x/l, y/l, z/l];
+          };
+          const nAw = xfDir(Wa, ra.data.faces[idxA].n), nBw = xfDir(Wb, rb.data.faces[idxB].n);
+          const flushDot = nAw[0]*nBw[0] + nAw[1]*nBw[1] + nAw[2]*nBw[2];
+          const started = Place.startAlignFaces();
+          const barOpen = !!document.querySelector('#align-faces-bar') && Place.aligning;
+          Place.stopAlignFaces(true);
+          const barClosed = !document.querySelector('#align-faces-bar') && !Place.aligning;
+          App.undo(); App.undo(); App.undo();
+          const undoX = App.doc.items[1].t.x;
+          App.change('Sperren', (doc) => { doc.items[1].locked = true; });
+          const lockedRes = Place.alignFaces(
+            { id: a.id, idx: idxA, info: ra.data.faces[idxA] },
+            { id: b.id, idx: idxB, info: rb.data.faces[idxB] }
+          );
+          return { flushDiff, flushDot, started, barOpen, barClosed, undoX, lockedBlocked: !(lockedRes && lockedRes.ok) };
+        })()""")
+        ok5 = bool(
+            abs(gap5 - 5.0) < 1e-3 and res5['flushDiff'] < 1e-3 and res5['flushDot'] > 0.999
+            and res5['started'] and res5['barOpen'] and res5['barClosed']
+            and abs(res5['undoX'] - 60.0) < 1e-3 and res5['lockedBlocked']
+        )
+
+        return [ok1, ok2, ok3, ok4, ok5]
+    finally:
+        p.ev("try { Place.stopAlignFaces(true); Features.stopPick && Features.stopPick(); ViewPrefs.setLevel('pro'); } catch (_) {}")
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -42459,6 +42702,7 @@ TESTS = [
     ('[A-202] Einlinien-Schrift: „AB“ mit Einlinig (Gravur) nur offene Kurven / keine geschlossenen Umrisse / Rückgängig', t_a202_einlinien_schrift),
     ('[A-204] Direkt bearbeiten: Fläche ersetzen und Kante verschieben (DB-04, DB-07)', t_a204_flaeche_ersetzen_kante_verschieben),
     ('[A-203] Einlinien-Schrift gravieren: „AB“ 0,5 mm tief, 0,4 mm breit auf Quader / Einfach & Profi / Bearbeiten / Rückgängig', t_a203_gravieren),
+    ('[A-206] Direkt bearbeiten: Vereinfachen und Körper an Körper ausrichten', t_vereinfachen_ausrichten),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

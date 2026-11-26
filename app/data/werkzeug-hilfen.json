@@ -2193,5 +2193,15 @@
     "tip": "Gerade Kante verschieben – die beiden Nachbarflächen kippen mit (Profi)",
     "hilfe": "Verschiebt im Profi-Modus eine gerade Kante zwischen zwei ebenen Flächen entlang der Winkelhalbierenden, einer Achse (X/Y/Z), einer Flächen-Normalen oder frei in X/Y/Z. Beide Nachbarflächen kippen um ihre gegenüberliegende Kante automatisch mit – auch an importierten Teilen.",
     "tipp": "Du kannst im Feld „Abstand“ auch Formeln wie „breite/4“ eingeben; mit „Richtung“ legst du fest, ob die Kante schräg oder nur in Z bzw. X/Y wandert."
+  },
+  "simplify": {
+    "tip": "Kleine Rundungen, Fasen und Löcher bis zu einer Größe automatisch entfernen (Profi)",
+    "hilfe": "Erkennt im Profi-Modus kleine Rundungen, Fasen und Löcher unterhalb der gewählten Größe an einem Körper (auch an importierten STEP-/BREP-Teilen) und entfernt sie in einem einzigen Verlaufsschritt. Jede Detail-Art lässt sich rechts einzeln ein- oder ausschalten.",
+    "tipp": "Perfekt zum schnellen Aufräumen vor einer Prüfung oder für einen sauberen 3D-Druck ohne winzige Fasen; zum Zurückholen einfach den Schritt unterdrücken."
+  },
+  "alignFaces": {
+    "tip": "Zwei Flächen anklicken – der zweite Körper legt sich bündig an den ersten an (Profi)",
+    "hilfe": "Richtet im Profi-Modus einen Körper über zwei gewählte ebene oder zylindrische Flächen direkt am ersten Körper aus – ohne dauerhafte Gelenk-Verbindung. Wähle oben in der Leiste zwischen „Gegenüber (berührend)“ und „Bündig (gleiche Seite)“ sowie optional einen Abstand.",
+    "tipp": "Ideal zum schnellen Stapeln oder Bündigsetzen beim Modellieren; willst du, dass beide Körper später zusammenbleiben, nutze stattdessen eine feste Verbindung."
   }
 }

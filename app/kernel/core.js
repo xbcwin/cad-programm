@@ -10167,7 +10167,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'directFace' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'directFace' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'simplify' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -13663,6 +13663,543 @@ export function createKernel(R, oc) {
     return comp;
   }
 
+  // ---------- Vereinfachen: kleine Details automatisch entfernen (DB-09) ----------
+  function buildFaceEdgeGraph(solidShape) {
+    const fObjs = solidShape.faces;
+    const allFaces = fObjs.map((f) => oc.TopoDS.Face(f.wrapped));
+    const faceTypes = fObjs.map((f) => f.geomType);
+    const faceBBoxes = fObjs.map((f) => bboxOf(f));
+    const faceInfos = fObjs.map((f) => faceInfo(f));
+    const nF = allFaces.length;
+    const edgesList = [];
+    const faceEdges = Array.from({ length: nF }, () => []);
+    for (let i = 0; i < nF; i++) {
+      for (const ew of collectEdges(allFaces[i])) {
+        if (oc.BRep_Tool.Degenerated(ew)) continue;
+        let ei = -1;
+        for (let k = 0; k < edgesList.length; k++) {
+          if (edgesList[k].e.IsSame(ew)) { ei = k; break; }
+        }
+        if (ei < 0) {
+          ei = edgesList.length;
+          let g = { t: 'OTHER', mid: [0, 0, 0], len: 0 };
+          let re = null;
+          try {
+            re = new R.Edge(ew);
+            const eg = edgeGeom(re);
+            g = { t: eg.t, a: eg.a, b: eg.b, mid: eg.m || [0, 0, 0], len: eg.l || 0, r: eg.r, c: eg.c, n: eg.n };
+          } catch (_) {
+          }
+          edgesList.push({ e: ew, re, faces: new Set(), ...g });
+        }
+        edgesList[ei].faces.add(i);
+        if (!faceEdges[i].includes(ei)) faceEdges[i].push(ei);
+      }
+    }
+    const innerEdgesByFace = new Map();
+    const innerWires = [];
+    for (let fi = 0; fi < nF; fi++) {
+      if (faceTypes[fi] !== 'PLANE') continue;
+      const wires = collectWires(allFaces[fi]);
+      if (wires.length <= 1) continue;
+      const set = new Set();
+      innerEdgesByFace.set(fi, set);
+      for (let wi = 1; wi < wires.length; wi++) {
+        const wEdgeIndices = [];
+        for (const ew of collectEdges(wires[wi])) {
+          if (oc.BRep_Tool.Degenerated(ew)) continue;
+          const ei = edgesList.findIndex((x) => x.e.IsSame(ew));
+          if (ei >= 0) {
+            set.add(ei);
+            if (!wEdgeIndices.includes(ei)) wEdgeIndices.push(ei);
+          }
+        }
+        if (wEdgeIndices.length) innerWires.push({ hostFi: fi, wi, edgeIndices: wEdgeIndices });
+      }
+    }
+    const solidBb = bboxOf(solidShape);
+    return { fObjs, allFaces, faceTypes, faceBBoxes, faceInfos, nF, edgesList, faceEdges, innerEdgesByFace, innerWires, solidBb };
+  }
+  function freeFaceEdgeGraph(g) {
+    if (!g) return;
+    for (const e of g.edgesList || []) safeDelete(e.re);
+    for (const f of g.fObjs || []) safeDelete(f);
+  }
+  function simplifyFaceNormalAt(g, fi, pt) {
+    const info = g.faceInfos[fi];
+    if (g.faceTypes[fi] === 'PLANE' && info && Array.isArray(info.n)) return norm(info.n);
+    try {
+      const nv = pt ? g.fObjs[fi].normalAt(pt) : g.fObjs[fi].normalAt();
+      return norm([nv.x, nv.y, nv.z]);
+    } catch (_) {
+      try {
+        const nv = g.fObjs[fi].normalAt();
+        return norm([nv.x, nv.y, nv.z]);
+      } catch (_2) {
+        return null;
+      }
+    }
+  }
+  function bboxMaxDim(bb) {
+    return bb ? Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) : 0;
+  }
+  function detectHoleGroups(g, maxSize) {
+    const groups = [];
+    const seenKeys = new Set();
+    for (const iw of g.innerWires) {
+      const hostFi = iw.hostFi;
+      const hostN = simplifyFaceNormalAt(g, hostFi);
+      if (!hostN) continue;
+      let allCircles = true;
+      let maxCircleR = 0;
+      const pts = [];
+      for (const ei of iw.edgeIndices) {
+        const eg = g.edgesList[ei];
+        if (!eg) continue;
+        if (eg.t === 'CIRCLE' && eg.r > 0) maxCircleR = Math.max(maxCircleR, eg.r);
+        else allCircles = false;
+        if (eg.a) pts.push(eg.a);
+        if (eg.b) pts.push(eg.b);
+        if (eg.mid) pts.push(eg.mid);
+      }
+      let wireDia = allCircles && maxCircleR > 0 ? 2 * maxCircleR : 0;
+      let wireCenter = [0, 0, 0];
+      if (pts.length) {
+        let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+        for (const p of pts) {
+          minX = Math.min(minX, p[0]); minY = Math.min(minY, p[1]); minZ = Math.min(minZ, p[2]);
+          maxX = Math.max(maxX, p[0]); maxY = Math.max(maxY, p[1]); maxZ = Math.max(maxZ, p[2]);
+        }
+        wireCenter = [(minX + maxX) * 0.5, (minY + maxY) * 0.5, (minZ + maxZ) * 0.5];
+        if (!wireDia) wireDia = Math.hypot(maxX - minX, maxY - minY, maxZ - minZ);
+      }
+      if (!(wireDia > 0) || wireDia > maxSize + 0.02) continue;
+
+      const comp = new Set();
+      const queue = [];
+      let valid = true;
+      const validateHoleFace = (fi) => {
+        const ft = g.faceTypes[fi];
+        const info = g.faceInfos[fi];
+        if (ft === 'CYLINDRE') {
+          const r = info && info.r > 0 ? info.r : 0;
+          return r > 0 && 2 * r <= maxSize + 0.05;
+        }
+        if (ft === 'CONE') {
+          let maxR = 0;
+          for (const ei of g.faceEdges[fi]) {
+            const eg = g.edgesList[ei];
+            if (eg && eg.t === 'CIRCLE' && eg.r > 0) maxR = Math.max(maxR, eg.r);
+          }
+          return maxR > 0 ? 2 * maxR <= maxSize + 0.05 : bboxMaxDim(g.faceBBoxes[fi]) <= maxSize + 0.05;
+        }
+        return bboxMaxDim(g.faceBBoxes[fi]) <= maxSize + 0.05;
+      };
+
+      for (const ei of iw.edgeIndices) {
+        const eg = g.edgesList[ei];
+        if (!eg) continue;
+        for (const fi of eg.faces) {
+          if (fi === hostFi || comp.has(fi)) continue;
+          if (!validateHoleFace(fi)) { valid = false; break; }
+          comp.add(fi);
+          queue.push(fi);
+        }
+        if (!valid) break;
+      }
+      if (!valid || !comp.size) continue;
+
+      while (queue.length && valid) {
+        const u = queue.shift();
+        for (const ei of g.faceEdges[u]) {
+          const eg = g.edgesList[ei];
+          if (!eg) continue;
+          for (const v of eg.faces) {
+            if (v === u || comp.has(v)) continue;
+            const vInner = g.innerEdgesByFace.get(v);
+            if (vInner && vInner.has(ei)) continue;
+            if (!validateHoleFace(v)) { valid = false; break; }
+            comp.add(v);
+            queue.push(v);
+          }
+          if (!valid) break;
+        }
+      }
+      if (!valid) continue;
+
+      for (const u of comp) {
+        for (const ei of g.faceEdges[u]) {
+          const eg = g.edgesList[ei];
+          if (!eg) continue;
+          for (const v of eg.faces) {
+            if (comp.has(v)) continue;
+            const vInner = g.innerEdgesByFace.get(v);
+            if (!vInner || !vInner.has(ei)) { valid = false; break; }
+          }
+          if (!valid) break;
+        }
+        if (!valid) break;
+      }
+      if (!valid) continue;
+
+      // Vorsprünge (Stifte/Zapfen) ausschließen: Lochflächen liegen innen / hinter der Wirtsfläche
+      let isConcave = false;
+      let checkedCyl = false;
+      for (const fi of comp) {
+        if (g.faceTypes[fi] === 'CYLINDRE' && g.faceInfos[fi] && Array.isArray(g.faceInfos[fi].axis)) {
+          checkedCyl = true;
+          const ax = g.faceInfos[fi].axis;
+          const pt = sampleFaceInterior(g.fObjs[fi], g.allFaces[fi]) || g.faceInfos[fi].c;
+          const nrm = pt ? simplifyFaceNormalAt(g, fi, pt) : null;
+          if (pt && nrm) {
+            const o = ax.slice(0, 3), d = norm(ax.slice(3, 6));
+            const rel = sub(pt, o);
+            const radial = sub(rel, mul(d, dot(rel, d)));
+            if (dot(radial, nrm) < -0.1) isConcave = true;
+          }
+        }
+      }
+      if (!checkedCyl) {
+        let sx = 0, sy = 0, sz = 0, cnt = 0;
+        for (const fi of comp) {
+          const c = g.faceInfos[fi] && g.faceInfos[fi].c;
+          if (c) { sx += c[0]; sy += c[1]; sz += c[2]; cnt++; }
+        }
+        if (cnt > 0 && dot(sub([sx / cnt, sy / cnt, sz / cnt], wireCenter), hostN) < -1e-4) isConcave = true;
+      }
+      if (!isConcave) continue;
+
+      const sorted = [...comp].sort((a, b) => a - b);
+      const key = sorted.join(',');
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        groups.push(sorted);
+      }
+    }
+    return groups;
+  }
+  function detectFilletAndChamferGroups(g, maxSize, opts = {}) {
+    const wantFillets = opts.fillets !== false;
+    const wantChamfers = opts.chamfers !== false;
+    const solidSpan = bboxMaxDim(g.solidBb);
+    const filletSet = new Set();
+    const chamferSet = new Set();
+
+    if (wantFillets) {
+      for (let fi = 0; fi < g.nF; fi++) {
+        const ft = g.faceTypes[fi];
+        const info = g.faceInfos[fi];
+        if (ft === 'CYLINDRE') {
+          if (!(info && info.r > 0 && info.r <= maxSize + 0.02)) continue;
+          let uSpan = Math.PI * 2;
+          try {
+            const uv = oc.BRepTools.UVBounds(g.allFaces[fi]);
+            uSpan = Math.abs(uv.UMax - uv.UMin);
+          } catch (_) {}
+          if (uSpan >= Math.PI * 1.85) continue;
+        } else if (ft === 'TORUS') {
+          if (!(info && info.r > 0 && info.r <= maxSize + 0.02)) continue;
+        } else if (ft === 'BSPLINE') {
+          if (bboxMaxDim(g.faceBBoxes[fi]) > maxSize * 3.5 + 0.02) continue;
+        } else {
+          continue;
+        }
+
+        const tanNeighbors = [];
+        for (const ei of g.faceEdges[fi]) {
+          const eg = g.edgesList[ei];
+          if (!eg) continue;
+          const nF = simplifyFaceNormalAt(g, fi, eg.mid);
+          if (!nF) continue;
+          for (const nfi of eg.faces) {
+            if (nfi === fi) continue;
+            const nN = simplifyFaceNormalAt(g, nfi, eg.mid);
+            if (!nN) continue;
+            if (dot(nF, nN) > 0.94) {
+              tanNeighbors.push({ nfi, ei, mid: eg.mid, nN });
+            }
+          }
+        }
+        const distinctNeighbors = new Set(tanNeighbors.map((x) => x.nfi));
+        if (distinctNeighbors.size < 2) continue;
+        let hasOppositeSides = false;
+        for (let a = 0; a < tanNeighbors.length && !hasOppositeSides; a++) {
+          for (let b = a + 1; b < tanNeighbors.length; b++) {
+            if (tanNeighbors[a].nfi !== tanNeighbors[b].nfi && dot(tanNeighbors[a].nN, tanNeighbors[b].nN) < 0.995) {
+              if (ft !== 'BSPLINE' || len(sub(tanNeighbors[a].mid, tanNeighbors[b].mid)) <= maxSize * 2.1 + 0.02) {
+                hasOppositeSides = true;
+                break;
+              }
+            }
+          }
+        }
+        if (hasOppositeSides) filletSet.add(fi);
+      }
+
+      let added = true;
+      while (added) {
+        added = false;
+        for (let fi = 0; fi < g.nF; fi++) {
+          if (filletSet.has(fi)) continue;
+          const ft = g.faceTypes[fi];
+          const info = g.faceInfos[fi];
+          if (ft === 'SPHERE') {
+            if (!(info && info.r > 0 && info.r <= maxSize + 0.02)) continue;
+          } else if (ft === 'TORUS' || ft === 'BSPLINE') {
+            if (bboxMaxDim(g.faceBBoxes[fi]) > maxSize * 2.6 + 0.02) continue;
+          } else {
+            continue;
+          }
+          let adjFilletEdges = 0;
+          for (const ei of g.faceEdges[fi]) {
+            const eg = g.edgesList[ei];
+            if (!eg) continue;
+            for (const nfi of eg.faces) {
+              if (nfi !== fi && filletSet.has(nfi)) { adjFilletEdges++; break; }
+            }
+          }
+          if (adjFilletEdges >= 2) {
+            filletSet.add(fi);
+            added = true;
+          }
+        }
+      }
+    }
+
+    if (wantChamfers) {
+      for (let fi = 0; fi < g.nF; fi++) {
+        if (filletSet.has(fi)) continue;
+        const ft = g.faceTypes[fi];
+        if (ft === 'PLANE') {
+          const nF = simplifyFaceNormalAt(g, fi);
+          if (!nF) continue;
+          const bevelNeighbors = [];
+          for (const ei of g.faceEdges[fi]) {
+            const eg = g.edgesList[ei];
+            if (!eg) continue;
+            for (const nfi of eg.faces) {
+              if (nfi === fi) continue;
+              const nN = simplifyFaceNormalAt(g, nfi, eg.mid);
+              if (!nN) continue;
+              const d = dot(nF, nN);
+              if (d > 0.12 && d < 0.985) bevelNeighbors.push({ nfi, ei, eg, n: nN });
+            }
+          }
+          let matched = false;
+          for (let a = 0; a < bevelNeighbors.length && !matched; a++) {
+            for (let b = a + 1; b < bevelNeighbors.length; b++) {
+              const c1 = bevelNeighbors[a], c2 = bevelNeighbors[b];
+              if (c1.nfi === c2.nfi) continue;
+              const dn = dot(c1.n, c2.n);
+              if (dn <= -0.85) continue;
+              let w = len(sub(c2.eg.mid, c1.eg.mid));
+              if (c1.eg.t === 'LINE' && c1.eg.a && c1.eg.b && len(sub(c1.eg.b, c1.eg.a)) > 1e-6) {
+                const d1 = norm(sub(c1.eg.b, c1.eg.a));
+                const cr = cross(nF, d1);
+                if (len(cr) > 1e-6) w = Math.abs(dot(sub(c2.eg.mid, c1.eg.mid), norm(cr)));
+              }
+              const theta = Math.acos(Math.max(-0.99, Math.min(0.99, dn)));
+              const sinHalf = Math.sin(theta * 0.5);
+              const leg = sinHalf > 1e-4 ? w / (2 * sinHalf) : w;
+              if (w > 1e-4 && leg <= maxSize + 0.02 && w <= maxSize * 1.6 + 0.02 && w < solidSpan * 0.45) {
+                matched = true;
+                break;
+              }
+            }
+          }
+          if (matched) chamferSet.add(fi);
+        } else if (ft === 'CONE') {
+          const circEdges = [];
+          for (const ei of g.faceEdges[fi]) {
+            const eg = g.edgesList[ei];
+            if (!eg || eg.t !== 'CIRCLE') continue;
+            const nF = simplifyFaceNormalAt(g, fi, eg.mid);
+            if (!nF) continue;
+            for (const nfi of eg.faces) {
+              if (nfi === fi) continue;
+              const nN = simplifyFaceNormalAt(g, nfi, eg.mid);
+              if (!nN) continue;
+              const d = dot(nF, nN);
+              if (d > 0.12 && d < 0.985) circEdges.push({ nfi, eg, n: nN });
+            }
+          }
+          let matched = false;
+          for (let a = 0; a < circEdges.length && !matched; a++) {
+            for (let b = a + 1; b < circEdges.length; b++) {
+              const c1 = circEdges[a], c2 = circEdges[b];
+              if (c1.nfi === c2.nfi) continue;
+              const dr = Math.abs((c1.eg.r || 0) - (c2.eg.r || 0));
+              const dc = c1.eg.c && c2.eg.c ? len(sub(c1.eg.c, c2.eg.c)) : len(sub(c1.eg.mid, c2.eg.mid));
+              if (Math.max(dr, dc) <= maxSize + 0.02) {
+                matched = true;
+                break;
+              }
+            }
+          }
+          if (matched) chamferSet.add(fi);
+        }
+      }
+
+      let added = true;
+      while (added) {
+        added = false;
+        for (let fi = 0; fi < g.nF; fi++) {
+          if (chamferSet.has(fi) || filletSet.has(fi) || g.faceTypes[fi] !== 'PLANE') continue;
+          if (bboxMaxDim(g.faceBBoxes[fi]) > maxSize * 2.2 + 0.02) continue;
+          let adjChamfer = 0;
+          const bevelDirs = new Set();
+          const nF = simplifyFaceNormalAt(g, fi);
+          for (const ei of g.faceEdges[fi]) {
+            const eg = g.edgesList[ei];
+            if (!eg) continue;
+            for (const nfi of eg.faces) {
+              if (nfi === fi) continue;
+              if (chamferSet.has(nfi)) adjChamfer++;
+              else if (nF) {
+                const nN = simplifyFaceNormalAt(g, nfi, eg.mid);
+                if (nN) {
+                  const d = dot(nF, nN);
+                  if (d > 0.12 && d < 0.985) bevelDirs.add(nfi);
+                }
+              }
+            }
+          }
+          if (adjChamfer >= 2 || (bevelDirs.size >= 3 && adjChamfer >= 1)) {
+            chamferSet.add(fi);
+            added = true;
+          }
+        }
+      }
+    }
+
+    const combined = new Set([...filletSet, ...chamferSet]);
+    const visited = new Set();
+    const groups = [];
+    for (const start of combined) {
+      if (visited.has(start)) continue;
+      const comp = [], q = [start];
+      visited.add(start);
+      while (q.length) {
+        const u = q.shift();
+        comp.push(u);
+        for (const ei of g.faceEdges[u]) {
+          const eg = g.edgesList[ei];
+          if (!eg) continue;
+          for (const v of eg.faces) {
+            if (combined.has(v) && !visited.has(v)) {
+              visited.add(v);
+              q.push(v);
+            }
+          }
+        }
+      }
+      groups.push(comp.sort((a, b) => a - b));
+    }
+    return { groups, allIndices: [...combined].sort((a, b) => a - b) };
+  }
+  function simplifySolid(solidShape, opts = {}) {
+    const maxSize = Math.max(0.01, Number(opts.maxSize) || 3);
+    const wantHoles = opts.holes !== false;
+    const wantFc = opts.fillets !== false || opts.chamfers !== false;
+    let cur = solidShape.clone();
+
+    if (wantHoles) {
+      let g = null;
+      let holeGroups = [];
+      try {
+        g = buildFaceEdgeGraph(cur);
+        holeGroups = detectHoleGroups(g, maxSize);
+      } finally {
+        freeFaceEdgeGraph(g);
+      }
+      if (holeGroups.length) {
+        const allHoles = [...new Set(holeGroups.flat())];
+        let healed = null;
+        try { healed = deleteFacesHealSolid(cur, allHoles); } catch (_) { healed = null; }
+        if (healed) {
+          safeDelete(cur);
+          cur = healed;
+        } else {
+          const maxPasses = holeGroups.length + 2;
+          const tried = new Set();
+          for (let pass = 0; pass < maxPasses; pass++) {
+            let g2 = null, nextGroups = [];
+            try {
+              g2 = buildFaceEdgeGraph(cur);
+              nextGroups = detectHoleGroups(g2, maxSize);
+            } finally {
+              freeFaceEdgeGraph(g2);
+            }
+            const pick = nextGroups.find((grp) => !tried.has(grp.join(',')));
+            if (!pick) break;
+            tried.add(pick.join(','));
+            try {
+              const h1 = deleteFacesHealSolid(cur, pick);
+              safeDelete(cur);
+              cur = h1;
+            } catch (_) {}
+          }
+        }
+      }
+    }
+
+    if (wantFc) {
+      let g = null;
+      let fcRes = { groups: [], allIndices: [] };
+      try {
+        g = buildFaceEdgeGraph(cur);
+        fcRes = detectFilletAndChamferGroups(g, maxSize, opts);
+      } finally {
+        freeFaceEdgeGraph(g);
+      }
+      if (fcRes.allIndices.length) {
+        let healed = null;
+        try { healed = deleteFacesHealSolid(cur, fcRes.allIndices); } catch (_) { healed = null; }
+        if (healed) {
+          safeDelete(cur);
+          cur = healed;
+        } else {
+          const maxPasses = fcRes.groups.length + 2;
+          const tried = new Set();
+          for (let pass = 0; pass < maxPasses; pass++) {
+            let g2 = null, nextFc = { groups: [] };
+            try {
+              g2 = buildFaceEdgeGraph(cur);
+              nextFc = detectFilletAndChamferGroups(g2, maxSize, opts);
+            } finally {
+              freeFaceEdgeGraph(g2);
+            }
+            const pick = nextFc.groups.find((grp) => !tried.has(grp.join(',')));
+            if (!pick) break;
+            tried.add(pick.join(','));
+            try {
+              const h1 = deleteFacesHealSolid(cur, pick);
+              safeDelete(cur);
+              cur = h1;
+            } catch (_) {}
+          }
+        }
+      }
+    }
+
+    return cur;
+  }
+  function buildSimplifyOn(baseShape, p, _topo = null, _tid = null) {
+    const maxSize = Number(p && p.maxSize);
+    if (!(maxSize > 0) || !isFinite(maxSize)) throw new Error('Vereinfachen: Die maximale Größe muss größer als 0 sein.');
+    const opts = { maxSize, fillets: p.fillets !== false, chamfers: p.chamfers !== false, holes: p.holes !== false };
+    const solids = baseShape.solids;
+    if (solids.length <= 1) return simplifySolid(baseShape, opts);
+    const outSolids = [];
+    for (const sol of solids) {
+      outSolids.push(simplifySolid(sol, opts));
+    }
+    if (outSolids.length === 1) return outSolids[0];
+    const comp = R.makeCompound(outSolids);
+    for (const s of outSolids) safeDelete(s);
+    return comp;
+  }
+
   // ---------- Fläche ersetzen (DB-04) & Kante verschieben (DB-07) ----------
   function makeOrientedPlaneFace(o, n, span) {
     const nn = norm(n);
@@ -14055,6 +14592,7 @@ export function createKernel(R, oc) {
     return comp;
   }
 
+
   function resolveMoveEdgeMatch(solidShape, edgeSpec, topo = null, tid = null) {
     const eArr = [];
     try { for (const ex of solidShape.edges) eArr.push(ex); } catch (_) {}
@@ -14257,6 +14795,7 @@ export function createKernel(R, oc) {
     for (const s of outSolids) safeDelete(s);
     return comp;
   }
+
 
   function basisFromNormal(fn) {
     const n = norm(fn);
@@ -16734,6 +17273,76 @@ export function createKernel(R, oc) {
             cachePut(k, next, null, null, null, nextTopo);
           } catch (err) {
             errors.push({ itemId: it.id, code: (err && err.code === 'edges') ? 'edges' : 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'simplify') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Vereinfachen: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        let bakedSet = bakedHoles.get(tid);
+        const priorHoles = [];
+        for (let hi = 0; hi < i; hi++) {
+          const he = evald[hi];
+          if (!he || he.it.role !== 'hole' || !he.shape || consumed.has(he.it.id)) continue;
+          if (bakedSet && bakedSet.has(he.it.id)) continue;
+          if (src.wb && he.wb && bboxHit(he.wb, src.wb)) priorHoles.push(he);
+        }
+        if (priorHoles.length) {
+          const inv = matInvRigid(src.m);
+          const rels = priorHoles.map((h) => matMul(inv, h.it.m));
+          const kHole = keyOf([src.key, 'bakeHoles', priorHoles.map((h, idx) => [h.key, rels[idx].map(r6)])]);
+          const ceH = cacheEntry(kHole);
+          let hShape = ceH ? ceH.shape : null, hTopo = ceH ? ceH.topo : null;
+          if (!hShape) {
+            try {
+              const moved = priorHoles.map((h, idx) => {
+                const tr = applyMatrixWithTopo(h.shape, rels[idx], h.topo || null, h.it.id);
+                return { shape: tr.shape, topo: tr.topo, selfId: h.it.id };
+              });
+              const tool = fuseAllWithTopo(moved, true, 'BH');
+              const br = boolWithTopo('cut', src.shape, src.topo || null, src.it.id, tool.shape, tool.topo, null, 'BHCut');
+              safeDelete(tool.shape); freeTopoMap(tool.topo);
+              hShape = br.shape; hTopo = br.topo;
+              cachePut(kHole, hShape, null, null, null, hTopo);
+            } catch (_) {
+              hShape = null;
+            }
+          }
+          if (hShape) {
+            if (!bakedSet) { bakedSet = new Set(); bakedHoles.set(tid, bakedSet); }
+            for (const h of priorHoles) bakedSet.add(h.it.id);
+            src.shape = hShape; src.topo = hTopo; src.key = kHole; src.wb = bboxTransform(bboxCached(kHole, hShape), src.m);
+            bodies.set(tid, src);
+          }
+        }
+        const maxSize = Number(p.maxSize);
+        const fillets = p.fillets !== false;
+        const chamfers = p.chamfers !== false;
+        const holes = p.holes !== false;
+        const k = keyOf([src.key, 'simplify', r6(maxSize), fillets, chamfers, holes]);
+        const ceS = cacheEntry(k);
+        let next = ceS ? ceS.shape : null, nextTopo = ceS ? ceS.topo : null;
+        if (!next) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            next = buildSimplifyOn(src.shape, { maxSize, fillets, chamfers, holes }, src.topo, src.it.id);
+            nextTopo = ensureTopoComplete(next, createTopoMap(), tid);
+            cachePut(k, next, null, null, null, nextTopo);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
             continue;
           }
         }
@@ -21493,6 +22102,7 @@ export function createKernel(R, oc) {
     for (const s of outSolids) safeDelete(s);
     return comp;
   }
+
 
   function fillSolidHoles(solid) {
     if (!solid || !solid.wrapped) return null;
