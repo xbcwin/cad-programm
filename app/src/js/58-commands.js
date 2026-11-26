@@ -531,6 +531,7 @@ const Commands = (() => {
     add('save-template', 'Als Vorlage speichern', 'save', 'vorlage speichern eigene vorlage template', () => Start.saveAsTemplate(), { group: 'Projekt' });
     add('save-userlib', 'Teil in meine Bibliothek speichern', 'save', 'bibliothek meine teile speichern bauteil wiederverwenden', () => UserLib.saveDialog(), { group: 'Bauteile', needSel: true });
     add('my-parts', 'Meine Teile (eigene Bibliothek)', 'parts', 'meine teile bibliothek eigene bauteile', () => Panels.toggleFlyout('parts', $('#t-parts')), { group: 'Bauteile' });
+    add('iso286-table', 'Toleranz-Tabelle ISO 286 (Passungen H7, g6 …)', 'ruler', 'toleranz toleranzen passung passungen iso 286 h7 g6 grundtoleranz it7 abmass abmasse bi-26', () => Iso286.openDialog(), { group: 'Bauteile', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
     add('open', 'Projekt öffnen', 'folder', 'laden datei öffnen', () => Start.openFile(), { group: 'Projekt' });
     add('loft', 'Übergang (Loft) aus gewählten Skizzenkörpern', 'loft', 'loft übergang profile nase verbinden spitze', () => Actions.loft(), { group: 'Bearbeiten', needSel: true });
     add('loft-tip', 'Zur Spitze zusammenlaufen lassen', 'loft', 'spitze kegel nase verlängern zuspitzen', () => { if (App.sel.length === 1) Actions.loft([App.sel[0]], { tip: 10 }); }, { group: 'Bearbeiten', needSel: true });

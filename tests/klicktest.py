@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Motion,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,Refine,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI,Enclosure,LabelCodes}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Motion,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,Refine,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI,Enclosure,LabelCodes,Iso286}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -40216,6 +40216,176 @@ def t_a192_gehaeuse_erweitert(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a195_toleranz_tabellen_iso286(p):
+    p.empty()
+
+    # 1. Einfach vs. Profi im Bauteile-Flyout & Öffnen des ISO-286-Dialogs
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(200)
+    p.pg.locator('#t-parts').click(); p.wait(250)
+    simple_st = p.ev("""return {
+      tilesVisible: [...document.querySelectorAll('.flyout.parts > .tiles .tile')].filter(t => t.offsetParent).length,
+      isoBtnVisible: !!(document.querySelector('#open-iso286-table') && document.querySelector('#open-iso286-table').offsetParent),
+    }""")
+    p.pg.keyboard.press('Escape'); p.wait(150)
+
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(200)
+    p.pg.locator('#t-parts').click(); p.wait(250)
+    pro_btn_vis = p.ev("return !!(document.querySelector('#open-iso286-table') && document.querySelector('#open-iso286-table').offsetParent)")
+    p.pg.locator('#open-iso286-table').click(); p.wait(250)
+    dlg_open = p.ev("return !!document.querySelector('#iso286-dlg')")
+    ok1 = bool(simple_st['tilesVisible'] == 5 and not simple_st['isoBtnVisible'] and pro_btn_vis and dlg_open)
+
+    # 2. Ø20 H7, g6, IT7 und Passungspaar H7/g6 nachschlagen
+    p.pg.locator('#iso286-nom').fill('20'); p.wait(120)
+    p.pg.select_option('#iso286-code', 'H7'); p.wait(120)
+    h7_res = p.ev("""return {
+      text: document.querySelector('#iso286-result')?.textContent || '',
+      api: Iso286.lookup('H7', 20),
+    }""")
+
+    p.pg.locator('#iso286-table-wrap tr[data-code="g6"]').click(); p.wait(120)
+    g6_res = p.ev("""return {
+      text: document.querySelector('#iso286-result')?.textContent || '',
+      codeVal: document.querySelector('#iso286-code')?.value || '',
+    }""")
+
+    p.pg.locator('#iso286-tab-it').click(); p.wait(120)
+    p.pg.select_option('#iso286-it-grade', '7'); p.wait(120)
+    it7_text = p.ev("return document.querySelector('#iso286-result')?.textContent || ''")
+
+    p.pg.locator('#iso286-tab-pairs').click(); p.wait(120)
+    p.pg.locator('#iso286-table-wrap tr[data-pair="H7/g6"]').click(); p.wait(120)
+    pair_text = p.ev("return document.querySelector('#iso286-result')?.textContent || ''")
+
+    p.pg.locator('#iso286-close').click(); p.wait(150)
+
+    ok2 = bool(
+        h7_res['api'] and h7_res['api']['upperUm'] == 21 and h7_res['api']['lowerUm'] == 0
+        and '+0,021 / 0' in h7_res['text'] and '20,000 – 20,021' in h7_res['text']
+        and g6_res['codeVal'] == 'g6' and '−0,007 / −0,020' in g6_res['text'] and '19,980 – 19,993' in g6_res['text']
+        and '21 µm' in it7_text and '0,021 mm' in it7_text
+        and 'Spielpassung' in pair_text and '+0,007' in pair_text and '+0,041' in pair_text
+    )
+
+    # 3. In Skizze: Kreis Ø20 anlegen, über Maß-Eingabe (#dim-iso286) H7 übernehmen
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(1200)
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(150)
+    cx, cy = p.canvas_center()
+    p.pg.keyboard.press('c'); p.pg.mouse.click(cx, cy); p.pg.mouse.move(cx + 25, cy); p.pg.keyboard.type('20'); p.pg.keyboard.press('Enter'); p.wait(400)
+    dim_id = p.ev("const d = Sketch.state.dims.find(x => x.k === 'd'); return d ? d.id : null;")
+    if not dim_id:
+        return [ok1, ok2, False, False, False]
+
+    p.pg.locator(f'.skdim[data-dim="{dim_id}"]').click(); p.wait(200)
+    p.pg.locator('#dim-iso286').click(); p.wait(250)
+    sk_dlg = p.ev("""return {
+      nom: document.querySelector('#iso286-nom')?.value || '',
+      code: document.querySelector('#iso286-code')?.value || '',
+      res: document.querySelector('#iso286-result')?.textContent || '',
+    }""")
+    p.pg.locator('#iso286-apply').click(); p.wait(200)
+    sk_after = p.ev("""
+      const d = Sketch.state.dims.find(x => x.id === arg);
+      const badge = document.querySelector(`.skdim[data-dim="${arg}"]`)?.textContent || '';
+      return { tol: d ? d.tol : null, badge };
+    """, dim_id)
+    ok3 = bool(
+        sk_dlg['code'] == 'H7' and '+0,021 / 0' in sk_dlg['res']
+        and sk_after['tol'] and sk_after['tol'].get('mode') == 'fit' and sk_after['tol'].get('fit') == 'H7'
+        and 'H7' in sk_after['badge'] and '+0,021/0' in sk_after['badge']
+    )
+
+    # Skizze hochziehen & in Zeichnung prüfen
+    p.pg.locator('.sketchbar .tool.primary').click(); p.wait(800)
+    p.pg.locator('.stepbox .btn.primary').click()
+    warte_rechnen(p)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.ev("Drawing.importModelDims()"); p.wait(300)
+
+    dw_st = p.ev("""
+      const d = Drawing.dims().find(x => x.type === 'dia' && Math.abs(x.nominalMm - 20) < 0.1);
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const texts = d && svg ? [...svg.querySelectorAll(`text[data-id="${d.id}"]`)].map(t => t.textContent) : [];
+      return { dim: d, texts };
+    """)
+    if not dw_st['dim']:
+        return [ok1, ok2, ok3, False, False]
+
+    p.ev("Drawing.select(arg)", dw_st['dim']['id']); p.wait(200)
+    p.pg.locator('#dw-tol-table-btn').click(); p.wait(250)
+    p.pg.select_option('#iso286-code', 'g6'); p.wait(120)
+    p.pg.locator('#iso286-apply').click(); p.wait(250)
+
+    dw_g6 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const texts = svg ? [...svg.querySelectorAll(`text[data-id="${arg}"]`)].map(t => t.textContent) : [];
+      const info = document.querySelector('#dw-tol-info')?.textContent || '';
+      return { tol: Drawing.getDimTol(arg), texts, info };
+    """, dw_st['dim']['id'])
+
+    p.ev("App.undo()"); p.wait(250)
+    dw_undo = p.ev("return Drawing.getDimTol(arg)", dw_st['dim']['id'])
+
+    ok4 = bool(
+        dw_st['dim'].get('tol', {}).get('fit') == 'H7'
+        and 'Ø20 H7' in dw_st['texts'] and '+0,021' in dw_st['texts']
+        and dw_g6['tol'] and dw_g6['tol'].get('fit') == 'g6'
+        and 'Ø20 g6' in dw_g6['texts'] and '−0,007 / −0,020' in dw_g6['info']
+        and dw_undo and dw_undo.get('fit') == 'H7'
+    )
+
+    # 5. Projekt-Maß (Parameter), Befehlssuche, Validierung & Hilfen
+    p.pg.click('#tab-model'); p.wait(250)
+    p.pg.locator('#lt-params').click(); p.wait(200)
+    pid = p.ev("""
+      const id = 'm_a195_bohrung';
+      App.change('Passmaß', doc => {
+        doc.params.push({ id, name: 'Bohrung', expr: 20 });
+      });
+      return id;
+    """)
+    p.wait(200)
+    p.pg.locator(f'#ptol-{pid}').click(); p.wait(220)
+    p.pg.select_option('#iso286-code', 'H7'); p.wait(120)
+    p.pg.locator('#iso286-apply').click(); p.wait(200)
+
+    par_st = p.ev("""
+      const pr = (App.doc.params || []).find(x => x.id === arg);
+      const btn = document.querySelector('#ptol-' + arg)?.textContent || '';
+      return { tol: pr ? pr.tol : null, btn };
+    """, pid)
+    p.ev("App.undo()"); p.wait(180)
+    par_undo = p.ev("return (App.doc.params || []).find(x => x.id === arg)?.tol || null", pid)
+
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const h = wh.iso286Table;
+      const hOk = !!(h && h.tip && h.hilfe && h.tipp && UI.helpKey(document.querySelector('#par-iso286')) === 'iso286Table');
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('iso 286').map(c => c.id);
+      return { valOk: !!(val && val.ok), hOk, i18nOk, cmds };
+    })()""")
+
+    ok5 = bool(
+        par_st['tol'] and par_st['tol'].get('fit') == 'H7'
+        and 'H7' in par_st['btn'] and '+0,021/0' in par_st['btn']
+        and par_undo is None
+        and 'iso286-table' in meta['cmds']
+        and meta['valOk'] and meta['hOk'] and meta['i18nOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_f11252354(p):
     # 1. Mass.measure() wartet bei kaltem Kern auf laufenden App-Neubau (kein Vorab-Cache-Treffer)
     p.empty()
@@ -40872,6 +41042,7 @@ TESTS = [
     ('[A-187] Bibliothek: Griffe, Knöpfe, Füße, Magnet-Taschen (BI-14, BI-15)', t_a187_griffe_knoepfe_fuesse_magnettaschen),
     ('[A-192] Bibliothek: Gehäuse-Generator Schritt 2 (Schnapphaken, Lüftung, Kabeldurchführung, BI-20, BI-21)', t_a192_gehaeuse_erweitert),
     ('[A-193] Bibliothek: Typenschild, QR-Code und Barcode (BI-22, BI-23)', t_a193_typenschild_qr_barcode),
+    ('[A-195] Bibliothek: Toleranz-Tabellen ISO 286 (BI-26)', t_a195_toleranz_tabellen_iso286),
     ('[F-11252354] Volltest-Reparatur: Mass.measure wartet auf App-Neubau / Zeichnung-PDF-Menü eindeutig / Einstellungen-Dialog ohne Geister-Reopen', t_f11252354),
     ('[A-196] Rohre, Fittings, Flansche, Riemen und Ketten (BI-27, BI-28)', t_a196_rohre_fittings_flansche_riemen_ketten),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),

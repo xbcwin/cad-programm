@@ -151,7 +151,7 @@ const Drawing = (() => {
     { key: 'arrow', get label() { return T('draw.noteTip.arrow'); } },
     { key: 'dot', get label() { return T('draw.noteTip.dot'); } },
   ];
-  const ISO286_DATA = /*JSON:iso286.json*/null;
+  const ISO286_DATA = (typeof Iso286 !== 'undefined' && Iso286.DATA) || null;
   const DIM_MODES = [
     { key: 'lin', get label() { return T('draw.dimMode.lin'); }, get short() { return T('draw.dimMode.lin'); }, get hint() { return T('draw.dimHint.lin'); } },
     { key: 'chain', get label() { return T('draw.dimMode.chain'); }, get short() { return T('draw.dimMode.chain'); }, get hint() { return T('draw.dimHint.chain'); } },
@@ -11904,44 +11904,45 @@ const Drawing = (() => {
       const v = po.clone().addScaledVector(px, Number(pt[0]) || 0).addScaledVector(py, Number(pt[1]) || 0);
       return M ? v.applyMatrix4(M) : v;
     };
-    const pushLin = (a2, b2, valHint = null, axisHint = null) => {
+    const pushLin = (a2, b2, valHint = null, axisHint = null, tol = null) => {
       if (!a2 || !b2 || Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) < 0.15) return;
-      out.push({ kind: 'lin', p0: skPt(a2), p1: skPt(b2), planeNormal: wn, valHint, axisHint, itemId, source: 'sketch' });
+      out.push({ kind: 'lin', p0: skPt(a2), p1: skPt(b2), planeNormal: wn, valHint, axisHint, ...(tol ? { tol } : {}), itemId, source: 'sketch' });
     };
     let addedHere = 0;
     for (const dm of sk.dims || []) {
       if (!dm || dm.ref) continue;
       const val = Model.num(dm.v, V, NaN);
       if (!isFinite(val)) continue;
+      const dmTol = dm.tol ? sanitizeTol(dm.tol) : null;
       if (dm.e) {
         const e = entById.get(dm.e);
         if (!e || e.con) continue;
         if (dm.k === 'w' && e.type === 'rect' && e.a && e.b) {
           const x0 = Math.min(e.a[0], e.b[0]), x1 = Math.max(e.a[0], e.b[0]);
           const y0 = Math.min(e.a[1], e.b[1]);
-          pushLin([x0, y0], [x1, y0], val);
+          pushLin([x0, y0], [x1, y0], val, null, dmTol);
           addedHere++;
         } else if (dm.k === 'h' && e.type === 'rect' && e.a && e.b) {
           const x0 = Math.min(e.a[0], e.b[0]);
           const y0 = Math.min(e.a[1], e.b[1]), y1 = Math.max(e.a[1], e.b[1]);
-          pushLin([x0, y0], [x0, y1], val);
+          pushLin([x0, y0], [x0, y1], val, null, dmTol);
           addedHere++;
         } else if (dm.k === 'w' && e.type === 'slot' && e.a && e.r > 0.05) {
-          out.push({ kind: 'dia', c: skPt(e.a), n: wn, r: e.r, isHole, itemId, source: 'sketch' });
+          out.push({ kind: 'dia', c: skPt(e.a), n: wn, r: e.r, isHole, ...(dmTol ? { tol: dmTol } : {}), itemId, source: 'sketch' });
           addedHere++;
         } else if (dm.k === 'len' && (e.type === 'line' || e.type === 'slot') && e.a && e.b) {
-          pushLin(e.a, e.b, val);
+          pushLin(e.a, e.b, val, null, dmTol);
           addedHere++;
         } else if (dm.k === 'd' && e.type === 'circle' && e.c && e.r > 0.05) {
-          out.push({ kind: 'dia', c: skPt(e.c), n: wn, r: e.r, isHole, itemId, source: 'sketch' });
+          out.push({ kind: 'dia', c: skPt(e.c), n: wn, r: e.r, isHole, ...(dmTol ? { tol: dmTol } : {}), itemId, source: 'sketch' });
           addedHere++;
         } else if (dm.k === 'r' && e.type === 'circle' && e.c && e.r > 0.05) {
-          out.push({ kind: 'rad', c: skPt(e.c), n: wn, r: e.r, itemId, source: 'sketch' });
+          out.push({ kind: 'rad', c: skPt(e.c), n: wn, r: e.r, ...(dmTol ? { tol: dmTol } : {}), itemId, source: 'sketch' });
           addedHere++;
         } else if (dm.k === 'r' && e.type === 'arc' && e.a && e.m && e.b) {
           const ai = SK.arcInfo(e.a, e.m, e.b);
           if (ai && ai.r > 0.05) {
-            out.push({ kind: 'rad', c: skPt(ai.c), n: wn, r: ai.r, pMid: skPt(e.m), itemId, source: 'sketch' });
+            out.push({ kind: 'rad', c: skPt(ai.c), n: wn, r: ai.r, pMid: skPt(e.m), ...(dmTol ? { tol: dmTol } : {}), itemId, source: 'sketch' });
             addedHere++;
           }
         } else if ((dm.k === 'rx' || dm.k === 'ry') && e.type === 'ellipse' && e.c) {
@@ -11949,14 +11950,14 @@ const Drawing = (() => {
           const dir = dm.k === 'rx' ? [Math.cos(rot), Math.sin(rot)] : [-Math.sin(rot), Math.cos(rot)];
           const rVal = dm.k === 'rx' ? e.rx : e.ry;
           if (rVal > 0.05) {
-            pushLin(e.c, [e.c[0] + dir[0] * rVal, e.c[1] + dir[1] * rVal], val);
+            pushLin(e.c, [e.c[0] + dir[0] * rVal, e.c[1] + dir[1] * rVal], val, null, dmTol);
             addedHere++;
           }
         }
       } else if (Array.isArray(dm.refs) && dm.refs.length >= 2) {
         if (dm.k === 'dist') {
           const a2 = sketchRefPt2(dm.refs[0], entById), b2 = sketchRefPt2(dm.refs[1], entById);
-          if (a2 && b2) { pushLin(a2, b2, val); addedHere++; }
+          if (a2 && b2) { pushLin(a2, b2, val, null, dmTol); addedHere++; }
         } else if (dm.k === 'distPL') {
           const p2 = sketchRefPt2(dm.refs[0], entById), L = sketchRefLine2(dm.refs[1], entById);
           if (p2 && L) {
@@ -11964,14 +11965,14 @@ const Drawing = (() => {
             if (L2 > 1e-8) {
               const t = ((p2[0] - L[0][0]) * dx + (p2[1] - L[0][1]) * dy) / L2;
               const q2 = [L[0][0] + t * dx, L[0][1] + t * dy];
-              pushLin(p2, q2, val);
+              pushLin(p2, q2, val, null, dmTol);
               addedHere++;
             }
           }
         } else if (dm.k === 'distCC') {
           const e0 = entById.get(dm.refs[0].e), e1 = entById.get(dm.refs[1].e);
           const c0 = e0 && e0.c, c1 = e1 && e1.c;
-          if (c0 && c1) { pushLin(c0, c1, val); addedHere++; }
+          if (c0 && c1) { pushLin(c0, c1, val, null, dmTol); addedHere++; }
         } else if (dm.k === 'ord') {
           const p2 = sketchRefPt2(dm.refs[0], entById);
           const L = sketchRefLine2(dm.refs[1], entById);
@@ -11980,13 +11981,13 @@ const Drawing = (() => {
             const dx = L[1][0] - L[0][0], dy = L[1][1] - L[0][1], L2 = dx * dx + dy * dy;
             if (L2 > 1e-8) {
               const t = ((p2[0] - L[0][0]) * dx + (p2[1] - L[0][1]) * dy) / L2;
-              pushLin(p2, [L[0][0] + t * dx, L[0][1] + t * dy], Math.abs(val));
+              pushLin(p2, [L[0][0] + t * dx, L[0][1] + t * dy], Math.abs(val), null, dmTol);
               addedHere++;
             }
           } else if (p2 && o2) {
             const ax = dm.axis === 'y' ? 1 : 0;
             const q2 = ax === 0 ? [o2[0], p2[1]] : [p2[0], o2[1]];
-            pushLin(p2, q2, Math.abs(val));
+            pushLin(p2, q2, Math.abs(val), null, dmTol);
             addedHere++;
           }
         } else if (dm.k === 'angLL') {
@@ -12282,7 +12283,7 @@ const Drawing = (() => {
           if (!best || score > best.score) best = { vk, v, dir, a, b, score };
         }
         if (best) {
-          const dObj = attachSafeRef({ id: uid('d'), view: best.vk, type: 'lin', dir: best.dir, a: best.a, b: best.b, off: -(9 / best.v.s), fromModel: true }, best.v, lay, sh);
+          const dObj = attachSafeRef({ id: uid('d'), view: best.vk, type: 'lin', dir: best.dir, a: best.a, b: best.b, off: -(9 / best.v.s), ...(item.tol ? { tol: sanitizeTol(item.tol) } : {}), fromModel: true }, best.v, lay, sh);
           mapped.push(dObj);
           viewCount[best.vk]++;
           globalLinKeys.push({ itemId: item.itemId, len: L3, u: u3 });
@@ -12314,9 +12315,10 @@ const Drawing = (() => {
           if (!best || score > best.score) best = { vk, v, c: cUse, r: rUse, hit, score };
         }
         if (best) {
-          const rk = `${best.vk}|${item.kind}|${Math.round(best.r * 200)}`;
+          const tolClean = item.tol ? sanitizeTol(item.tol) : null;
+          const rk = `${best.vk}|${item.kind}|${Math.round(best.r * 200)}|${tolClean ? JSON.stringify(tolClean) : ''}`;
           if (!pendingCircleGroups.has(rk)) pendingCircleGroups.set(rk, []);
-          pendingCircleGroups.get(rk).push({ vk: best.vk, v: best.v, c: best.c, r: best.r, hit: best.hit });
+          pendingCircleGroups.get(rk).push({ vk: best.vk, v: best.v, c: best.c, r: best.r, hit: best.hit, tol: tolClean });
           viewCount[best.vk]++;
         }
       } else if (item.kind === 'ang') {
@@ -12409,6 +12411,7 @@ const Drawing = (() => {
         : ([45, 135, 225, 315].sort((p, q) => Math.abs(angleDiff(p * toRad, away * toRad)) - Math.abs(angleDiff(q * toRad, away * toRad)))[0] || 45);
       const mt = type === 'dia' ? (v.geo.threads || []).find((th) => th.type === 'end' && Math.hypot(th.c[0] - pick.c[0], th.c[1] - pick.c[1]) < 0.3 && (Math.abs(th.r - pick.r) < 0.45 || Math.abs(th.rThread - pick.r) < 0.45)) : null;
       const thLbl = mt ? ((mt.source === 'cosmetic' || mt.blind0 || mt.blind1) ? `${mt.size} × ${fmtDim(mt.length, st)}` : `${mt.size}`) : null;
+      const tolItem = list.find((it) => it && it.tol);
       const dObj = attachSafeRef({
         id: uid('d'),
         view: first.vk,
@@ -12419,6 +12422,7 @@ const Drawing = (() => {
         count: list.length,
         ...(type === 'rad' && pick.hit && !pick.hit.full ? { partial: true } : {}),
         ...(thLbl ? { threadLabel: thLbl } : {}),
+        ...(tolItem && tolItem.tol ? { tol: sanitizeTol(tolItem.tol) } : {}),
         fromModel: true,
       }, v, lay, sh);
       mapped.push(dObj);
@@ -16345,6 +16349,18 @@ const Drawing = (() => {
             tolBox.append(h('div', { class: 'hint-box', id: 'dw-tol-info', html: linesHtml.join('<br>') }));
           }
         }
+        if (!simpleMode && typeof Iso286 !== 'undefined' && Iso286.openDialog) {
+          const tblBtn = h('button', { type: 'button', class: 'btn small pro', id: 'dw-tol-table-btn', 'data-help': 'iso286Table' });
+          tblBtn.innerHTML = icon('ruler') + esc(T('iso286.openTableBtn'));
+          tblBtn.onclick = () => Iso286.openDialog({
+            nominalMm: selDimInfo.nominalMm > 0 ? selDimInfo.nominalMm : 20,
+            code: (curTol && curTol.fit) || (selDimInfo.dim.type === 'dia' ? 'H7' : 'h6'),
+            fitShow: (curTol && curTol.fitShow) || 'both',
+            targetLabel: T('iso286.targetDrawingDim', { label: selDimInfo.label }),
+            onApply: (tol) => setDimTol(selDimInfo.dim.id, tol),
+          });
+          tolBox.append(tblBtn);
+        }
         selSec.append(tolBox);
         if (!simpleMode) {
           const bDimDat = h('button', { type: 'button', class: 'btn', id: 'dw-dim-add-datum', 'data-help': 'drawingGdt' });
@@ -17208,6 +17224,20 @@ const Drawing = (() => {
     centers, allCenters, setCenters, hideCenter, showCenter, toggleCenter, showAllCenters,
     iso286, ISO286: ISO286_DATA,
     dims: () => autoDimList(dwg(), layout || computeLayout(dwg())).map((x) => ({ ...x, nominalMm: dimNominal(x) })),
+    tolTargets: () => {
+      const sh = dwg();
+      const lay = layout || computeLayout(sh);
+      const st = sheetDimStyle(sh);
+      return autoDimList(sh, lay)
+        .filter((x) => x && (x.type === 'lin' || x.type === 'dia' || x.type === 'rad' || x.type === 'arclen'))
+        .map((x) => ({
+          dimId: x.id,
+          label: dimSummaryLabel(x, st),
+          nominalMm: dimNominal(x),
+          curTol: x.tol ? { ...x.tol } : null,
+          selected: x.id === selDim,
+        }));
+    },
     lostDims, removeDim, removeLostDims, startRebind, rebindDim, addDim,
     getDimTol, setDimTol,
     exportPDF, buildPDFBytes, exportSVG, buildSVGString, exportDXF, buildDXF, exportPNG, buildPNG, pngDialog, pngDimensions,
