@@ -5616,6 +5616,7 @@ export function createKernel(R, oc) {
     if (lib === 'pipeFlange') return buildPipeFlange(p);
     if (lib === 'stdBelt') return buildStdBelt(p);
     if (lib === 'stdChain') return buildStdChain(p);
+    if (lib === 'profile') return buildProfile(p);
     const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
     const tol = num(p.tol, 0) + pf;
     if (lib === 'screwHole') {
@@ -7272,6 +7273,75 @@ export function createKernel(R, oc) {
     } finally {
       safeDelete(plateProto); safeDelete(rollerProto); safeDelete(pinBotProto); safeDelete(pinTopProto);
       for (const s of solids) safeDelete(s);
+    }
+  }
+  function buildProfile(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const sh = String(sp.shape || p.shape || 'squareTube');
+    const w = Math.max(2, pos(sp.w ?? p.w, 30));
+    const t = Math.max(0.4, pos(sp.t ?? p.t, sh === 'flat' ? 5 : 2));
+    const h = sh === 'roundTube' ? w : sh === 'flat' ? t : Math.max(2, pos(sp.h ?? p.h, w));
+    const tf = Math.max(0.4, pos(sp.tf ?? p.tf, t));
+    const L = Math.max(2, pos(sp.length ?? p.length, 500));
+
+    let outer = null, inner = null, face = null, shape = null;
+    try {
+      if (sh === 'squareTube') {
+        const tc = Math.min(t, Math.min(w, h) / 2 - 0.1);
+        outer = R.makeBox([-w / 2, -h / 2, 0], [w / 2, h / 2, L]);
+        inner = R.makeBox([-(w / 2 - tc), -(h / 2 - tc), -1], [w / 2 - tc, h / 2 - tc, L + 1]);
+        shape = outer.cut(inner);
+      } else if (sh === 'roundTube') {
+        const tc = Math.min(t, w / 2 - 0.1);
+        outer = R.makeCylinder(w / 2, L, [0, 0, 0], [0, 0, 1]);
+        inner = R.makeCylinder(w / 2 - tc, L + 2, [0, 0, -1], [0, 0, 1]);
+        shape = outer.cut(inner);
+      } else if (sh === 'flat') {
+        shape = R.makeBox([-w / 2, -t / 2, 0], [w / 2, t / 2, L]);
+      } else {
+        let pts;
+        if (sh === 'angle') {
+          const tc = Math.min(t, Math.min(w, h) - 0.4);
+          pts = [
+            [-w / 2, -h / 2, 0], [w / 2, -h / 2, 0], [w / 2, -h / 2 + tc, 0],
+            [-w / 2 + tc, -h / 2 + tc, 0], [-w / 2 + tc, h / 2, 0], [-w / 2, h / 2, 0],
+          ];
+        } else if (sh === 'channel') {
+          const tw = Math.min(t, w - 0.4);
+          const tfc = Math.min(tf, h / 2 - 0.2);
+          pts = [
+            [-w / 2, -h / 2, 0], [w / 2, -h / 2, 0], [w / 2, -h / 2 + tfc, 0],
+            [-w / 2 + tw, -h / 2 + tfc, 0], [-w / 2 + tw, h / 2 - tfc, 0],
+            [w / 2, h / 2 - tfc, 0], [w / 2, h / 2, 0], [-w / 2, h / 2, 0],
+          ];
+        } else if (sh === 'tee') {
+          const tw = Math.min(t, w - 0.4);
+          const tfc = Math.min(tf, h - 0.4);
+          pts = [
+            [-tw / 2, -h / 2, 0], [tw / 2, -h / 2, 0], [tw / 2, h / 2 - tfc, 0],
+            [w / 2, h / 2 - tfc, 0], [w / 2, h / 2, 0], [-w / 2, h / 2, 0],
+            [-w / 2, h / 2 - tfc, 0], [-tw / 2, h / 2 - tfc, 0],
+          ];
+        } else {
+          // ibeam
+          const tw = Math.min(t, w - 0.4);
+          const tfc = Math.min(tf, h / 2 - 0.2);
+          pts = [
+            [-w / 2, -h / 2, 0], [w / 2, -h / 2, 0], [w / 2, -h / 2 + tfc, 0],
+            [tw / 2, -h / 2 + tfc, 0], [tw / 2, h / 2 - tfc, 0], [w / 2, h / 2 - tfc, 0],
+            [w / 2, h / 2, 0], [-w / 2, h / 2, 0], [-w / 2, h / 2 - tfc, 0],
+            [-tw / 2, h / 2 - tfc, 0], [-tw / 2, -h / 2 + tfc, 0], [-w / 2, -h / 2 + tfc, 0],
+          ];
+        }
+        face = polygonFace(pts);
+        shape = R.basicFaceExtrusion(face, new R.Vector([0, 0, L]));
+      }
+      if (!isClosedValidSolid(shape)) throw new Error('Profil ergab keinen geschlossenen Körper.');
+      const out = shape;
+      shape = null;
+      return out;
+    } finally {
+      safeDelete(outer); safeDelete(inner); safeDelete(face); safeDelete(shape);
     }
   }
   // ---------- Kanten-Veredelung ----------

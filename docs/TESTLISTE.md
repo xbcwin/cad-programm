@@ -3085,6 +3085,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Ausrichten über Flächen: Würfel B (verschoben und gedreht) legt sich über `Place.alignFaces` bündig an Würfel A (Abstand `0 mm`, Mitten deckend, Gegennormale), Abstand `5 mm`, Bündig-Modus (`flush`), interaktive Leiste `#align-faces-bar`, Rückgängig und Sperrschutz bei festgesetztem Körper geprüft (Klicktest `[A-206]`)
 - [ ] **Von Hand**: Im Browser im Profi-Modus an einem importierten oder gerundeten Teil mit kleinen Fasen/Bohrungen „Vereinfachen“ testen sowie zwei verschobene Körper über „Ausrichten über Flächen“ per Zwei-Flächen-Klick bündig aneinander setzen.
 
+## Profile, Schritt 1: Profil-Sammlung (Auto [A-207], PR-01)
+- [x] Neue Bibliotheks-Gruppe „Profile“ im Bauteile-Flyout in **Einfach** und **Profi** sichtbar, alle 7 Profile (Vierkantrohr, Rundrohr, L-Profil, U-Profil, T-Profil, I-Träger, Flachstahl) über Klick und Befehlssuche einfügbar (Klicktest `[A-207]`)
+- [x] Vierkantrohr 30×30×2, Länge 500 mm einfügen ergibt geschlossenen B-Rep-Körper mit exaktem Volumen (`112000 mm³`, Abweichung < 1 %) und Hüllmaßen `30 × 30 × 500 mm` (Klicktest `[A-207]`)
+- [x] Wechsel der Profilart auf U-Profil (`UPE 80`) und Normgröße (`U40x20`) ändert Querschnitt, Hüllmaße und Volumen exakt (Klicktest `[A-207]`)
+- [x] Alle 7 Profilarten bauen mit `GeomCheck` = 0 Fehlern und korrektem Volumen; Rückgängig/Wiederherstellen, Projekt-Validierung, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-207]`)
+- [ ] **Von Hand**: Im Browser im Einfach- und Profi-Modus über „Bauteile → Profile“ ein I-Träger- und ein Rundrohr-Profil auf eine Körperfläche ziehen und verschiedene Normgrößen durchschalten.
+
 ## Fehler melden
 
 ```

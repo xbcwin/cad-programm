@@ -1092,6 +1092,197 @@ function chainMetrics(p = {}) {
     links, reqLen, actualLength, zHalf, nStr, arcR, centerDist, outerX, outerY,
   };
 }
+// Profile & Halbzeuge nach Norm (Vierkantrohr, Rundrohr, L, U, T, I, Flachstahl; PR-01)
+const PROFILE_SHAPES = [
+  { id: 'squareTube', label: 'Vierkantrohr', short: 'Vierkant', norm: 'DIN EN 10219', icon: 'profileSquare', defSize: '30x30x2', defLength: 500, desc: 'Quadrat- oder Rechteck-Hohlprofil nach DIN EN 10219', kw: 'vierkant vierkantrohr rechteckrohr hohlprofil quadratrohr en 10219' },
+  { id: 'roundTube', label: 'Rundrohr', short: 'Rundrohr', norm: 'DIN EN 10220', icon: 'profileRound', defSize: '30x2', defLength: 500, desc: 'Konstruktions-Rundrohr nach DIN EN 10220 / 10305', kw: 'rundrohr rohr stahlrohr konstruktionsrohr en 10220' },
+  { id: 'angle', label: 'L-Profil', short: 'L-Profil', norm: 'DIN EN 10056-1', icon: 'profileL', defSize: '30x30x3', defLength: 500, desc: 'Winkelstahl (L-Profil, gleich- oder ungleichschenklig) nach DIN EN 10056-1', kw: 'l-profil lprofil winkel winkelstahl winkeleisen en 10056' },
+  { id: 'channel', label: 'U-Profil', short: 'U-Profil', norm: 'DIN 1026-2', icon: 'profileU', defSize: 'UPE80', defLength: 500, desc: 'U-Profil (UPE / DIN 1026) mit parallelen Flanschen', kw: 'u-profil uprofil upe unp u-stahl u-traeger u-träger din 1026' },
+  { id: 'tee', label: 'T-Profil', short: 'T-Profil', norm: 'DIN EN 10055', icon: 'profileT', defSize: 'T30', defLength: 500, desc: 'T-Stahl (gleichschenklig) nach DIN EN 10055', kw: 't-profil tprofil t-stahl t-traeger t-träger en 10055' },
+  { id: 'ibeam', label: 'I-Träger', short: 'I-Träger', norm: 'DIN 1025-5 / -2', icon: 'profileI', defSize: 'IPE100', defLength: 500, desc: 'Doppel-T-Träger (IPE / HEB) nach DIN 1025', kw: 'i-traeger i-träger i-profil iprofil doppel-t ipe heb traeger träger din 1025' },
+  { id: 'flat', label: 'Flachstahl', short: 'Flachstahl', norm: 'DIN EN 10058', icon: 'profileFlat', defSize: '30x5', defLength: 500, desc: 'Flachstahl / Flacheisen nach DIN EN 10058', kw: 'flachstahl flacheisen flach bandstahl rechteckstahl en 10058' },
+];
+const PROFILE_SHAPE_BY_ID = new Map(PROFILE_SHAPES.map((x) => [x.id, x]));
+const PROFILE_SHAPE_OPTIONS = PROFILE_SHAPES.map((x) => [x.id, `${x.label} (${x.norm})`]);
+const PROFILE_SIZES = {
+  squareTube: [
+    { id: '20x20x2', label: '20 × 20 × 2 mm', w: 20, h: 20, t: 2 },
+    { id: '25x25x2', label: '25 × 25 × 2 mm', w: 25, h: 25, t: 2 },
+    { id: '30x30x2', label: '30 × 30 × 2 mm', w: 30, h: 30, t: 2 },
+    { id: '30x30x3', label: '30 × 30 × 3 mm', w: 30, h: 30, t: 3 },
+    { id: '40x40x2', label: '40 × 40 × 2 mm', w: 40, h: 40, t: 2 },
+    { id: '40x40x3', label: '40 × 40 × 3 mm', w: 40, h: 40, t: 3 },
+    { id: '50x50x3', label: '50 × 50 × 3 mm', w: 50, h: 50, t: 3 },
+    { id: '60x60x3', label: '60 × 60 × 3 mm', w: 60, h: 60, t: 3 },
+    { id: '80x80x4', label: '80 × 80 × 4 mm', w: 80, h: 80, t: 4 },
+    { id: '100x100x4', label: '100 × 100 × 4 mm', w: 100, h: 100, t: 4 },
+    { id: '40x20x2', label: '40 × 20 × 2 mm', w: 40, h: 20, t: 2 },
+    { id: '50x30x2', label: '50 × 30 × 2 mm', w: 50, h: 30, t: 2 },
+    { id: '60x40x3', label: '60 × 40 × 3 mm', w: 60, h: 40, t: 3 },
+    { id: '80x40x3', label: '80 × 40 × 3 mm', w: 80, h: 40, t: 3 },
+  ],
+  roundTube: [
+    { id: '16x1.5', label: 'Ø 16 × 1,5 mm', w: 16, t: 1.5 },
+    { id: '20x2', label: 'Ø 20 × 2 mm', w: 20, t: 2 },
+    { id: '25x2', label: 'Ø 25 × 2 mm', w: 25, t: 2 },
+    { id: '30x2', label: 'Ø 30 × 2 mm', w: 30, t: 2 },
+    { id: '33.7x2.6', label: 'Ø 33,7 × 2,6 mm (DN25)', w: 33.7, t: 2.6 },
+    { id: '40x2', label: 'Ø 40 × 2 mm', w: 40, t: 2 },
+    { id: '42.4x2.6', label: 'Ø 42,4 × 2,6 mm (DN32)', w: 42.4, t: 2.6 },
+    { id: '48.3x3.2', label: 'Ø 48,3 × 3,2 mm (DN40)', w: 48.3, t: 3.2 },
+    { id: '60.3x3.2', label: 'Ø 60,3 × 3,2 mm (DN50)', w: 60.3, t: 3.2 },
+    { id: '76.1x3.2', label: 'Ø 76,1 × 3,2 mm (DN65)', w: 76.1, t: 3.2 },
+    { id: '88.9x3.2', label: 'Ø 88,9 × 3,2 mm (DN80)', w: 88.9, t: 3.2 },
+  ],
+  angle: [
+    { id: '20x20x3', label: 'L 20 × 20 × 3 mm', w: 20, h: 20, t: 3 },
+    { id: '25x25x3', label: 'L 25 × 25 × 3 mm', w: 25, h: 25, t: 3 },
+    { id: '30x30x3', label: 'L 30 × 30 × 3 mm', w: 30, h: 30, t: 3 },
+    { id: '35x35x4', label: 'L 35 × 35 × 4 mm', w: 35, h: 35, t: 4 },
+    { id: '40x40x4', label: 'L 40 × 40 × 4 mm', w: 40, h: 40, t: 4 },
+    { id: '50x50x5', label: 'L 50 × 50 × 5 mm', w: 50, h: 50, t: 5 },
+    { id: '60x60x6', label: 'L 60 × 60 × 6 mm', w: 60, h: 60, t: 6 },
+    { id: '80x80x8', label: 'L 80 × 80 × 8 mm', w: 80, h: 80, t: 8 },
+    { id: '40x20x4', label: 'L 40 × 20 × 4 mm', w: 40, h: 20, t: 4 },
+    { id: '50x30x5', label: 'L 50 × 30 × 5 mm', w: 50, h: 30, t: 5 },
+    { id: '60x40x5', label: 'L 60 × 40 × 5 mm', w: 60, h: 40, t: 5 },
+  ],
+  channel: [
+    { id: 'U30x15', label: 'U 30 × 15 × 4 mm', w: 15, h: 30, t: 4, tf: 4.5 },
+    { id: 'U40x20', label: 'U 40 × 20 × 5 mm', w: 20, h: 40, t: 5, tf: 5.5 },
+    { id: 'U50x25', label: 'U 50 × 25 × 5 mm', w: 25, h: 50, t: 5, tf: 6 },
+    { id: 'U60x30', label: 'U 60 × 30 × 6 mm', w: 30, h: 60, t: 6, tf: 6 },
+    { id: 'UPE80', label: 'UPE 80 (80 × 50 mm)', w: 50, h: 80, t: 4, tf: 7 },
+    { id: 'UPE100', label: 'UPE 100 (100 × 55 mm)', w: 55, h: 100, t: 4.5, tf: 7.5 },
+    { id: 'UPE120', label: 'UPE 120 (120 × 60 mm)', w: 60, h: 120, t: 5, tf: 8 },
+    { id: 'UPE140', label: 'UPE 140 (140 × 65 mm)', w: 65, h: 140, t: 5, tf: 9 },
+    { id: 'UPE160', label: 'UPE 160 (160 × 70 mm)', w: 70, h: 160, t: 5.5, tf: 9.5 },
+    { id: 'UPE200', label: 'UPE 200 (200 × 80 mm)', w: 80, h: 200, t: 6, tf: 11 },
+  ],
+  tee: [
+    { id: 'T20', label: 'T 20 (20 × 20 × 3 mm)', w: 20, h: 20, t: 3, tf: 3 },
+    { id: 'T25', label: 'T 25 (25 × 25 × 3,5 mm)', w: 25, h: 25, t: 3.5, tf: 3.5 },
+    { id: 'T30', label: 'T 30 (30 × 30 × 4 mm)', w: 30, h: 30, t: 4, tf: 4 },
+    { id: 'T35', label: 'T 35 (35 × 35 × 4,5 mm)', w: 35, h: 35, t: 4.5, tf: 4.5 },
+    { id: 'T40', label: 'T 40 (40 × 40 × 5 mm)', w: 40, h: 40, t: 5, tf: 5 },
+    { id: 'T50', label: 'T 50 (50 × 50 × 6 mm)', w: 50, h: 50, t: 6, tf: 6 },
+    { id: 'T60', label: 'T 60 (60 × 60 × 7 mm)', w: 60, h: 60, t: 7, tf: 7 },
+    { id: 'T80', label: 'T 80 (80 × 80 × 9 mm)', w: 80, h: 80, t: 9, tf: 9 },
+    { id: 'T100', label: 'T 100 (100 × 100 × 11 mm)', w: 100, h: 100, t: 11, tf: 11 },
+  ],
+  ibeam: [
+    { id: 'IPE80', label: 'IPE 80 (80 × 46 mm)', w: 46, h: 80, t: 3.8, tf: 5.2 },
+    { id: 'IPE100', label: 'IPE 100 (100 × 55 mm)', w: 55, h: 100, t: 4.1, tf: 5.7 },
+    { id: 'IPE120', label: 'IPE 120 (120 × 64 mm)', w: 64, h: 120, t: 4.4, tf: 6.3 },
+    { id: 'IPE140', label: 'IPE 140 (140 × 73 mm)', w: 73, h: 140, t: 4.7, tf: 6.9 },
+    { id: 'IPE160', label: 'IPE 160 (160 × 82 mm)', w: 82, h: 160, t: 5.0, tf: 7.4 },
+    { id: 'IPE180', label: 'IPE 180 (180 × 91 mm)', w: 91, h: 180, t: 5.3, tf: 8.0 },
+    { id: 'IPE200', label: 'IPE 200 (200 × 100 mm)', w: 100, h: 200, t: 5.6, tf: 8.5 },
+    { id: 'HEB100', label: 'HEB 100 (100 × 100 mm)', w: 100, h: 100, t: 6, tf: 10 },
+    { id: 'HEB120', label: 'HEB 120 (120 × 120 mm)', w: 120, h: 120, t: 6.5, tf: 11 },
+    { id: 'HEB140', label: 'HEB 140 (140 × 140 mm)', w: 140, h: 140, t: 7, tf: 12 },
+    { id: 'HEB160', label: 'HEB 160 (160 × 160 mm)', w: 160, h: 160, t: 8, tf: 13 },
+  ],
+  flat: [
+    { id: '20x3', label: '20 × 3 mm', w: 20, t: 3 },
+    { id: '20x5', label: '20 × 5 mm', w: 20, t: 5 },
+    { id: '25x5', label: '25 × 5 mm', w: 25, t: 5 },
+    { id: '30x5', label: '30 × 5 mm', w: 30, t: 5 },
+    { id: '40x5', label: '40 × 5 mm', w: 40, t: 5 },
+    { id: '40x8', label: '40 × 8 mm', w: 40, t: 8 },
+    { id: '50x5', label: '50 × 5 mm', w: 50, t: 5 },
+    { id: '50x8', label: '50 × 8 mm', w: 50, t: 8 },
+    { id: '60x6', label: '60 × 6 mm', w: 60, t: 6 },
+    { id: '60x10', label: '60 × 10 mm', w: 60, t: 10 },
+    { id: '80x8', label: '80 × 8 mm', w: 80, t: 8 },
+    { id: '100x10', label: '100 × 10 mm', w: 100, t: 10 },
+  ],
+};
+function profileShapeInfo(shape) {
+  return PROFILE_SHAPE_BY_ID.get(String(shape || 'squareTube')) || PROFILE_SHAPES[0];
+}
+function profileDefaultSize(shape) {
+  return profileShapeInfo(shape).defSize;
+}
+function profileEntry(shape, size) {
+  const sh = profileShapeInfo(shape);
+  const list = PROFILE_SIZES[sh.id] || [];
+  const norm = String(size || '').trim().toLowerCase().replace(/\s+/g, '').replace(/×/g, 'x').replace(/,/g, '.');
+  const hit = norm ? list.find((x) => x.id.toLowerCase() === norm) : null;
+  if (hit) return hit;
+  return list.find((x) => x.id === sh.defSize) || list[0] || null;
+}
+function profileSizeOptions(shape) {
+  const sh = profileShapeInfo(shape);
+  const list = PROFILE_SIZES[sh.id] || [];
+  const customLbl = typeof T === 'function' ? T('panel.item.profileCustomSize') : 'Eigene Maße';
+  return [...list.map((x) => [x.id, x.label]), ['custom', customLbl === 'panel.item.profileCustomSize' ? 'Eigene Maße' : customLbl]];
+}
+function profileMetrics(p = {}) {
+  const sh = profileShapeInfo(p.shape);
+  const isCustom = p.size === 'custom';
+  const e = isCustom ? null : profileEntry(sh.id, p.size);
+  const rawW = Number(p.w);
+  const rawH = Number(p.h);
+  const rawT = Number(p.t);
+  const rawTf = Number(p.tf);
+  const length = Math.max(2, Number(p.length ?? sh.defLength) || sh.defLength);
+  let w, h, t, tf, area;
+  if (sh.id === 'squareTube') {
+    w = Math.max(2, rawW > 0 ? rawW : (e ? e.w : 30));
+    h = Math.max(2, rawH > 0 ? rawH : (e ? e.h : w));
+    t = clamp(rawT > 0 ? rawT : (e ? e.t : 2), 0.4, Math.min(w, h) / 2 - 0.1);
+    tf = t;
+    area = w * h - (w - 2 * t) * (h - 2 * t);
+  } else if (sh.id === 'roundTube') {
+    w = Math.max(2, rawW > 0 ? rawW : (e ? e.w : 30));
+    h = w;
+    t = clamp(rawT > 0 ? rawT : (e ? e.t : 2), 0.4, w / 2 - 0.1);
+    tf = t;
+    area = Math.PI * (Math.pow(w / 2, 2) - Math.pow(w / 2 - t, 2));
+  } else if (sh.id === 'angle') {
+    w = Math.max(2, rawW > 0 ? rawW : (e ? e.w : 30));
+    h = Math.max(2, rawH > 0 ? rawH : (e ? e.h : w));
+    t = clamp(rawT > 0 ? rawT : (e ? e.t : 3), 0.4, Math.min(w, h) - 0.4);
+    tf = t;
+    area = t * (w + h - t);
+  } else if (sh.id === 'channel') {
+    w = Math.max(3, rawW > 0 ? rawW : (e ? e.w : 50));
+    h = Math.max(4, rawH > 0 ? rawH : (e ? e.h : 80));
+    t = clamp(rawT > 0 ? rawT : (e ? e.t : 4), 0.4, w - 0.4);
+    tf = clamp(rawTf > 0 ? rawTf : (e ? e.tf : t), 0.4, h / 2 - 0.2);
+    area = 2 * w * tf + (h - 2 * tf) * t;
+  } else if (sh.id === 'tee') {
+    w = Math.max(3, rawW > 0 ? rawW : (e ? e.w : 30));
+    h = Math.max(3, rawH > 0 ? rawH : (e ? e.h : 30));
+    t = clamp(rawT > 0 ? rawT : (e ? e.t : 4), 0.4, w - 0.4);
+    tf = clamp(rawTf > 0 ? rawTf : (e ? e.tf : t), 0.4, h - 0.4);
+    area = w * tf + (h - tf) * t;
+  } else if (sh.id === 'ibeam') {
+    w = Math.max(3, rawW > 0 ? rawW : (e ? e.w : 55));
+    h = Math.max(4, rawH > 0 ? rawH : (e ? e.h : 100));
+    t = clamp(rawT > 0 ? rawT : (e ? e.t : 4.1), 0.4, w - 0.4);
+    tf = clamp(rawTf > 0 ? rawTf : (e ? e.tf : 5.7), 0.4, h / 2 - 0.2);
+    area = 2 * w * tf + (h - 2 * tf) * t;
+  } else {
+    w = Math.max(2, rawW > 0 ? rawW : (e ? e.w : 30));
+    t = Math.max(0.5, rawT > 0 ? rawT : (e ? e.t : 5));
+    h = t;
+    tf = t;
+    area = w * t;
+  }
+  const hasOverride = rawW > 0 || rawH > 0 || rawT > 0 || rawTf > 0;
+  const volume = round(area * length, 2);
+  const steelKgPerM = round((area * 1000 * 7.85) / 1e6, 3);
+  return {
+    shape: sh.id, shapeLabel: sh.label, norm: sh.norm,
+    size: isCustom ? 'custom' : (e ? e.id : sh.defSize),
+    sizeLabel: e && !hasOverride ? e.label : '',
+    isNorm: !!(e && !hasOverride),
+    w: round(w, 3), h: round(h, 3), t: round(t, 3), tf: round(tf, 3),
+    length: round(length, 3), area: round(area, 2), volume, steelKgPerM,
+  };
+}
 // Griffe, Drehknöpfe, Rändelschrauben & Gerätefüße (BI-14)
 function pullHandleMetrics(p = {}) {
   const style = p.style === 'bridge' || p.style === 'tHandle' ? p.style : 'bow';
@@ -2753,6 +2944,17 @@ const LIB = [
       { k: 'length', label: 'Wunsch-Länge (L)', type: 'num', def: 152.4 },
       { k: 'sprocketZ', label: 'Kettenrad-Zähne (Schleife)', type: 'num', def: 15, int: true, unit: '' },
       { k: 'pitch', label: 'Teilung (p)', type: 'num', def: null, auto: true },
+    ] },
+  { lib: 'profile', label: 'Profil', role: 'solid', icon: 'profileSquare', profile: true, mat: 'Baustahl',
+    kw: 'profil profile vierkant vierkantrohr rechteckrohr rundrohr rohr winkel l-profil u-profil upe unp t-profil i-traeger i-träger ipe heb flachstahl flach stahlbau gestell pr-01',
+    desc: 'Norm-Profil (Vierkantrohr, Rundrohr, L-, U-, T-, I-Profil oder Flachstahl) in wählbarer Länge', params: [
+      { k: 'shape', label: 'Profilart', type: 'select', options: PROFILE_SHAPE_OPTIONS, def: 'squareTube' },
+      { k: 'size', label: 'Normgröße', type: 'select', options: (it) => profileSizeOptions(it && it.p && it.p.shape), def: '30x30x2' },
+      { k: 'length', label: 'Länge (L)', type: 'num', def: 500 },
+      { k: 'w', label: (p) => (p && p.shape === 'roundTube' ? 'Außen-Ø (d)' : p && (p.shape === 'channel' || p.shape === 'ibeam') ? 'Flanschbreite (b)' : 'Breite (b)'), type: 'num', def: null, auto: true },
+      { k: 'h', label: 'Höhe (h)', type: 'num', def: null, auto: true, show: (p) => !p || (p.shape !== 'roundTube' && p.shape !== 'flat') },
+      { k: 't', label: (p) => (p && (p.shape === 'channel' || p.shape === 'tee' || p.shape === 'ibeam') ? 'Stegdicke (s)' : p && p.shape === 'flat' ? 'Dicke (t)' : 'Wandstärke (t)'), type: 'num', def: null, auto: true },
+      { k: 'tf', label: 'Flanschdicke (t_f)', type: 'num', def: null, auto: true, show: (p) => !!(p && (p.shape === 'channel' || p.shape === 'tee' || p.shape === 'ibeam')) },
     ] },
 ];
 // Kaufteile mit ihrer echten Form (kommen über die Drohnen-Bibliothek, nicht ins Fenster „Bauteile“)

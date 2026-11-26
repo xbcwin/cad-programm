@@ -5476,5 +5476,9 @@
   "toast.alignFacesDone": "Aligned “{b}” to “{a}”.",
   "toast.alignFacesLocked": "“{name}” is grounded or locked by a joint.",
   "toast.alignFacesNeedPlane": "Please pick planar faces (or two cylindrical faces).",
-  "toast.alignFacesSameBody": "Pick two different bodies for alignment."
+  "toast.alignFacesSameBody": "Pick two different bodies for alignment.",
+  "fly.profiles": "Profiles",
+  "panel.item.profileHint": "<b>{shape}</b> ({norm}) · Section <b>{dims}</b> · Area <b>{area} mm²</b> · Length {L} · approx. {kgm} kg/m (steel).",
+  "panel.item.profileCustomSize": "Custom dimensions",
+  "undo.profileShape": "Profile type changed"
 }

@@ -208,6 +208,11 @@ const Commands = (() => {
         ...(d.pro ? { when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple } : {}),
       });
     }
+    if (typeof PROFILE_SHAPES !== 'undefined' && LIBMAP.profile) {
+      for (const sh of PROFILE_SHAPES) {
+        add('lib-profile-' + sh.id, sh.label + ' hinzufügen (Profil)', sh.icon, 'profil profile stahlbau gestell pr-01 ' + sh.kw + ' ' + sh.desc, () => Actions.addPart(LIBMAP.profile, { shape: sh.id, size: sh.defSize, length: sh.defLength }, { name: sh.label }), { group: 'Profile' });
+      }
+    }
     add('lib-stdScrew-hex', 'Sechskantschraube (ISO 4017) hinzufügen', 'bolt', 'bauteil normteil sechskantschraube schraube m10 m12 m16 m20 m24 din 933 iso 4017', () => Actions.addPart(LIBMAP.stdScrew, { size: 'M10', head: 'hex', length: 30 }, { name: 'Sechskantschraube' }), { group: 'Bauteile' });
     add('mount-pattern', 'Lochbild setzen (Lüfter, Motor, Servo, Platine)', 'mountPattern', 'lochbild bohrbild luefter lüfter 25 30 40 50 60 70 80 92 120 140 motor schrittmotor nema 14 17 23 servo standard mini micro sg90 s3003 mg996 platte platine platinen raspberry pi pi4 rpi zero pico arduino uno nano esp32 devkit feather bi-16 bi-17', () => { const f = Actions.selectedFace(); if (f && f.info && f.info.t === 'PLANE') Features.mountPattern(f); else Features.startMountPattern(); }, { group: 'Bauteile' });
     add('enclosure-gen', 'Gehäuse-Generator (Kasten mit Deckel)', 'enclosure', 'gehaeuse gehäuse generator kasten deckel box lippe nut schraubdom schraubdome schnapphaken rasten lueftung lüftung schlitze kabel kabeldurchfuehrung kabeldurchführung zugentlastung lasche elektronik bi-20 bi-21', () => Enclosure.openDialog(), { group: 'Bauteile' });

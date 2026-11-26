@@ -42384,6 +42384,226 @@ def t_vereinfachen_ausrichten(p):
         p.ev("try { Place.stopAlignFaces(true); Features.stopPick && Features.stopPick(); ViewPrefs.setLevel('pro'); } catch (_) {}")
 
 
+def t_a207_profil_sammlung(p):
+    p.empty()
+
+    # 1. Flyout-Gruppe „Profile“ in Profi & Einfach + Befehlssuche
+    p.ev("ViewPrefs.setLevel('pro'); Commands.setMode('model');")
+    p.wait(180)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#fly-profiles-section [data-profile="squareTube"]', timeout=5000)
+    pro_fly = p.ev("""return (() => {
+      const shapes = ['squareTube', 'roundTube', 'angle', 'channel', 'tee', 'ibeam', 'flat'];
+      const head = document.querySelector('#fly-profiles-head');
+      const sec = document.querySelector('#fly-profiles-section');
+      const tilesOk = shapes.every(sh => {
+        const el = document.querySelector(`#fly-profiles-tiles .tile[data-lib="profile"][data-profile="${sh}"]`);
+        return !!(el && el.offsetParent !== null && el.getAttribute('data-help') === 'profile');
+      });
+      const queries = ['vierkantrohr', 'rundrohr', 'l-profil', 'u-profil', 't-profil', 'i-träger', 'flachstahl'];
+      const cmdOk = queries.every(q => Commands.search(q).some(c => c.id.startsWith('lib-profile-')));
+      return {
+        headOk: !!(sec && sec.offsetParent !== null && head && /profile/i.test(head.textContent)),
+        tilesOk,
+        cmdOk,
+      };
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.wait(180)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#fly-profiles-section', timeout=5000)
+    simple_fly = p.ev("""return (() => {
+      const shapes = ['squareTube', 'roundTube', 'angle', 'channel', 'tee', 'ibeam', 'flat'];
+      const head = document.querySelector('#fly-profiles-head');
+      const sec = document.querySelector('#fly-profiles-section');
+      const btnsOk = shapes.every(sh => {
+        const el = document.querySelector(`#add-profile-${sh}`);
+        return !!(el && el.offsetParent !== null && el.getAttribute('data-help') === 'profile');
+      });
+      const tileCnt = [...document.querySelectorAll('.flyout.parts .tile')].filter(t => t.offsetParent !== null).length;
+      const queries = ['vierkantrohr', 'rundrohr', 'l-profil', 'u-profil', 't-profil', 'i-träger', 'flachstahl'];
+      const cmdOk = queries.every(q => Commands.search(q).some(c => c.id.startsWith('lib-profile-')));
+      return {
+        headOk: !!(sec && sec.offsetParent !== null && head && /profile/i.test(head.textContent)),
+        btnsOk,
+        tileCnt,
+        cmdOk,
+      };
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+    ok1 = bool(
+        pro_fly['headOk'] and pro_fly['tilesOk'] and pro_fly['cmdOk']
+        and simple_fly['headOk'] and simple_fly['btnsOk'] and simple_fly['tileCnt'] == 5 and simple_fly['cmdOk']
+    )
+
+    # 2. Vierkantrohr 30×30×2, Länge 500 über Flyout einfügen → Volumen auf 1 % prüfen
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#fly-profiles-tiles [data-profile="squareTube"]', timeout=5000)
+    p.pg.locator('#fly-profiles-tiles [data-profile="squareTube"]').click()
+    warte_rechnen(p, 40)
+    sq_res = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const m = await Mass.measure({ ensure: true });
+      const pm = Mass.partOf(m, it.id);
+      const r = App.results.get(it.id);
+      const b = r && r.data && r.data.bbox;
+      const hint = document.querySelector('#p-profile-hint')?.textContent || '';
+      return {
+        errs: App.errors.length,
+        lib: it && it.p && it.p.lib,
+        shape: it && it.p && it.p.shape,
+        size: it && it.p && it.p.size,
+        len: it && it.p && it.p.length,
+        vol: pm ? pm.volume : 0,
+        dx: b ? b[3] - b[0] : 0,
+        dy: b ? b[4] - b[1] : 0,
+        dz: b ? b[5] - b[2] : 0,
+        hint,
+      };
+    })()""")
+    sq_exp_vol = (30 * 30 - 26 * 26) * 500  # 112000 mm³
+    ok2 = bool(
+        sq_res['errs'] == 0
+        and sq_res['lib'] == 'profile' and sq_res['shape'] == 'squareTube'
+        and sq_res['size'] == '30x30x2' and abs(sq_res['len'] - 500) < 1e-3
+        and abs(sq_res['vol'] - sq_exp_vol) / sq_exp_vol < 0.01
+        and abs(sq_res['dx'] - 30) < 0.1 and abs(sq_res['dy'] - 30) < 0.1 and abs(sq_res['dz'] - 500) < 0.1
+        and '224' in sq_res['hint']
+    )
+
+    # 3. Wechsel auf U-Profil ändert Querschnitt (UPE 80, danach Normgröße U40x20)
+    p.pg.wait_for_selector('#lp-shape', timeout=5000)
+    p.pg.select_option('#lp-shape', 'channel')
+    warte_rechnen(p, 40)
+    ch_res1 = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const m = await Mass.measure({ ensure: true });
+      const pm = Mass.partOf(m, it.id);
+      const r = App.results.get(it.id);
+      const b = r && r.data && r.data.bbox;
+      const opts = [...document.querySelectorAll('#lp-size option')].map(o => o.value);
+      return {
+        errs: App.errors.length,
+        shape: it && it.p && it.p.shape,
+        size: it && it.p && it.p.size,
+        len: it && it.p && it.p.length,
+        vol: pm ? pm.volume : 0,
+        dx: b ? b[3] - b[0] : 0,
+        dy: b ? b[4] - b[1] : 0,
+        dz: b ? b[5] - b[2] : 0,
+        hasU40: opts.includes('U40x20'),
+      };
+    })()""")
+    p.pg.select_option('#lp-size', 'U40x20')
+    warte_rechnen(p, 40)
+    ch_res2 = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const m = await Mass.measure({ ensure: true });
+      const pm = Mass.partOf(m, it.id);
+      const r = App.results.get(it.id);
+      const b = r && r.data && r.data.bbox;
+      return {
+        errs: App.errors.length,
+        size: it && it.p && it.p.size,
+        vol: pm ? pm.volume : 0,
+        dx: b ? b[3] - b[0] : 0,
+        dy: b ? b[4] - b[1] : 0,
+        dz: b ? b[5] - b[2] : 0,
+      };
+    })()""")
+    upe80_vol = (2 * 50 * 7 + (80 - 14) * 4) * 500  # 482000 mm³
+    u40_vol = (2 * 20 * 5.5 + (40 - 11) * 5) * 500  # 182500 mm³
+    ok3 = bool(
+        ch_res1['errs'] == 0 and ch_res1['shape'] == 'channel' and ch_res1['size'] == 'UPE80'
+        and abs(ch_res1['len'] - 500) < 1e-3
+        and abs(ch_res1['vol'] - upe80_vol) / upe80_vol < 0.01
+        and abs(ch_res1['dx'] - 50) < 0.1 and abs(ch_res1['dy'] - 80) < 0.1 and abs(ch_res1['dz'] - 500) < 0.1
+        and ch_res1['hasU40']
+        and ch_res2['errs'] == 0 and ch_res2['size'] == 'U40x20'
+        and abs(ch_res2['vol'] - u40_vol) / u40_vol < 0.01
+        and abs(ch_res2['dx'] - 20) < 0.1 and abs(ch_res2['dy'] - 40) < 0.1 and abs(ch_res2['dz'] - 500) < 0.1
+    )
+
+    # 4. Alle 7 Profilarten mit exaktem Volumen & GeomCheck (0 Fehler)
+    p.ev("""
+      App.change('Alle 7 Profile', (doc) => {
+        const defs = [
+          ['squareTube', '30x30x2'],
+          ['roundTube', '30x2'],
+          ['angle', '30x30x3'],
+          ['channel', 'UPE80'],
+          ['tee', 'T30'],
+          ['ibeam', 'IPE100'],
+          ['flat', '30x5'],
+        ];
+        doc.items = defs.map(([sh, sz], i) => {
+          const it = Model.newItem('part', { lib: 'profile', shape: sh, size: sz, length: 200 }, { name: sh });
+          it.t.x = i * 160;
+          return it;
+        });
+      });
+    """)
+    warte_rechnen(p, 60)
+    all7 = p.ev("""return (async () => {
+      const items = App.doc.items;
+      const m = await Mass.measure({ ensure: true });
+      const vols = [];
+      for (const it of items) {
+        const pm = Mass.partOf(m, it.id);
+        const ki = Model.kernelItem(it);
+        const exp = (ki && ki.p && ki.p.spec && ki.p.spec.volume) || 0;
+        vols.push({ shape: it.p.shape, vol: pm ? pm.volume : 0, exp });
+      }
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        count: items.length,
+        vols,
+        gcIssues: gc.issues.length,
+        gcChecked: gc.checkedCount,
+      };
+    })()""")
+    ok4 = bool(
+        all7['errs'] == 0 and all7['count'] == 7
+        and all(v['exp'] > 0 and abs(v['vol'] - v['exp']) / v['exp'] < 0.01 for v in all7['vols'])
+        and all7['gcIssues'] == 0 and all7['gcChecked'] == 7
+    )
+
+    # 5. Undo/Redo, Validierung, Hilfen, Erklärungen & DE/EN-Texte
+    p.ev("App.undo();")
+    warte_rechnen(p, 35)
+    undo_len = p.ev("return App.doc.items.length")
+    p.ev("App.redo();")
+    warte_rechnen(p, 35)
+    redo_len = p.ev("return App.doc.items.length")
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const hJson = wh.profile;
+      const hOk = !!(hJson && hJson.tip && hJson.hilfe && hJson.tipp);
+      const sOk = !!(se.profile && se.profile.was && se.profile.wozu && se.profile.achtung);
+      const exp = Explain.local(App.doc.items[0].id);
+      const expOk = !!(exp && exp.lines && exp.lines.length > 0 && exp.lines.some(l => l.k === 'was' && l.t.includes('Profilstab')));
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { valOk: !!(val && val.ok), hOk, sOk, expOk, i18nOk };
+    })()""")
+    ok5 = bool(undo_len == 1 and redo_len == 7 and meta['valOk'] and meta['hOk'] and meta['sOk'] and meta['expOk'] and meta['i18nOk'])
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -42703,6 +42923,7 @@ TESTS = [
     ('[A-204] Direkt bearbeiten: Fläche ersetzen und Kante verschieben (DB-04, DB-07)', t_a204_flaeche_ersetzen_kante_verschieben),
     ('[A-203] Einlinien-Schrift gravieren: „AB“ 0,5 mm tief, 0,4 mm breit auf Quader / Einfach & Profi / Bearbeiten / Rückgängig', t_a203_gravieren),
     ('[A-206] Direkt bearbeiten: Vereinfachen und Körper an Körper ausrichten', t_vereinfachen_ausrichten),
+    ('[A-207] Profile, Schritt 1: Profil-Sammlung (PR-01)', t_a207_profil_sammlung),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

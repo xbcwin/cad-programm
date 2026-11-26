@@ -2203,5 +2203,10 @@
     "tip": "Zwei Flächen anklicken – der zweite Körper legt sich bündig an den ersten an (Profi)",
     "hilfe": "Richtet im Profi-Modus einen Körper über zwei gewählte ebene oder zylindrische Flächen direkt am ersten Körper aus – ohne dauerhafte Gelenk-Verbindung. Wähle oben in der Leiste zwischen „Gegenüber (berührend)“ und „Bündig (gleiche Seite)“ sowie optional einen Abstand.",
     "tipp": "Ideal zum schnellen Stapeln oder Bündigsetzen beim Modellieren; willst du, dass beide Körper später zusammenbleiben, nutze stattdessen eine feste Verbindung."
+  },
+  "profile": {
+    "tip": "Norm-Profil (Vierkantrohr, Rundrohr, L-, U-, T-, I-Profil oder Flachstahl) in wählbarer Länge",
+    "hilfe": "Erzeugt ein Konstruktionsprofil mit genormtem Querschnitt (Vierkantrohr, Rundrohr, L-Profil, U-Profil, T-Profil, I-Träger oder Flachstahl) und beliebiger Länge. Im Eigenschaften-Panel kannst du jederzeit zwischen allen Profilarten, den passenden Normgrößen oder eigenen Maßen wechseln.",
+    "tipp": "Wähle „Eigene Maße“ bei Normgröße (oder gib direkt Breite, Höhe oder Wandstärke ein), um Sonderprofile außerhalb der Standardtabelle zu erzeugen."
   }
 }

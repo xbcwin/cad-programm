@@ -1204,6 +1204,8 @@ const Model = (() => {
             o.p.spec = beltMetrics(o.p);
           } else if (o.p.lib === 'stdChain' && typeof chainMetrics === 'function') {
             o.p.spec = chainMetrics(o.p);
+          } else if (o.p.lib === 'profile' && typeof profileMetrics === 'function') {
+            o.p.spec = profileMetrics(o.p);
           }
         }
       }
@@ -2848,6 +2850,7 @@ const Model = (() => {
         if (L === 'pipeFlange') { const m = typeof pipeFlangeMetrics === 'function' ? pipeFlangeMetrics(p) : { flangeD: 115, totalH: 16 }; const r = m.flangeD / 2; return [-r, -r, 0, r, r, m.totalH]; }
         if (L === 'stdBelt') { const m = typeof beltMetrics === 'function' ? beltMetrics(p) : { shape: 'loop', outerX: 60, outerY: 28, outerZ: 6 }; return m.shape === 'open' ? [-m.outerX / 2, -m.toothH, 0, m.outerX / 2, m.backT, m.outerZ] : [-m.outerX / 2, -m.outerY / 2, 0, m.outerX / 2, m.outerY / 2, m.outerZ]; }
         if (L === 'stdChain') { const m = typeof chainMetrics === 'function' ? chainMetrics(p) : { outerX: 164.2, outerY: 11.8, totalW: 16.6 }; return [-m.outerX / 2, -m.outerY / 2, 0, m.outerX / 2, m.outerY / 2, m.totalW]; }
+        if (L === 'profile') { const m = typeof profileMetrics === 'function' ? profileMetrics(p) : { w: 30, h: 30, length: 500 }; return [-m.w / 2, -m.h / 2, 0, m.w / 2, m.h / 2, m.length]; }
         if (L === 'buyAntenna') { const r = Math.max(4, p.form === 'stab' ? n('d', 3) : n('kd', 14)) / 2; return [-r, -r, 0, r, r, n('L', 45)]; }
         if (L === 'buyStack') { const s = n('a', 30.5) + 5.5; return [-s / 2, -s / 2, 0, s / 2, s / 2, n('h', 12)]; }
         if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }

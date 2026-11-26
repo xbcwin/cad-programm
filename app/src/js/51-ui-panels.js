@@ -563,7 +563,7 @@ const Panels = (() => {
         t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); Actions.addPart(d, libDefaults(d)); closeFlyout(); } });
         return t;
       };
-      const base = LIB.filter((x) => !x.buy && !x.drone && !x.std);
+      const base = LIB.filter((x) => !x.buy && !x.drone && !x.std && !x.profile);
       const stds = LIB.filter((x) => !x.buy && !x.drone && x.std);
       el.append(h('h3', null, T('tool.fly.partsTitle')));
       const tiles = h('div', { class: 'tiles' });
@@ -629,6 +629,36 @@ const Panels = (() => {
       scBtn.onclick = () => { Actions.addPart(LIBMAP.stdChain, libDefaults(LIBMAP.stdChain)); closeFlyout(); };
       stepRow.append(mpBtn, pcBtn, mpkBtn, bhBtn, phBtn, rkBtn, tsBtn, dfBtn, encBtn, npBtn, qrBtn, bcBtn, svgBtn, spBtn, peBtn, ptBtn, pfBtn, sbBtn, scBtn);
       el.append(stepRow);
+      if (typeof PROFILE_SHAPES !== 'undefined' && LIBMAP.profile) {
+        const profSec = h('div', { class: 'profile-section', id: 'fly-profiles-section' });
+        profSec.append(h('h3', { id: 'fly-profiles-head', 'data-help': 'profile' }, T('fly.profiles')));
+        const profTiles = h('div', { class: 'tiles pro', id: 'fly-profiles-tiles' });
+        const profSimple = h('div', { class: 'btn-row simple-only', id: 'fly-profiles-simple' });
+        for (const sh of PROFILE_SHAPES) {
+          const defP = { shape: sh.id, size: sh.defSize, length: sh.defLength };
+          const t = h('div', {
+            class: 'tile pro', role: 'button', tabindex: '0',
+            'data-lib': 'profile', 'data-profile': sh.id,
+            'aria-label': sh.label, 'data-tip': sh.desc, 'data-help': 'profile',
+          });
+          t.innerHTML = partSVG({ role: 'solid', icon: sh.icon });
+          t.append(h('span', { class: 'lbl' }, hyph(sh.label)), h('span', { class: 'role' }, sh.norm));
+          Place.bindTile(t, { part: LIBMAP.profile, params: defP, name: sh.label });
+          t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); Actions.addPart(LIBMAP.profile, defP, { name: sh.label }); closeFlyout(); } });
+          profTiles.append(t);
+
+          const b = h('button', {
+            type: 'button', class: 'btn small simple-only', id: 'add-profile-' + sh.id,
+            'data-lib': 'profile', 'data-profile': sh.id,
+            'data-help': 'profile', 'data-tip': sh.desc,
+          });
+          b.innerHTML = icon(sh.icon) + esc(sh.label);
+          b.onclick = () => { Actions.addPart(LIBMAP.profile, defP, { name: sh.label }); closeFlyout(); };
+          profSimple.append(b);
+        }
+        profSec.append(profTiles, profSimple);
+        el.append(profSec);
+      }
       if (stds.length) {
         el.append(h('h3', { class: 'pro' }, T('fly.stdParts')));
         const stdTiles = h('div', { class: 'tiles pro' });
@@ -2489,12 +2519,37 @@ const Panels = (() => {
       if (def) {
         const fl = h('div', { class: 'fields' });
         for (const q of def.params) {
+          if (q.show && !q.show(it.p)) continue;
+          const qLabel = typeof q.label === 'function' ? q.label(it.p) : q.label;
           let fld;
-          if (q.type === 'select') fld = UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? q.def ?? '', options: q.options, onChange: (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v) });
-          else if (q.type === 'text') {
-            fld = UI.textField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? q.def ?? '', placeholder: q.placeholder || '', onCommit: (v) => setP(q.k, v) });
+          if (q.type === 'select') {
+            const opts = typeof q.options === 'function' ? () => q.options(it) : q.options;
+            let selVal = it.p[q.k] ?? q.def ?? '';
+            if (def.lib === 'profile' && q.k === 'size' && it.p.size !== 'custom' && typeof profileMetrics === 'function') {
+              selVal = profileMetrics(Model.resolveP(it.p, V)).size;
+            }
+            const onSel = def.lib === 'profile' && q.k === 'shape'
+              ? (v) => App.change(T('undo.profileShape'), (doc) => {
+                const item = Model.find(doc, it.id).item;
+                const prevSh = profileShapeInfo(item.p.shape);
+                const nextSh = profileShapeInfo(v);
+                item.p.shape = nextSh.id;
+                item.p.size = nextSh.defSize;
+                item.p.w = null; item.p.h = null; item.p.t = null; item.p.tf = null;
+                if (!item.name || item.name === prevSh.label || item.name === 'Profil') item.name = nextSh.label;
+              })
+              : def.lib === 'profile' && q.k === 'size'
+                ? (v) => App.change('Maß geändert', (doc) => {
+                  const item = Model.find(doc, it.id).item;
+                  item.p.size = v;
+                  if (v !== 'custom') { item.p.w = null; item.p.h = null; item.p.t = null; item.p.tf = null; }
+                })
+                : (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v);
+            fld = UI.selectField({ id: 'lp-' + q.k, label: qLabel, value: selVal, options: opts, onChange: onSel });
+          } else if (q.type === 'text') {
+            fld = UI.textField({ id: 'lp-' + q.k, label: qLabel, value: it.p[q.k] ?? q.def ?? '', placeholder: q.placeholder || '', onCommit: (v) => setP(q.k, v) });
             if (q.wide) fld.style.gridColumn = '1 / -1';
-          } else fld = UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, vars: V, placeholder: q.auto ? T('panel.item.autoFitPh') : '', onCommit: (v) => setP(q.k, v) });
+          } else fld = UI.numField({ id: 'lp-' + q.k, label: qLabel, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, vars: V, placeholder: q.auto ? T('panel.item.autoFitPh') : '', onCommit: (v) => setP(q.k, v) });
           if (q.k === 'printFit') fld.setAttribute('data-help', 'printFit');
           fl.append(fld);
         }
@@ -3034,6 +3089,19 @@ const Panels = (() => {
           sec.append(h('div', { id: 'p-stdchain-hint', class: 'hint-box', html: T('panel.item.stdChainHint', {
             chain: esc(m.chainLabelShort), shape: m.shape === 'loop' ? 'geschlossen' : 'gerade',
             links: m.links, p: Units.fmtLenU(m.pitch, 3), L: Units.fmtLenU(m.actualLength, 1), w: Units.fmtLenU(m.totalW, 1),
+          }) }));
+        } else if (def.lib === 'profile' && typeof profileMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = profileMetrics(rp);
+          let dimsTxt = '';
+          if (m.shape === 'roundTube') dimsTxt = `Ø ${Units.fmtLenU(m.w, 1)} × ${Units.fmtLenU(m.t, 2)}`;
+          else if (m.shape === 'flat') dimsTxt = `${Units.fmtLenU(m.w, 1)} × ${Units.fmtLenU(m.t, 2)}`;
+          else if (m.shape === 'channel' || m.shape === 'tee' || m.shape === 'ibeam') dimsTxt = `${Units.fmtLenU(m.h, 1)} × ${Units.fmtLenU(m.w, 1)} × ${Units.fmtLenU(m.t, 2)} / ${Units.fmtLenU(m.tf, 2)}`;
+          else dimsTxt = `${Units.fmtLenU(m.w, 1)} × ${Units.fmtLenU(m.h, 1)} × ${Units.fmtLenU(m.t, 2)}`;
+          sec.append(h('div', { id: 'p-profile-hint', class: 'hint-box', html: T('panel.item.profileHint', {
+            shape: esc(m.shapeLabel), norm: esc(m.norm),
+            dims: esc(dimsTxt), area: fmt(m.area, 1),
+            L: Units.fmtLenU(m.length, 1), kgm: fmt(m.steelKgPerM, 2),
           }) }));
         }
         w.append(sec);

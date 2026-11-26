@@ -554,5 +554,10 @@
     "was": "Entfernt an einem Körper automatisch kleine Rundungen, Fasen und Löcher bis zu einer wählbaren Maximalgröße in einem einzigen Schritt.",
     "wozu": "Bereinigt fertige oder importierte Teile für schnelle Simulationen, 3D-Druck, Baugruppen oder als Vorbereitung für weitere Änderungen.",
     "achtung": "Einzelne Detail-Arten (Rundungen, Fasen, Löcher) lassen sich rechts im Eigenschaften-Panel gezielt ein- oder ausschalten; der Schritt bleibt immer unterdrückbar und rückgängig machbar."
+  },
+  "profile": {
+    "was": "Erzeugt einen Profilstab nach Norm (Vierkantrohr, Rundrohr, L-, U-, T-, I-Profil oder Flachstahl) mit gewähltem Querschnitt und Länge.",
+    "wozu": "Baut Rahmen, Gestelle, Maschinenunterbauten, Streben und Stahlbau-Konstruktionen mit echten DIN-/EN-Querschnitten.",
+    "achtung": "Profilart, Normgröße und Länge lassen sich jederzeit rechts im Eigenschaften-Panel umschalten oder durch eigene Maße überschreiben."
   }
 }

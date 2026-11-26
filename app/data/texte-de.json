@@ -5476,5 +5476,9 @@
   "toast.alignFacesDone": "„{b}“ an „{a}“ ausgerichtet.",
   "toast.alignFacesLocked": "„{name}“ ist festgesetzt oder durch eine feste Verbindung gesperrt.",
   "toast.alignFacesNeedPlane": "Bitte wähle ebene Flächen (oder zwei runde Zylinderflächen).",
-  "toast.alignFacesSameBody": "Wähle für das Ausrichten zwei verschiedene Körper."
+  "toast.alignFacesSameBody": "Wähle für das Ausrichten zwei verschiedene Körper.",
+  "fly.profiles": "Profile",
+  "panel.item.profileHint": "<b>{shape}</b> ({norm}) · Querschnitt <b>{dims}</b> · Fläche <b>{area} mm²</b> · Länge {L} · ca. {kgm} kg/m (Stahl).",
+  "panel.item.profileCustomSize": "Eigene Maße",
+  "undo.profileShape": "Profilart gewechselt"
 }
