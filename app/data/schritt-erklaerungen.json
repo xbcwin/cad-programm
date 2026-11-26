@@ -524,5 +524,10 @@
     "was": "Erzeugt eine Rollenkette nach DIN 8187 / ISO 606 aus Laschen, Bolzen und Rollen passend zur Teilung und Gesamtlänge.",
     "wozu": "Ergänzt Kettenräder um die maßhaltige Rollenkette – gerade abgelängt oder als geschlossene Schleife.",
     "achtung": "Geschlossene Rollenketten benötigen eine gerade Gliederzahl und rundet Tracery auf das nächste Vielfache der doppelten Teilung."
+  },
+  "directFace": {
+    "was": "Bearbeitet eine gewählte Fläche eines Körpers direkt: verschiebt sie entlang einer Richtung, dreht (neigt) sie um eine Achse oder versetzt sie nach innen bzw. außen.",
+    "wozu": "Passt Abmessungen, Schrägen, Wandstärken oder Lochdurchmesser schnell an – auch an importierten STEP-, IGES- oder BREP-Teilen ohne Skizzenverlauf.",
+    "achtung": "Wenn eine Fläche zu weit nach innen verschoben oder versetzt wird, sodass sie durch die Gegenseite bricht oder ein Radius kleiner als null wird, schlägt der Schritt fehl."
   }
 }

@@ -40734,6 +40734,234 @@ def t_a196_rohre_fittings_flansche_riemen_ketten(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_direkt_flaeche(p):
+    p.empty()
+    p.ev("Actions.addPrimitive('box')"); warte_rechnen(p, 20)
+
+    # 1. Einfach-Modus blendet faceDirect aus; Profi zeigt faceDirect; Deckfläche um +5 mm ziehen
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(300)
+    p.ev("""
+      const it = App.doc.items[0], r = App.results.get(it.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      App.select([it.id], { face: { id: it.id, faceIdx: fi, point: r.data.faces[fi].c, normal: r.data.faces[fi].n } });
+    """)
+    p.wait(300)
+    simple_hidden = (
+        'faceDirect' not in p.ev("return Handles.debugKinds()")
+        and not p.pg.locator('#ctx-direct-face').is_visible()
+    )
+
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(300)
+    p.ev("""
+      const it = App.doc.items[0], r = App.results.get(it.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      App.select([it.id], { face: { id: it.id, faceIdx: fi, point: r.data.faces[fi].c, normal: r.data.faces[fi].n } });
+    """)
+    p.wait(400)
+    pro_shown = (
+        'faceDirect' in p.ev("return Handles.debugKinds()")
+        and p.pg.locator('#ctx-direct-face').count() == 1
+        and p.pg.locator('.dimlabel.face-direct-tip').count() == 1
+    )
+
+    hp = p.ev("""
+      const m = Handles.debugHandle('faceDirect');
+      const s = Viewer.toScreen(m.position), d = Viewer.toScreen(m.position.clone().addScaledVector(m.userData.wdir, 12));
+      const r = Viewer.canvas.getBoundingClientRect();
+      return [s.x + r.left, s.y + r.top, d.x + r.left, d.y + r.top];
+    """)
+    p.pg.mouse.move(hp[0], hp[1]); p.pg.mouse.down()
+    p.pg.mouse.move(hp[2], hp[3], steps=5); p.wait(200)
+    p.pg.keyboard.type('5'); p.pg.keyboard.press('Enter'); p.pg.mouse.up()
+    warte_rechnen(p, 20)
+
+    s1 = p.ev("""return (async () => {
+      const r = App.results.get(App.doc.items[0].id);
+      const bb = r && r.data && r.data.bbox;
+      const m = await Kernel.call('measure', { scene: Model.kernelScene(App.doc) });
+      return {
+        errs: App.errors.length,
+        kinds: App.doc.items.map(x => x.kind),
+        h: bb ? (bb[5] - bb[2]) : null,
+        vol: m ? m.volume : null,
+        hnd: Handles.debugKinds(),
+      };
+    })()""")
+    ok1 = (
+        simple_hidden and pro_shown
+        and s1['errs'] == 0
+        and s1['kinds'] == ['box', 'directFace']
+        and s1['h'] is not None and abs(s1['h'] - 25.0) < 0.01
+        and s1['vol'] is not None and abs(s1['vol'] - 10000.0) < 5
+        and 'faceMove' in s1['hnd']
+    )
+
+    # 2. Panel ändern (-3 mm), Unterdrücken & Rückgängig
+    p.pg.fill('#df-face-dist', '-3'); p.pg.press('#df-face-dist', 'Enter')
+    warte_rechnen(p, 20)
+    h_minus = p.ev("const bb = App.results.get(App.doc.items[0].id)?.data?.bbox; return bb ? (bb[5] - bb[2]) : null")
+    p.ev("Timeline.toggleSuppress(App.doc.items[1].id)")
+    warte_rechnen(p, 20)
+    h_sup = p.ev("const bb = App.results.get(App.doc.items[0].id)?.data?.bbox; return bb ? (bb[5] - bb[2]) : null")
+    p.ev("Timeline.toggleSuppress(App.doc.items[1].id)")
+    warte_rechnen(p, 20)
+    h_unsup = p.ev("const bb = App.results.get(App.doc.items[0].id)?.data?.bbox; return bb ? (bb[5] - bb[2]) : null")
+    p.pg.keyboard.press('Control+z'); warte_rechnen(p, 20)
+    h_undo = p.ev("const bb = App.results.get(App.doc.items[0].id)?.data?.bbox; return bb ? (bb[5] - bb[2]) : null")
+    p.pg.keyboard.press('Control+y'); warte_rechnen(p, 20)
+    h_redo = p.ev("const bb = App.results.get(App.doc.items[0].id)?.data?.bbox; return bb ? (bb[5] - bb[2]) : null")
+    ok2 = (
+        h_minus is not None and abs(h_minus - 17.0) < 0.01
+        and h_sup is not None and abs(h_sup - 20.0) < 0.01
+        and h_unsup is not None and abs(h_unsup - 17.0) < 0.01
+        and h_undo is not None and abs(h_undo - 20.0) < 0.01
+        and h_redo is not None and abs(h_redo - 17.0) < 0.01
+    )
+
+    # 3. Fläche drehen (DB-01): Deckfläche um 15° neigen
+    p.ev("App.change('x', d => { d.items = []; d.rollback = null; delete d.noHistory; })"); p.wait(300)
+    p.ev("Actions.addPrimitive('box')"); warte_rechnen(p, 20)
+    p.ev("""
+      const it = App.doc.items[0], r = App.results.get(it.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      App.select([it.id], { face: { id: it.id, faceIdx: fi, point: r.data.faces[fi].c, normal: r.data.faces[fi].n } });
+    """)
+    p.wait(300)
+    p.pg.click('#ctx-direct-face'); p.wait(200)
+    p.pg.locator('.menu button[role="menuitem"]', has_text='Fläche drehen').click()
+    warte_rechnen(p, 20)
+    rot_info = p.ev("""return (async () => {
+      const r = App.results.get(App.doc.items[0].id);
+      const bb = r && r.data && r.data.bbox;
+      const top = r && r.data && r.data.faces.find(f => f.t === 'PLANE' && f.n && f.n[2] > 0.5 && f.c[2] > 10);
+      const m = await Kernel.call('measure', { scene: Model.kernelScene(App.doc) });
+      return {
+        errs: App.errors.length,
+        mode: App.doc.items[1] && App.doc.items[1].p.mode,
+        hnd: Handles.debugKinds(),
+        zMax: bb ? bb[5] : null,
+        vol: m ? m.volume : null,
+        nz: top && top.n ? top.n[2] : null,
+      };
+    })()""")
+    ok3 = (
+        rot_info['errs'] == 0
+        and rot_info['mode'] == 'rotate'
+        and 'faceRot' in rot_info['hnd']
+        and rot_info['zMax'] is not None and abs(rot_info['zMax'] - (20 + 10 * math.tan(math.radians(15)))) < 0.05
+        and rot_info['vol'] is not None and abs(rot_info['vol'] - 8000.0) < 10
+        and rot_info['nz'] is not None and abs(rot_info['nz'] - math.cos(math.radians(15))) < 0.005
+    )
+
+    # 4. Importiertes STEP-Teil: Fläche versetzen (DB-02) – mit Verlauf und ohne Verlauf (noHistory)
+    p.ev("App.change('x', d => { d.items = []; d.rollback = null; delete d.noHistory; })"); p.wait(300)
+    p.ev("Actions.addPrimitive('box')"); warte_rechnen(p, 20)
+    p.pg.evaluate("""async () => {
+      const {Kernel, Model, App} = window.__M;
+      const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+      window.__dfStep = new File([new Uint8Array(r.data)], 'ImportTeil.step');
+    }""")
+    p.wait(500)
+    p.ev("App.change('x', d => { d.items = []; })"); p.wait(300)
+    p.pg.evaluate("() => window.__M.Start.importCAD(window.__dfStep)")
+    warte_rechnen(p, 30)
+    p.ev("""
+      const it = App.doc.items[0], r = App.results.get(it.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      App.select([it.id], { face: { id: it.id, faceIdx: fi, point: r.data.faces[fi].c, normal: r.data.faces[fi].n } });
+    """)
+    p.wait(300)
+    p.pg.click('#ctx-direct-face'); p.wait(200)
+    p.pg.locator('.menu button[role="menuitem"]', has_text='Fläche versetzen').click()
+    warte_rechnen(p, 20)
+    p.pg.fill('#df-face-offset', '5'); p.pg.press('#df-face-offset', 'Enter')
+    warte_rechnen(p, 20)
+    step_p5 = p.ev("""
+      const r = App.results.get(App.doc.items[0].id);
+      return {
+        fmt: App.doc.items[0].p.fmt,
+        kinds: App.doc.items.map(x => x.kind),
+        errs: App.errors.length,
+        h: r && r.data && r.data.bbox ? (r.data.bbox[5] - r.data.bbox[2]) : null,
+      };
+    """)
+    p.pg.fill('#df-face-offset', '-3'); p.pg.press('#df-face-offset', 'Enter')
+    warte_rechnen(p, 20)
+    step_m3 = p.ev("const bb = App.results.get(App.doc.items[0].id)?.data?.bbox; return bb ? (bb[5] - bb[2]) : null")
+
+    # Modus ohne Verlauf: direkt versetzen und einfrieren
+    p.pg.evaluate("async () => await window.__M.Timeline.setNoHistory(true)")
+    warte_rechnen(p, 30)
+    p.pg.evaluate("""() => {
+      const {App, Features} = window.__M;
+      const it = App.doc.items[0], r = App.results.get(it.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      Features.directFace({ id: it.id, idx: fi, info: r.data.faces[fi] }, { mode: 'offset', offset: 4 });
+    }""")
+    warte_rechnen(p, 30)
+    nh_info = p.ev("""
+      const it = App.doc.items[0], r = App.results.get(it.id);
+      const bb = r && r.data && r.data.bbox;
+      return {
+        noHistory: !!App.doc.noHistory,
+        count: App.doc.items.length,
+        errs: App.errors.length,
+        h: bb ? (bb[5] - bb[2]) : null,
+      };
+    """)
+    ok4 = (
+        step_p5['fmt'] == 'step'
+        and step_p5['kinds'] == ['import', 'directFace']
+        and step_p5['errs'] == 0
+        and step_p5['h'] is not None and abs(step_p5['h'] - 25.0) < 0.01
+        and step_m3 is not None and abs(step_m3 - 17.0) < 0.01
+        and nh_info['noHistory']
+        and nh_info['count'] == 1
+        and nh_info['errs'] == 0
+        and nh_info['h'] is not None and abs(nh_info['h'] - 21.0) < 0.01
+    )
+
+    # 5. Gebogene Fläche versetzen (Zylinder Ø 20 → +3 mm → Ø 26) & Hilfetexte
+    p.ev("App.change('x', d => { d.items = []; d.rollback = null; delete d.noHistory; })"); p.wait(300)
+    p.ev("Actions.addPrimitive('cylinder')"); warte_rechnen(p, 20)
+    p.ev("""
+      const it = App.doc.items[0], r = App.results.get(it.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE');
+      App.select([it.id], { face: { id: it.id, faceIdx: fi, point: r.data.faces[fi].c, normal: [1, 0, 0] } });
+    """)
+    p.wait(300)
+    p.pg.click('#ctx-direct-offset')
+    warte_rechnen(p, 20)
+    p.pg.fill('#df-face-offset', '3'); p.pg.press('#df-face-offset', 'Enter')
+    warte_rechnen(p, 20)
+    cyl_info = p.ev("""return (async () => {
+      const r = App.results.get(App.doc.items[0].id);
+      const bb = r && r.data && r.data.bbox;
+      const [m, wh, se, de, en] = await Promise.all([
+        Kernel.call('measure', { scene: Model.kernelScene(App.doc) }),
+        fetch('data/werkzeug-hilfen.json').then(x => x.json()),
+        fetch('data/schritt-erklaerungen.json').then(x => x.json()),
+        fetch('data/texte-de.json').then(x => x.json()),
+        fetch('data/texte-en.json').then(x => x.json()),
+      ]);
+      const h = wh.directFace, s = se.directFace;
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      return {
+        errs: App.errors.length,
+        dx: bb ? (bb[3] - bb[0]) : null,
+        vol: m ? m.volume : null,
+        helpOk: !!(h && h.tip && h.hilfe && h.tipp && s && s.was && s.wozu && s.achtung && deK.length === enK.length && deK.every((k, i) => k === enK[i])),
+      };
+    })()""")
+    ok5 = (
+        cyl_info['errs'] == 0
+        and cyl_info['dx'] is not None and abs(cyl_info['dx'] - 26.0) < 0.05
+        and cyl_info['vol'] is not None and abs(cyl_info['vol'] - math.pi * 13 * 13 * 20) < 10
+        and cyl_info['helpOk']
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -41045,6 +41273,7 @@ TESTS = [
     ('[A-195] Bibliothek: Toleranz-Tabellen ISO 286 (BI-26)', t_a195_toleranz_tabellen_iso286),
     ('[F-11252354] Volltest-Reparatur: Mass.measure wartet auf App-Neubau / Zeichnung-PDF-Menü eindeutig / Einstellungen-Dialog ohne Geister-Reopen', t_f11252354),
     ('[A-196] Rohre, Fittings, Flansche, Riemen und Ketten (BI-27, BI-28)', t_a196_rohre_fittings_flansche_riemen_ketten),
+    ('[A-198] Direkt bearbeiten: Fläche verschieben, drehen, versetzen (inkl. STEP)', t_direkt_flaeche),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

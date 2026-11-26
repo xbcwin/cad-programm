@@ -958,6 +958,13 @@ const App = (() => {
     const act = Model.activeItems(doc);
     const hasRes = S.results && S.results.size > 0;
     const liveSolids = act.filter((it) => !it.hidden && it.role !== 'hole' && !S.merged.has(it.id) && !S.deletedBy.has(it.id) && (!hasRes || S.results.has(it.id)));
+    const mergedTargets = new Set();
+    for (const [, tgtId] of S.merged) {
+      let cur = tgtId;
+      const seen = new Set();
+      while (S.merged.has(cur) && !seen.has(cur)) { seen.add(cur); cur = S.merged.get(cur); }
+      mergedTargets.add(cur);
+    }
     const solidBoxes = liveSolids.map((it) => worldBoxOfTop(doc, it));
     const looseHoles = [];
     const activeHoles = [];
@@ -984,7 +991,8 @@ const App = (() => {
         : (!usedIds.has(root.id) ? root.id : uid('i'));
       usedIds.add(preferredId);
       const holeHits = activeHoles.some((h) => !h.wb || !sb || boxesHit(h.wb, sb));
-      if (!opts.bakeTransforms && isCleanFrozenBody(root) && !holeHits) {
+      const modHits = mergedTargets.has(root.id);
+      if (!opts.bakeTransforms && isCleanFrozenBody(root) && !holeHits && !modHits) {
         const kept = Patch.jsonClone(root);
         frozenSolids.push(kept);
         idMap.set(root.id, kept.id);
@@ -1217,7 +1225,7 @@ const App = (() => {
       if (typeof Assembly !== 'undefined' && Assembly.recordLightOpen) {
         Assembly.recordLightOpen(S.doc.id, performance.now() - tBuild0, lw ? lw.lightNodes.length : 0, lw ? lw.evalItems.length : ((res && res.nodes && res.nodes.length) || 0));
       }
-      if (S.doc.noHistory && S.peek == null && !(S.extra && S.extra.length) && !(res && res.errors && res.errors.length) && S.revision !== lastBakedRev && needsDirectBake(S.doc)) {
+      if (S.doc.noHistory && S.peek == null && !(S.extra && S.extra.length) && !(res && res.errors && res.errors.length) && S.revision !== lastBakedRev && !(typeof Handles !== 'undefined' && Handles.dragging) && needsDirectBake(S.doc)) {
         const bakeRev = S.revision;
         try {
           const baked = await bakeItemsToFrozen(S.doc, { bakeTransforms: false });

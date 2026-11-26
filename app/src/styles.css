@@ -287,6 +287,8 @@ body.sketching .viewcube,body.sketching .view-btns{display:none}
 .ctxbar .lbl{font:600 11.5px/1 var(--font-cond);letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:0 6px 0 8px}
 .ctxbar .vsep{width:1px;align-self:stretch;margin:4px 3px;background:var(--line)}
 .dimlabel{position:absolute;transform:translate(-50%,-50%);background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);border-radius:5px;padding:3px 6px;font:500 12.5px/1 var(--font-mono);white-space:nowrap;box-shadow:var(--shadow-1);cursor:text;user-select:none}
+.dimlabel.face-direct-tip{border-color:#0ca678;color:#0ca678;cursor:pointer}
+body.simple .dimlabel.face-direct-tip,body.presenting .dimlabel.face-direct-tip{display:none!important}
 .dimlabel.live{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);pointer-events:none!important}
 .dimlabel.mlabel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);pointer-events:auto;cursor:copy}
 .ctxbar .lbl.copyable{cursor:copy}

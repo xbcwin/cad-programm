@@ -40,7 +40,7 @@ const Handles = (() => {
     sphere: { x: 'd', y: 'd', z: 'd' }, hemisphere: { x: 'd', y: 'd', z: 'd' }, torus: { x: 'd', y: 'd', z: 't' },
   };
   const LABELS = { w: 'Breite', d: 'Durchmesser', h: 'Höhe', d1: 'Durchmesser', t: 'Ringdicke', dist: 'Höhe' };
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
   function current() {
     if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1 || Views.exploded) return null;
     const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked || isStepMod(f.item)) return null;
@@ -49,6 +49,13 @@ const Handles = (() => {
   }
   function rebuild() {
     clear();
+    if (App.mode === 'model' && !Sketch.active && !Views.exploded && App.sel.length === 1 && !App.ctx && !(typeof ViewPrefs !== 'undefined' && ViewPrefs.simple)) {
+      const sf = Model.find(App.doc, App.sel[0]);
+      if (sf && sf.item.kind === 'directFace' && !sf.item.locked && Model.isActive(App.doc, sf.item.id)) {
+        directFaceHandles(sf.item);
+        return;
+      }
+    }
     const c = current(); if (!c) return;
     const { it, box, W } = c;
     if (!App.ctx && !Model.isActive(App.doc, it.id)) return;   // Schritt hinter dem Marker oder unterdrückt: keine Griffe
@@ -174,7 +181,185 @@ const Handles = (() => {
       shown.add(m.userData.param);
       addLabel(m, P[m.userData.param]);
     }
+    if (App.face && App.face.id === it.id && !(typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) && !App.ctx && it.role !== 'hole' && App.doc.items.some((x) => x.id === it.id)) {
+      faceDirectHandle(c);
+    }
     scaleHandles(); placeLabels();
+  }
+  // Direkt-Bearbeiten-Pfeil an der gewählten Fläche (Profi)
+  function faceDirectHandle(c) {
+    const face = Actions.selectedFace();
+    if (!face || face.id !== c.it.id || !face.info || !Array.isArray(face.info.c)) return;
+    const fi = face.info, W = c.W;
+    const isPlanar = fi.t === 'PLANE' && Array.isArray(fi.n);
+    let base, wdir;
+    if (isPlanar) {
+      base = new THREE.Vector3(...fi.c).applyMatrix4(W);
+      wdir = new THREE.Vector3(...fi.n).transformDirection(W).normalize();
+    } else {
+      base = Array.isArray(face.point) ? new THREE.Vector3(...face.point) : new THREE.Vector3(...fi.c).applyMatrix4(W);
+      if (Array.isArray(face.normal) && face.normal.length >= 3) {
+        wdir = new THREE.Vector3(...face.normal).normalize();
+      } else if (fi.t === 'CYLINDRE' && Array.isArray(fi.axis)) {
+        const o = new THREE.Vector3(fi.axis[0], fi.axis[1], fi.axis[2]).applyMatrix4(W);
+        const d = new THREE.Vector3(fi.axis[3], fi.axis[4], fi.axis[5]).transformDirection(W).normalize();
+        const rel = base.clone().sub(o);
+        wdir = rel.sub(d.multiplyScalar(rel.dot(d)));
+        if (wdir.lengthSq() < 1e-9) wdir.set(1, 0, 0);
+        else wdir.normalize();
+      } else {
+        wdir = new THREE.Vector3(0, 0, 1);
+      }
+    }
+    let sideOffset = null;
+    if (H.lift && H.lift.userData && H.lift.userData.base && wdir.z > 0.9 && base.distanceTo(H.lift.userData.base) < 6) {
+      sideOffset = new THREE.Vector3(1, 0, 0);
+    }
+    const hm = handleMesh('lift');
+    hm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), wdir);
+    hm.material.color.set('#0ca678');
+    hm.userData = { kind: 'faceDirect', isPlanar, base: base.clone(), wdir: wdir.clone(), sideOffset };
+    group.add(hm); items.push(hm);
+    const el = h('div', { class: 'dimlabel face-direct-tip', title: 'Ziehen oder Abstand eintippen' }, isPlanar ? 'Fläche verschieben' : 'Fläche versetzen');
+    bindLabelPass(el);
+    el.addEventListener('click', (e) => {
+      if (!el.classList.contains('editing') && e.altKey && !App.ctx) {
+        e.stopPropagation();
+        Interact.selectBehind(e.clientX, e.clientY);
+        return;
+      }
+      e.stopPropagation();
+      editFaceDirectLabel(el, hm);
+    });
+    overlayEl.append(el); labels.push({ el, handle: hm });
+  }
+  function directFaceHandles(it) {
+    if (typeof Features === 'undefined' || !Features.directFaceFrame) return;
+    const fr = Features.directFaceFrame(it);
+    if (!fr) return;
+    if (fr.mode === 'rotate') {
+      const arcR = fr.radius;
+      const deg0 = Math.min(-25, fr.angle), deg1 = Math.max(25, fr.angle);
+      const arcPts = [];
+      for (let i = 0; i <= 48; i++) {
+        const th = ((deg0 + ((deg1 - deg0) * i) / 48) * Math.PI) / 180;
+        arcPts.push(fr.rotPivot.clone().addScaledVector(fr.u0, Math.cos(th) * arcR).addScaledVector(fr.w0, Math.sin(th) * arcR));
+      }
+      const arcLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(arcPts), new THREE.LineDashedMaterial({ color: new THREE.Color('#f08c00'), dashSize: 2, gapSize: 1.5, depthTest: false, transparent: true, opacity: 0.9 }));
+      arcLine.computeLineDistances(); arcLine.renderOrder = 29;
+      group.add(arcLine); items.push(arcLine);
+      const th = (fr.angle * Math.PI) / 180;
+      const radOut = fr.u0.clone().multiplyScalar(Math.cos(th)).addScaledVector(fr.w0, Math.sin(th)).normalize();
+      const tan = fr.u0.clone().multiplyScalar(-Math.sin(th)).addScaledVector(fr.w0, Math.cos(th)).normalize();
+      const hm = handleMesh('lift');
+      hm.material.color.set('#f08c00');
+      hm.position.copy(fr.rotPivot).addScaledVector(radOut, arcR);
+      hm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan);
+      hm.userData = { kind: 'faceRot', stepId: it.id, center: fr.rotPivot.clone(), axis: fr.rotAxisDir.clone(), u0: fr.u0.clone(), w0: fr.w0.clone(), rad: arcR, wdir: radOut.clone() };
+      group.add(hm); items.push(hm);
+      const txt = fmtAngleU(fr.angle);
+      const el = h('div', { class: 'dimlabel', title: 'Klicken und genauen Winkel eintippen' }, txt);
+      bindLabelPass(el);
+      el.addEventListener('click', (e) => { e.stopPropagation(); editFaceStepAngle(el, hm); });
+      overlayEl.append(el); labels.push({ el, handle: hm });
+      scaleHandles(); placeLabels();
+      return;
+    }
+    const hm = handleMesh('lift');
+    hm.material.color.set('#0ca678');
+    hm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), fr.moveDir);
+    hm.userData = { kind: 'faceMove', stepId: it.id, mode: fr.mode, axis: fr.axis, isPlanar: fr.isPlanar, base: fr.origin.clone(), wdir: fr.moveDir.clone() };
+    group.add(hm); items.push(hm);
+    const val = fr.mode === 'offset' ? fr.offset : fr.dist;
+    const prefix = fr.mode === 'offset' ? 'Versatz ' : '';
+    const txt = fr.mode === 'move' && fr.axis === 'free'
+      ? `(${Units.fmtLen(fr.dx)} / ${Units.fmtLen(fr.dy)} / ${Units.fmtLenU(fr.dz)})`
+      : prefix + (val > 0 ? '+' : '') + (Units.key() === 'mm' ? Units.fmtLen(val) : Units.fmtLenU(val));
+    const el = h('div', { class: 'dimlabel face-direct-tip', title: 'Klicken und genauen Wert eintippen' }, txt);
+    bindLabelPass(el);
+    el.addEventListener('click', (e) => { e.stopPropagation(); editFaceStepLabel(el, hm); });
+    overlayEl.append(el); labels.push({ el, handle: hm });
+    scaleHandles(); placeLabels();
+  }
+  function editFaceDirectLabel(el, handle) {
+    if (el.classList.contains('editing')) return;
+    const face = Actions.selectedFace(); if (!face) return;
+    const isPlanar = !!handle.userData.isPlanar;
+    el.classList.add('editing'); el.textContent = '';
+    const inp = h('input', { type: 'text', value: '5', 'aria-label': isPlanar ? 'Abstand' : 'Versatz' });
+    el.append(inp); inp.focus(); inp.select();
+    let finished = false;
+    const done = (ok) => {
+      if (finished) return; finished = true;
+      if (ok) {
+        const val = inp.value.trim();
+        const V = Model.vars(App.doc).v;
+        const p = Units.parseLen(val, V, { expr: true });
+        if (p.ok && Math.abs(p.num) > 1e-6) {
+          Features.directFace(face, isPlanar ? { mode: 'move', dist: p.value } : { mode: 'offset', offset: p.value });
+          return;
+        }
+        if (val !== '') UI.toast('Bitte eine Zahl oder Formel ungleich 0 eingeben.', { kind: 'bad' });
+      }
+      rebuild();
+    };
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(true); } if (e.key === 'Escape') { e.preventDefault(); done(false); } e.stopPropagation(); });
+    inp.addEventListener('blur', () => done(true), { once: true });
+  }
+  function editFaceStepLabel(el, handle) {
+    if (el.classList.contains('editing')) return;
+    const sf = Model.find(App.doc, handle.userData.stepId); if (!sf) return;
+    const it = sf.item;
+    if (handle.userData.mode === 'move' && handle.userData.axis === 'free') return;
+    const k = handle.userData.mode === 'offset' ? 'offset' : 'dist';
+    const raw = it.p[k] ?? 0;
+    const orig = typeof raw === 'number' ? Units.fmtInput(raw) : String(raw);
+    el.classList.add('editing'); el.textContent = '';
+    const inp = h('input', { type: 'text', value: orig, 'aria-label': k === 'offset' ? 'Versatz' : 'Abstand' });
+    el.append(inp); inp.focus(); inp.select();
+    let finished = false;
+    const done = (ok) => {
+      if (finished) return; finished = true;
+      if (ok) {
+        const val = inp.value.trim();
+        if (val !== orig) {
+          const V = Model.vars(App.doc).v;
+          const p = Units.parseLen(val, V, { expr: true });
+          if (p.ok) App.change(k === 'offset' ? T('undo.directFaceOffset') : T('undo.directFaceMove'), (doc) => { const f = Model.find(doc, it.id); if (f) f.item.p[k] = p.value; });
+          else UI.toast('Bitte eine gültige Zahl oder Formel eingeben.', { kind: 'bad' });
+        }
+      }
+      rebuild();
+    };
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(true); } if (e.key === 'Escape') { e.preventDefault(); done(false); } e.stopPropagation(); });
+    inp.addEventListener('blur', () => done(true), { once: true });
+  }
+  function editFaceStepAngle(el, handle) {
+    if (el.classList.contains('editing')) return;
+    const sf = Model.find(App.doc, handle.userData.stepId); if (!sf) return;
+    const it = sf.item, raw = it.p.angle ?? 0;
+    const orig = typeof raw === 'number' ? fmtFixed(raw, Math.max(4, FMT.angle)) : String(raw ?? '');
+    el.classList.add('editing'); el.textContent = '';
+    const inp = h('input', { type: 'text', value: orig, 'aria-label': 'Drehwinkel' });
+    el.append(inp); inp.focus(); inp.select();
+    let finished = false;
+    const done = (ok) => {
+      if (finished) return; finished = true;
+      if (ok) {
+        const t = inp.value.trim();
+        if (t !== orig) {
+          const V = Model.vars(App.doc).v, n = parseNum(t);
+          const v = isNaN(n) ? Model.num(t, V, NaN) : n;
+          if (!isNaN(v) && Math.abs(v) < 80) {
+            const val = isNaN(n) ? t : round(clamp(v, -75, 75), 4);
+            App.change(T('undo.directFaceRotate'), (doc) => { const f = Model.find(doc, it.id); if (f) f.item.p.angle = val; });
+          } else UI.toast('Bitte einen Winkel zwischen −75° und +75° eingeben.', { kind: 'bad' });
+        }
+      }
+      rebuild();
+    };
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(true); } if (e.key === 'Escape') { e.preventDefault(); done(false); } e.stopPropagation(); });
+    inp.addEventListener('blur', () => done(true), { once: true });
   }
   // Rundungs-Ziehgriff: Pfeil an der Mitte der gewählten Kante, Ziehen nach innen = größerer Radius
   function filletHandle(c) {
@@ -342,10 +527,14 @@ const Handles = (() => {
     for (const m of items) {
       if (!m.isMesh) continue;
       const ps = Viewer.pixelSizeAt(m.position);
-      const s = (m.userData.kind === 'size' ? 11 * ps : (m.userData.kind === 'lift' || m.userData.kind === 'revAngle') ? 13 * ps : 12 * ps) * tMul;
+      const s = (m.userData.kind === 'size' ? 11 * ps : (m.userData.kind === 'lift' || m.userData.kind === 'revAngle' || m.userData.kind === 'faceDirect' || m.userData.kind === 'faceMove' || m.userData.kind === 'faceRot') ? 13 * ps : 12 * ps) * tMul;
       m.scale.setScalar(s);
       if (m.userData.kind === 'lift') m.position.copy(m.userData.base).add(new THREE.Vector3(0, 0, 26 * ps * tMul));
       if (m.userData.kind === 'fillet') { m.scale.setScalar(13 * ps * tMul); m.position.copy(m.userData.base).addScaledVector(m.userData.wdir, -16 * ps * tMul); }
+      if (m.userData.kind === 'faceDirect' || m.userData.kind === 'faceMove') {
+        m.position.copy(m.userData.base).addScaledVector(m.userData.wdir, 26 * ps * tMul);
+        if (m.userData.sideOffset) m.position.addScaledVector(m.userData.sideOffset, 24 * ps * tMul);
+      }
     }
     Viewer.requestRender();
   }
@@ -372,7 +561,8 @@ const Handles = (() => {
     for (const m of items) {
       if (!m.isMesh) continue;
       if (m.userData.kind === 'size') m.material.color.set(m === obj ? Viewer.theme.accent : 0xffffff);
-      else if (m.userData.kind === 'revAngle') m.material.color.set(m === obj ? '#ffb020' : '#f08c00');
+      else if (m.userData.kind === 'revAngle' || m.userData.kind === 'faceRot') m.material.color.set(m === obj ? '#ffb020' : '#f08c00');
+      else if (m.userData.kind === 'faceDirect' || m.userData.kind === 'faceMove') m.material.color.set(m === obj ? '#12b886' : '#0ca678');
     }
     Viewer.requestRender();
   }
@@ -407,12 +597,56 @@ const Handles = (() => {
     return (b * e - c * d) / den;
   }
   function start(handle, ev) {
-    const c = current(); if (!c) return false;
     const ud = handle.userData;
-    if ((ud.kind === 'lift' || ud.kind === 'rot') && typeof Joints !== 'undefined' && (Joints.isFixedPart(c.it.id) || (Joints.dragContext && Joints.dragContext(App.doc, c.it.id).blocked))) return false;
     const before = App.snapshot();
     const V = Model.vars(App.doc).v;
+    if (ud.kind === 'faceMove' || ud.kind === 'faceRot') {
+      const sf = Model.find(App.doc, ud.stepId);
+      if (!sf || sf.item.locked) return false;
+      const it = sf.item;
+      state = { handle, it, stepId: it.id, before, kind: ud.kind, sx: ev.clientX, sy: ev.clientY, fine: ev.shiftKey };
+      if (ud.kind === 'faceMove') {
+        const param = ud.mode === 'offset' ? 'offset' : (ud.axis === 'free' ? null : 'dist');
+        const v0 = param ? Model.num(it.p[param], V, 0) : 0;
+        Object.assign(state, {
+          mode: ud.mode, axis: ud.axis, param, v0, val: v0,
+          dx0: Model.num(it.p.dx, V, 0), dy0: Model.num(it.p.dy, V, 0), dz0: Model.num(it.p.dz, V, 0),
+          p0: ud.base.clone(), axisDir: ud.wdir.clone().normalize(),
+        });
+        state.s0 = closestOnAxis(state.p0, state.axisDir, ev.clientX, ev.clientY);
+      } else {
+        Object.assign(state, { center: ud.center.clone(), axis: ud.axis.clone(), u0: ud.u0.clone(), w0: ud.w0.clone(), rad: ud.rad, v0: Model.num(it.p.angle, V, 0), val: Model.num(it.p.angle, V, 0) });
+        const rayDir = Viewer.setRay(ev.clientX, ev.clientY).ray.direction;
+        const p = Math.abs(rayDir.dot(state.axis)) > 0.05 ? Viewer.rayPlane(ev.clientX, ev.clientY, state.center, state.axis) : null;
+        if (p) {
+          const rel = p.clone().sub(state.center);
+          state.a0 = Math.atan2(rel.dot(state.w0), rel.dot(state.u0));
+          state.lastA = state.a0; state.cum = 0; state.useScreen = false;
+        } else {
+          state.useScreen = true;
+          const th0 = (state.v0 * Math.PI) / 180;
+          const tan = ud.u0.clone().multiplyScalar(-Math.sin(th0)).addScaledVector(ud.w0, Math.cos(th0)).normalize();
+          const s0 = Viewer.toScreen(handle.position), s1 = Viewer.toScreen(handle.position.clone().add(tan));
+          let tx = s1.x - s0.x, ty = s1.y - s0.y; const tl = Math.hypot(tx, ty);
+          if (tl > 1e-4) { tx /= tl; ty /= tl; } else { tx = 1; ty = 0; }
+          state.screenTan = [tx, ty];
+        }
+      }
+      return true;
+    }
+    const c = current(); if (!c) return false;
+    if ((ud.kind === 'lift' || ud.kind === 'rot') && typeof Joints !== 'undefined' && (Joints.isFixedPart(c.it.id) || (Joints.dragContext && Joints.dragContext(App.doc, c.it.id).blocked))) return false;
     state = { handle, c, before, kind: ud.kind, sx: ev.clientX, sy: ev.clientY, fine: ev.shiftKey };
+    if (ud.kind === 'faceDirect') {
+      const face = Actions.selectedFace();
+      if (!face || face.id !== c.it.id) { state = null; return false; }
+      const mode = ud.isPlanar ? 'move' : 'offset';
+      const step = Features.directFace(face, { mode, dist: 0, offset: 0, noChange: true, noSelect: true, silent: true });
+      if (!step) { state = null; return false; }
+      Object.assign(state, { stepId: step.id, mode, isPlanar: ud.isPlanar, val: 0, p0: ud.base.clone(), axisDir: ud.wdir.clone().normalize() });
+      state.s0 = closestOnAxis(state.p0, state.axisDir, ev.clientX, ev.clientY);
+      return true;
+    }
     if (ud.kind === 'fillet') {
       state.axisDir = ud.wdir.clone();
       state.p0 = ud.base.clone();
@@ -481,6 +715,73 @@ const Handles = (() => {
     const { c, handle } = state; const ud = handle.userData;
     const grid = App.doc.settings.snap === false ? 0 : (ev.shiftKey ? 0.1 : App.doc.settings.grid || 1);
     const snap = (v) => (grid ? Math.round(v / grid) * grid : round(v, 3));
+    if (state.kind === 'faceDirect') {
+      const s = closestOnAxis(state.p0, state.axisDir, ev.clientX, ev.clientY);
+      const v = snap(s - state.s0);
+      state.val = v;
+      const f = Model.find(App.doc, state.stepId);
+      if (f) {
+        if (state.mode === 'offset') f.item.p.offset = round(v, 4);
+        else f.item.p.dist = round(v, 4);
+      }
+      handle.userData.base = state.p0.clone().addScaledVector(state.axisDir, v); scaleHandles();
+      for (const l of labels) if (l.handle === handle) l.el.hidden = true;
+      showLive(handle, v, state.mode === 'offset' ? 'Versatz' : 'Verschieben', 'mm');
+      App.emit('doc'); liveRebuild();
+      return;
+    }
+    if (state.kind === 'faceMove') {
+      const s = closestOnAxis(state.p0, state.axisDir, ev.clientX, ev.clientY);
+      const delta = snap(s - state.s0);
+      if (state.param) {
+        const val = round(state.v0 + delta, 4);
+        state.val = val;
+        state.it.p[state.param] = val;
+        showLive(handle, val, state.mode === 'offset' ? 'Versatz' : 'Verschieben', 'mm');
+      } else {
+        const inv = Model.worldMatrix(App.doc, state.it.p.target).invert();
+        const dL = state.axisDir.clone().transformDirection(inv).multiplyScalar(delta);
+        state.it.p.dx = round(state.dx0 + dL.x, 4);
+        state.it.p.dy = round(state.dy0 + dL.y, 4);
+        state.it.p.dz = round(state.dz0 + dL.z, 4);
+        showLive(handle, delta, 'Verschieben', 'mm');
+      }
+      handle.userData.base = state.p0.clone().addScaledVector(state.axisDir, delta); scaleHandles();
+      for (const l of labels) if (l.handle === handle) l.el.hidden = true;
+      App.emit('doc'); liveRebuild();
+      return;
+    }
+    if (state.kind === 'faceRot') {
+      let degDelta = 0;
+      if (!state.useScreen) {
+        const p = Viewer.rayPlane(ev.clientX, ev.clientY, state.center, state.axis);
+        if (p) {
+          const rel = p.clone().sub(state.center);
+          const a = Math.atan2(rel.dot(state.w0), rel.dot(state.u0));
+          let dA = a - state.lastA;
+          while (dA > Math.PI) dA -= Math.PI * 2;
+          while (dA < -Math.PI) dA += Math.PI * 2;
+          state.lastA = a; state.cum += dA;
+          degDelta = (state.cum * 180) / Math.PI;
+        }
+      } else {
+        degDelta = ((ev.clientX - state.sx) * state.screenTan[0] + (ev.clientY - state.sy) * state.screenTan[1]) * 0.8;
+      }
+      const step = ev.shiftKey ? 1 : 5;
+      const val = clamp(Math.round((state.v0 + degDelta) / step) * step, -75, 75);
+      state.val = val;
+      state.it.p.angle = round(val, 2);
+      const th = (val * Math.PI) / 180;
+      const radOut = state.u0.clone().multiplyScalar(Math.cos(th)).addScaledVector(state.w0, Math.sin(th)).normalize();
+      const tan = state.u0.clone().multiplyScalar(-Math.sin(th)).addScaledVector(state.w0, Math.cos(th)).normalize();
+      handle.position.copy(state.center).addScaledVector(radOut, state.rad);
+      handle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan);
+      handle.userData.wdir = radOut;
+      placeLabels();
+      showLive(handle, val, 'Winkel', '°');
+      App.emit('doc'); liveRebuild();
+      return;
+    }
     if (state.kind === 'fillet') {
       const s = closestOnAxis(state.p0, state.axisDir, ev.clientX, ev.clientY) - state.s0;
       const step = ev.shiftKey ? 0.1 : 0.5;
@@ -629,6 +930,34 @@ const Handles = (() => {
       if (fin) { fin.r = 0.5; if (st.r !== 0.5) Actions.setFinish(st.tid, st.finId, { r: st.r }); else App.rebuild(); }
       App.select([st.tid]); rebuild(); return;
     }
+    if (st.kind === 'faceDirect') {
+      const f = Model.find(App.doc, st.stepId);
+      const p = f && f.item && f.item.p;
+      const val = p ? (st.mode === 'offset' ? Model.num(p.offset, Model.vars(App.doc).v, 0) : Model.num(p.dist, Model.vars(App.doc).v, 0)) : st.val;
+      if (Math.abs(val) < 1e-6) {
+        if (f && f.list) {
+          const idx = f.list.indexOf(f.item);
+          if (idx >= 0) {
+            f.list.splice(idx, 1);
+            if (App.doc.rollback != null && idx < App.doc.rollback) App.doc.rollback = Math.max(0, App.doc.rollback - 1);
+          }
+        }
+        App.emit('doc'); App.rebuild(); rebuild(); return;
+      }
+      const label = st.mode === 'offset' ? T('undo.directFaceOffset') : T('undo.directFaceMove');
+      if (App.snapshot() !== st.before) { App.pushUndo(label, st.before); App.touched(); }
+      App.select([st.stepId]);
+      App.rebuild();
+      rebuild();
+      return;
+    }
+    if (st.kind === 'faceMove' || st.kind === 'faceRot') {
+      const label = st.kind === 'faceRot' ? T('undo.directFaceRotate') : (st.mode === 'offset' ? T('undo.directFaceOffset') : T('undo.directFaceMove'));
+      if (App.snapshot() !== st.before) { App.pushUndo(label, st.before); App.touched(); App.rebuild(); }
+      else App.emit('doc');
+      rebuild();
+      return;
+    }
     const label = st.kind === 'size' ? 'Größe geändert' : st.kind === 'lift' ? 'Angehoben' : st.kind === 'revAngle' ? 'Drehwinkel geändert' : 'Gedreht';
     if (App.snapshot() !== st.before) { App.pushUndo(label, st.before); App.touched(); }
     rebuild();
@@ -656,6 +985,23 @@ const Handles = (() => {
       const other = c.it.p.dir === 'two' ? Model.num(c.it.p[ud.param === 'angle' ? 'angle2' : 'angle'], V, 0) : 0;
       const maxA = Math.max(0.1, 360 - other);
       return { fields: [{ label: ud.factor === 2 ? 'Gesamtwinkel' : 'Winkel', value: cur, unit: '°' }], apply: ([v]) => { c.it.p[ud.param] = round(clamp(v, 0.1, maxA), 3); fin(); } };
+    }
+    if (st.kind === 'faceDirect') {
+      return { fields: [{ label: st.mode === 'offset' ? 'Versatz' : 'Verschieben', value: st.val, unit: 'mm' }], apply: ([v]) => {
+        const f = Model.find(App.doc, st.stepId);
+        if (f) {
+          if (st.mode === 'offset') f.item.p.offset = round(v, 6);
+          else f.item.p.dist = round(v, 6);
+        }
+        st.val = round(v, 6);
+        fin();
+      } };
+    }
+    if (st.kind === 'faceMove' && st.param) {
+      return { fields: [{ label: st.mode === 'offset' ? 'Versatz' : 'Verschieben', value: st.val, unit: 'mm' }], apply: ([v]) => { st.it.p[st.param] = round(v, 6); fin(); } };
+    }
+    if (st.kind === 'faceRot') {
+      return { fields: [{ label: 'Winkel', value: st.val, unit: '°' }], apply: ([v]) => { st.it.p.angle = round(clamp(v, -75, 75), 3); fin(); } };
     }
     return null;
   }
@@ -1395,6 +1741,9 @@ const Interact = (() => {
         { icon: 'knurl', label: T('kind.knurl'), id: 'cm-knurl', help: 'knurl', hidden: (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) || !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top) || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.knurl({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'gripPattern', label: T('kind.gripPattern'), id: 'cm-grip-pattern', help: 'gripPattern', hidden: (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) || !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top) || !['PLANE', 'CYLINDRE'].includes(((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.gripPattern({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'thicken', label: T('common.thicken'), id: 'cm-thicken', help: 'thickenFace', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.thicken({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
+        { icon: 'directFace', label: T('ctx.directFaceMove'), id: 'cm-direct-move', help: 'directFace', hidden: (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) || !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top) || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'PLANE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.directFace({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx], point: hit.point ? hit.point.toArray() : null, normal: hit.normal ? hit.normal.toArray() : null }, { mode: 'move' }); } },
+        { icon: 'rotate', label: T('ctx.directFaceRotate'), id: 'cm-direct-rot', help: 'directFace', hidden: (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) || !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top) || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'PLANE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.directFace({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx], point: hit.point ? hit.point.toArray() : null, normal: hit.normal ? hit.normal.toArray() : null }, { mode: 'rotate' }); } },
+        { icon: 'directFace', label: T('ctx.directFaceOffset'), id: 'cm-direct-offset', help: 'directFace', hidden: (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) || !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.directFace({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx], point: hit.point ? hit.point.toArray() : null, normal: hit.normal ? hit.normal.toArray() : null }, { mode: 'offset' }); } },
         { icon: 'fillet', label: T('ctx.fullFillet'), id: 'cm-fullfillet', help: 'fullFillet', hidden: !hit || hit.faceIdx == null || top.role === 'hole', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.startFullFillet({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'fillet', label: T('ctx.faceFillet'), id: 'cm-facefillet', help: 'faceFillet', hidden: (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) || !hit || hit.faceIdx == null || top.role === 'hole', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.startFaceFillet({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'chamfer', label: T('ctx.cornerChamfer'), id: 'cm-cornerchamfer', help: 'cornerChamfer', hidden: !hit || top.role === 'hole', run: () => Features.startCornerChamfer(hit.id) },

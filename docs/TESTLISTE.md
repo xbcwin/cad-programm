@@ -3031,6 +3031,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Einfach- und Profi-Oberfläche, Befehlssuche, GeomCheck, Rückgängig/Wiederherstellen, Hilfetexte, Erklärungen und DE/EN-Texte geprüft (Klicktest `[A-196]`)
 - [ ] **Von Hand**: Im Browser ein DN25-Rohr mit Bogen, T-Stück und Flansch sowie einen GT2-Riemen um zwei Zahnriemenscheiben im 3D-Bild optisch prüfen.
 
+## Direkt bearbeiten: Fläche verschieben, drehen, versetzen (Auto [A-198], DB-01, DB-02)
+- [x] **Quader-Deckfläche per Pfeil um 5 mm nach oben verschieben**: Im Einfach-Modus ausgeblendet, im Profi-Modus erscheint der Pfeil `faceDirect`; Ziehen und `5` + Enter legt den Schritt `directFace` an und erhöht den Quader exakt um +5 mm auf 25 mm (`t_direkt_flaeche`).
+- [x] **Panel-Werte, Unterdrücken & Rückgängig**: Änderung auf `-3 mm` verkürzt auf 17 mm; Unterdrücken und `Strg Z`/`Strg Y` schalten sauber um (`t_direkt_flaeche`).
+- [x] **Fläche drehen (DB-01)**: Über `#ctx-direct-face` → „Fläche drehen“ neigt den Quader-Deckel um 15° mit aktivem `faceRot`-Drehgriff und korrekter Flächennormale (`t_direkt_flaeche`).
+- [x] **Importiertes STEP-Teil versetzen (DB-02, mit und ohne Verlauf)**: Exportierter/re-importierter STEP-Quader lässt sich über `#df-face-offset` um `+5 mm` und `-3 mm` versetzen sowie im `noHistory`-Modus direkt um `+4 mm` einfrieren (`t_direkt_flaeche`).
+- [x] **Gebogene Fläche versetzen & Hilfen**: Zylindermantel (Ø 20 mm) wächst beim Versetzen um `+3 mm` auf Ø 26 mm; `HELP.directFace` vollständig (`t_direkt_flaeche`).
+- [ ] **Von Hand**: Im Browser ein beliebiges STEP-Teil importieren, eine Fläche direkt mit dem Pfeil ziehen und anschließend eine Nachbarfläche um eine gewählte Kante neigen.
+
 ## Fehler melden
 
 ```
