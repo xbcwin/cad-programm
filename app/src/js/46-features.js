@@ -5677,7 +5677,10 @@ const Features = (() => {
     const sb = h('button', { type: 'button', class: 'btn primary', id: 'sk3-to-sweep', disabled: !ents.some((e) => !e.con) });
     sb.innerHTML = icon('sweep') + esc(T('ctx.alongPath'));
     sb.onclick = () => sweepFromSketch3d(it.id);
-    row.append(eb, sb);
+    const fb = h('button', { type: 'button', class: 'btn pro', id: 'sk3-to-frame', 'data-help': 'frame', disabled: !ents.some((e) => !e.con) });
+    fb.innerHTML = icon('frame') + esc(T('kind.frame'));
+    fb.onclick = () => frameFromSketch3d(it.id);
+    row.append(eb, sb, fb);
     sec.append(row, h('div', { class: 'hint-box', html: T('sk3.propHint') }));
   }
   let relink3dRounds = 0;
@@ -5982,6 +5985,288 @@ const Features = (() => {
     }
     sec.append(h('div', { class: 'mini-row', id: 'hx-info' }, h('span', { class: 'grow' }, infoLabel), h('b', { class: 'mono' }, infoVal)));
     sec.append(h('div', { class: 'hint-box', html: T('helix.hint') }));
+  }
+
+  // ---------- Gestell aus Linien (PR-03, PR-06) ----------
+  function frameProfileCandidates(doc, excludeId, V) {
+    return (doc && doc.items ? doc.items : []).filter((x) => (
+      x && x.id !== excludeId
+      && (x.kind === 'extrude' || x.kind === 'revolve')
+      && x.p && x.p.sketch
+      && typeof SK !== 'undefined'
+      && SK.regions(Solver.cached(x.p.sketch, V).ents).length > 0
+    ));
+  }
+  function startFrame(opts = {}) {
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) {
+      UI.toast(T('toast.frameProOnly'), { icon: 'info' });
+      return false;
+    }
+    if (App.ctx) {
+      UI.toast(T('toast.frameTopOnly'), { icon: 'info' });
+      return false;
+    }
+    if (App.sel.length === 1) {
+      const f = Model.find(App.doc, App.sel[0]);
+      if (f && f.item.kind === 'sketch3d') return !!frameFromSketch3d(f.item.id, opts);
+    }
+    Sketch.chooseAndStart({ ...opts, frameMode: true });
+    UI.toast(T('toast.frameStart'), { icon: 'info', ms: 4200 });
+    return true;
+  }
+  function frame(opts = {}) {
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple && !opts.allowSimple) {
+      UI.toast(T('toast.frameProOnly'), { icon: 'info' });
+      return null;
+    }
+    if (App.ctx) {
+      UI.toast(T('toast.frameTopOnly'), { icon: 'info' });
+      return null;
+    }
+    const V = Model.vars(App.doc).v;
+    let sketch = opts.sketch ? deepClone(opts.sketch) : null;
+    let mat = opts.matrix || null;
+    if (!sketch && opts.sketchId) {
+      const sf = Model.find(App.doc, opts.sketchId);
+      if (sf && sf.item && sf.item.p && sf.item.p.sketch) {
+        sketch = deepClone(sf.item.p.sketch);
+        if (!mat) mat = Model.localMatrix(sf.item);
+      }
+    }
+    let sketch3dId = opts.sketch3dId || null;
+    if (sketch3dId) {
+      const sf = Model.find(App.doc, sketch3dId);
+      if (!sf || sf.item.kind !== 'sketch3d') { UI.toast(T('sk3.toast.needSketch3d'), { icon: 'info' }); return null; }
+      const res = Model.sketch3dResolve(sf.item.p && sf.item.p.sketch3d, V);
+      if (!(res.ents || []).some((e) => !e.con && Model.sketch3dEntLen(e) > 1e-4)) {
+        UI.toast(T('toast.frameNeedSegs3d'), { icon: 'info' });
+        return null;
+      }
+    } else {
+      if (!sketch || !Model.frameSegsFrom2d(sketch, V).segs.length) {
+        UI.toast(T('toast.frameNeedSegs'), { icon: 'info' });
+        return null;
+      }
+    }
+    let profileMode = opts.profileMode === 'sketch' ? 'sketch' : 'library';
+    let prof = opts.prof ? deepClone(opts.prof) : null;
+    let profName = opts.profName || '';
+    let profId = opts.profId || null;
+    if (profileMode === 'sketch' && !prof && profId) {
+      const pf = Model.find(App.doc, profId);
+      if (pf && pf.item && pf.item.p && pf.item.p.sketch) {
+        prof = deepClone(pf.item.p.sketch);
+        if (!profName) profName = Model.label(pf.item);
+      }
+    }
+    if (profileMode === 'sketch' && !prof) {
+      UI.toast(T('toast.frameNeedProf'), { icon: 'info' });
+      return null;
+    }
+    const shape = typeof profileShapeInfo === 'function' ? profileShapeInfo(opts.shape || 'squareTube').id : (opts.shape || 'squareTube');
+    const defSz = shape === 'squareTube' ? '20x20x2' : (typeof profileDefaultSize === 'function' ? profileDefaultSize(shape) : '20x20x2');
+    const size = opts.size || defSz;
+    const p = {
+      ...(sketch3dId ? { sketch3dId } : { sketch }),
+      profileMode,
+      shape,
+      size,
+      ...(opts.w != null ? { w: opts.w } : {}),
+      ...(opts.h != null ? { h: opts.h } : {}),
+      ...(opts.t != null ? { t: opts.t } : {}),
+      ...(opts.tf != null ? { tf: opts.tf } : {}),
+      ...(prof ? { prof, profName, ...(profId ? { profId } : {}) } : {}),
+      rot: opts.rot ?? 0,
+      offX: opts.offX ?? 0,
+      offY: opts.offY ?? 0,
+    };
+    let step = null;
+    App.change(T('undo.frameAdded'), (doc) => {
+      step = Model.newItem('frame', p, {
+        name: opts.name || T('kind.frame'),
+        color: opts.color || nextColor(),
+        mat: opts.mat || 'Baustahl',
+      });
+      if (mat) Model.setFromMatrix(step, mat);
+      if (sketch3dId) {
+        const idx = doc.items.findIndex((x) => x.id === sketch3dId);
+        const at = idx >= 0 ? idx + 1 : doc.items.length;
+        doc.items.splice(at, 0, step);
+        if (doc.rollback != null && at <= doc.rollback) doc.rollback++;
+      } else {
+        insertAtMarker(doc, step);
+      }
+      if (profId && opts.hideProf !== false) {
+        const sp = doc.items.find((x) => x.id === profId);
+        if (sp) sp.hidden = true;
+      }
+      if (opts.hideSource && opts.sketchId) {
+        const ss = doc.items.find((x) => x.id === opts.sketchId);
+        if (ss) ss.hidden = true;
+      }
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('toast.frameAdded'), { icon: 'check' });
+    }
+    return step;
+  }
+  function frameFromSketch(itemId, opts = {}) {
+    const sf = Model.find(App.doc, itemId);
+    if (!sf || !sf.item || !sf.item.p || !sf.item.p.sketch) {
+      UI.toast(T('toast.frameNeedSegs'), { icon: 'info' });
+      return null;
+    }
+    return frame({
+      sketchId: itemId,
+      color: sf.item.color,
+      ...opts,
+    });
+  }
+  function frameFromSketch3d(sketch3dId, opts = {}) {
+    const sf = Model.find(App.doc, sketch3dId);
+    if (!sf || sf.item.kind !== 'sketch3d') {
+      UI.toast(T('sk3.toast.needSketch3d'), { icon: 'info' });
+      return null;
+    }
+    return frame({
+      sketch3dId,
+      color: sf.item.color,
+      ...opts,
+    });
+  }
+  function renderFrame(it, sec, setP) {
+    sec.id = 'frame-sec';
+    sec.setAttribute('data-help', 'frame');
+    const V = Model.vars(App.doc).v;
+    const p = it.p || {};
+    const m = Model.frameMetrics(it, V);
+    const profs = frameProfileCandidates(App.doc, it.id, V);
+    const fl = h('div', { class: 'fields' });
+    const modeOpts = [['library', T('panel.frame.modeLibrary')], ['sketch', T('panel.frame.modeSketch')]];
+    fl.append(UI.selectField({
+      id: 'fr-prof-mode', label: T('panel.frame.profMode'), value: m.profileMode, options: modeOpts,
+      onChange: (v) => {
+        if (v === 'sketch' && !it.p.prof && profs.length) {
+          const src = profs[0];
+          App.change(T('undo.frameChanged'), (doc) => {
+            const f = Model.find(doc, it.id).item;
+            f.p.profileMode = 'sketch';
+            f.p.prof = deepClone(src.p.sketch);
+            f.p.profName = Model.label(src);
+            f.p.profId = src.id;
+            const s2 = doc.items.find((x) => x.id === src.id);
+            if (s2) s2.hidden = true;
+          });
+        } else {
+          setP('profileMode', v);
+        }
+      },
+    }));
+    if (m.profileMode === 'library') {
+      const shOpts = typeof PROFILE_SHAPE_OPTIONS !== 'undefined' ? PROFILE_SHAPE_OPTIONS : [['squareTube', 'Vierkantrohr']];
+      const curShape = m.spec ? m.spec.shape : (p.shape || 'squareTube');
+      const curSize = p.size === 'custom' ? 'custom' : (m.spec ? m.spec.size : (p.size || '20x20x2'));
+      fl.append(UI.selectField({
+        id: 'fr-shape', label: T('panel.frame.shape'), value: curShape, options: shOpts,
+        onChange: (v) => App.change(T('undo.profileShape'), (doc) => {
+          const f = Model.find(doc, it.id).item;
+          const nextSh = typeof profileShapeInfo === 'function' ? profileShapeInfo(v) : { id: v, defSize: '20x20x2' };
+          f.p.shape = nextSh.id;
+          f.p.size = nextSh.defSize;
+          f.p.w = null; f.p.h = null; f.p.t = null; f.p.tf = null;
+        }),
+      }));
+      const szOpts = typeof profileSizeOptions === 'function' ? profileSizeOptions(curShape) : [['20x20x2', '20 × 20 × 2 mm'], ['custom', 'Eigene Maße']];
+      fl.append(UI.selectField({
+        id: 'fr-size', label: T('panel.frame.size'), value: curSize, options: szOpts,
+        onChange: (v) => App.change(T('undo.frameChanged'), (doc) => {
+          const f = Model.find(doc, it.id).item;
+          f.p.size = v;
+          if (v !== 'custom') { f.p.w = null; f.p.h = null; f.p.t = null; f.p.tf = null; }
+        }),
+      }));
+      const setCustomDim = (key, val) => App.change(T('undo.frameChanged'), (doc) => {
+        const f = Model.find(doc, it.id).item;
+        f.p.size = 'custom';
+        f.p[key] = val;
+      }, { merge: 'fr:' + it.id + ':' + key });
+      const sp = m.spec || { w: 20, h: 20, t: 2, tf: 2 };
+      fl.append(UI.numField({ id: 'fr-w', label: curShape === 'roundTube' ? T('param.od') : T('param.w'), value: p.w ?? sp.w, min: 2, vars: V, onCommit: (v) => setCustomDim('w', v) }));
+      if (curShape !== 'roundTube' && curShape !== 'flat') {
+        fl.append(UI.numField({ id: 'fr-h', label: T('param.h'), value: p.h ?? sp.h, min: 2, vars: V, onCommit: (v) => setCustomDim('h', v) }));
+      }
+      fl.append(UI.numField({ id: 'fr-t', label: curShape === 'flat' ? T('common.thickness') : T('param.wall'), value: p.t ?? sp.t, min: 0.4, vars: V, onCommit: (v) => setCustomDim('t', v) }));
+      if (curShape === 'channel' || curShape === 'tee' || curShape === 'ibeam') {
+        fl.append(UI.numField({ id: 'fr-tf', label: T('panel.frame.flangeT'), value: p.tf ?? sp.tf, min: 0.4, vars: V, onCommit: (v) => setCustomDim('tf', v) }));
+      }
+    } else {
+      fl.append(UI.selectField({
+        id: 'fr-prof', label: T('panel.frame.profSketch'), value: '',
+        options: [['', it.p.profName || (profs.length ? T('panel.sweep.adopted') : T('panel.frame.noProfFound'))], ...profs.map((x) => [x.id, Model.label(x)])],
+        onChange: (v) => {
+          const src = profs.find((x) => x.id === v);
+          if (!src) return;
+          App.change(T('undo.frameChanged'), (doc) => {
+            const f = Model.find(doc, it.id).item;
+            f.p.profileMode = 'sketch';
+            f.p.prof = deepClone(src.p.sketch);
+            f.p.profName = Model.label(src);
+            f.p.profId = src.id;
+            const s2 = doc.items.find((x) => x.id === src.id);
+            if (s2) s2.hidden = true;
+          });
+        },
+      }));
+    }
+    fl.append(
+      UI.numField({ id: 'fr-rot', label: T('panel.frame.rot'), value: p.rot ?? 0, unit: '°', vars: V, onCommit: (v) => setP('rot', v) }),
+      UI.numField({ id: 'fr-offx', label: T('panel.frame.offX'), value: p.offX ?? 0, vars: V, onCommit: (v) => setP('offX', v) }),
+      UI.numField({ id: 'fr-offy', label: T('panel.frame.offY'), value: p.offY ?? 0, vars: V, onCommit: (v) => setP('offY', v) }),
+    );
+    sec.append(fl);
+    if (m.profileMode === 'sketch' && !m.prof) {
+      sec.append(h('div', { class: 'hint-box', id: 'fr-need-prof' }, T('panel.frame.needProfSketch')));
+    }
+    if (p.sketch3dId) {
+      const sk3List = App.doc.items.filter((x) => x.kind === 'sketch3d' && !x.suppressed);
+      if (sk3List.length) {
+        sec.append(UI.selectField({
+          id: 'fr-sk3', label: T('kind.sketch3d'), value: p.sketch3dId,
+          options: sk3List.map((x) => [x.id, Model.label(x)]),
+          onChange: (v) => setP('sketch3dId', v),
+        }));
+      }
+      const sf = Model.find(App.doc, p.sketch3dId);
+      if (sf) {
+        const row = h('div', { class: 'btn-row', style: { marginTop: '6px' } });
+        const eb = h('button', { type: 'button', class: 'btn', id: 'fr-edit-sk3' });
+        eb.innerHTML = icon('edit') + esc(T('sk3.editBtn'));
+        eb.onclick = () => Sketch.edit3d(sf.item.id);
+        const sb = h('button', { type: 'button', class: 'btn', id: 'fr-sel-sk3' });
+        sb.innerHTML = icon('pointer') + esc(T('sk3.selectBtn'));
+        sb.onclick = () => App.select([sf.item.id]);
+        row.append(eb, sb);
+        sec.append(row);
+      }
+    } else {
+      const eb = h('button', { type: 'button', class: 'btn', id: 'fr-edit-sk', style: { marginTop: '6px' } });
+      eb.innerHTML = icon('edit') + esc(T('panel.frame.editSketch'));
+      eb.onclick = () => Sketch.editItem(it.id);
+      sec.append(eb);
+    }
+    const profDesc = m.profileMode === 'sketch'
+      ? (m.profName ? `Skizze „${esc(m.profName)}“` : esc(T('panel.frame.customProf')))
+      : `${esc(m.spec ? m.spec.shapeLabel : 'Profil')}${m.spec && m.spec.sizeLabel ? ` (${esc(m.spec.sizeLabel)})` : ''}`;
+    sec.append(h('div', { class: 'mini-row', id: 'fr-info', style: { marginTop: '8px' } },
+      h('span', { class: 'grow' }, `${m.count === 1 ? '1 Stab' : `${m.count} Stäbe`} · ${T('panel.frame.totalLen')}`),
+      h('b', { class: 'mono' }, Units.fmtLenU(m.totalLength, 1))));
+    sec.append(h('div', { class: 'hint-box', id: 'fr-hint', html: T('panel.frame.hint', {
+      prof: profDesc,
+      area: fmt(m.area, 1),
+      len: Units.fmtLenU(m.totalLength, 1),
+      kg: fmt(m.steelKg, 2),
+    }) }));
   }
 
   // ---------- Schraubdom (KP-24) ----------
@@ -8820,5 +9105,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, portCutout, startPortCutout, pickPortCutoutFace, renderPortCutout, magnetPocket, startMagnetPocket, pickMagnetPocketFace, renderMagnetPocket, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, deleteFace, startDeleteFace, pickDeleteFace, removeDeleteFaceEntry, renderDeleteFace, replaceFace, startReplaceFace, pickReplaceTarget, pickReplaceSourceFace, setReplaceDatum, renderReplaceFace, moveEdge, startMoveEdge, pickMoveEdge, renderMoveEdge, isHoleFaceInfo, isFilletFaceInfo, editHole, startEditHole, pickEditHoleFace, renderEditHole, editFillet, startEditFillet, pickEditFilletFace, removeEditFilletEntry, renderEditFillet, simplify, startSimplify, renderSimplify, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, directFace, startDirectFace, pickDirectFace, pickDirectFaceRotAxis, directFaceFrame, renderDirectFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut, startEngrave, engrave, updateEngrave, stopEngrave, get engraving() { return !!engraveState; } };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, portCutout, startPortCutout, pickPortCutoutFace, renderPortCutout, magnetPocket, startMagnetPocket, pickMagnetPocketFace, renderMagnetPocket, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, deleteFace, startDeleteFace, pickDeleteFace, removeDeleteFaceEntry, renderDeleteFace, replaceFace, startReplaceFace, pickReplaceTarget, pickReplaceSourceFace, setReplaceDatum, renderReplaceFace, moveEdge, startMoveEdge, pickMoveEdge, renderMoveEdge, isHoleFaceInfo, isFilletFaceInfo, editHole, startEditHole, pickEditHoleFace, renderEditHole, editFillet, startEditFillet, pickEditFilletFace, removeEditFilletEntry, renderEditFillet, simplify, startSimplify, renderSimplify, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, directFace, startDirectFace, pickDirectFace, pickDirectFaceRotAxis, directFaceFrame, renderDirectFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, startFrame, frame, frameFromSketch, frameFromSketch3d, renderFrame, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut, startEngrave, engrave, updateEngrave, stopEngrave, get engraving() { return !!engraveState; } };
 })();

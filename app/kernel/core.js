@@ -7344,6 +7344,181 @@ export function createKernel(R, oc) {
       safeDelete(outer); safeDelete(inner); safeDelete(face); safeDelete(shape);
     }
   }
+  function frameBasis(T, planeN, rotDeg) {
+    const tDir = norm(T);
+    let ref = null;
+    if (Array.isArray(planeN) && planeN.length >= 3 && len(planeN) > 1e-6) {
+      const pn = norm(planeN);
+      if (Math.abs(dot(tDir, pn)) < 0.99) ref = pn;
+    }
+    if (!ref) ref = Math.abs(tDir[2]) < 0.99 ? [0, 0, 1] : [1, 0, 0];
+    const V0 = norm(sub(ref, mul(tDir, dot(ref, tDir))));
+    const U0 = norm(cross(V0, tDir));
+    const rad = (num(rotDeg, 0) * Math.PI) / 180;
+    const cs = Math.cos(rad), sn = Math.sin(rad);
+    const U = add(mul(U0, cs), mul(V0, sn));
+    const V = sub(mul(V0, cs), mul(U0, sn));
+    return { U, V, T: tDir };
+  }
+  function libraryProfileWires(spec, M) {
+    const sh = String((spec && spec.shape) || 'squareTube');
+    const w = Math.max(2, pos(spec && spec.w, 20));
+    const t = Math.max(0.4, pos(spec && spec.t, sh === 'flat' ? 5 : 2));
+    const h = sh === 'roundTube' ? w : sh === 'flat' ? t : Math.max(2, pos(spec && spec.h, w));
+    const tf = Math.max(0.4, pos(spec && spec.tf, t));
+    const wireFromPts = (pts, ccw = true) => {
+      const segs = pts.map((pt, i) => ({ t: 'line', a: pt, b: pts[(i + 1) % pts.length] }));
+      return loopWire({ segs }, M, ccw);
+    };
+    if (sh === 'squareTube') {
+      const tc = Math.min(t, Math.min(w, h) / 2 - 0.1);
+      const outer = wireFromPts([[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]], true);
+      const iw = w / 2 - tc, ih = h / 2 - tc;
+      const inner = wireFromPts([[-iw, -ih], [iw, -ih], [iw, ih], [-iw, ih]], false);
+      return { outer, holes: [inner] };
+    }
+    if (sh === 'roundTube') {
+      const tc = Math.min(t, w / 2 - 0.1);
+      const outer = loopWire({ circle: { c: [0, 0], r: w / 2 } }, M, true);
+      const inner = loopWire({ circle: { c: [0, 0], r: w / 2 - tc } }, M, false);
+      return { outer, holes: [inner] };
+    }
+    if (sh === 'flat') {
+      return { outer: wireFromPts([[-w / 2, -t / 2], [w / 2, -t / 2], [w / 2, t / 2], [-w / 2, t / 2]], true), holes: [] };
+    }
+    let pts;
+    if (sh === 'angle') {
+      const tc = Math.min(t, Math.min(w, h) - 0.4);
+      pts = [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, -h / 2 + tc], [-w / 2 + tc, -h / 2 + tc], [-w / 2 + tc, h / 2], [-w / 2, h / 2]];
+    } else if (sh === 'channel') {
+      const tw = Math.min(t, w - 0.4), tfc = Math.min(tf, h / 2 - 0.2);
+      pts = [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, -h / 2 + tfc], [-w / 2 + tw, -h / 2 + tfc], [-w / 2 + tw, h / 2 - tfc], [w / 2, h / 2 - tfc], [w / 2, h / 2], [-w / 2, h / 2]];
+    } else if (sh === 'tee') {
+      const tw = Math.min(t, w - 0.4), tfc = Math.min(tf, h - 0.4);
+      pts = [[-tw / 2, -h / 2], [tw / 2, -h / 2], [tw / 2, h / 2 - tfc], [w / 2, h / 2 - tfc], [w / 2, h / 2], [-w / 2, h / 2], [-w / 2, h / 2 - tfc], [-tw / 2, h / 2 - tfc]];
+    } else {
+      const tw = Math.min(t, w - 0.4), tfc = Math.min(tf, h / 2 - 0.2);
+      pts = [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, -h / 2 + tfc], [tw / 2, -h / 2 + tfc], [tw / 2, h / 2 - tfc], [w / 2, h / 2 - tfc], [w / 2, h / 2], [-w / 2, h / 2], [-w / 2, h / 2 - tfc], [-tw / 2, h / 2 - tfc], [-tw / 2, -h / 2 + tfc], [-w / 2, -h / 2 + tfc]];
+    }
+    return { outer: wireFromPts(pts, true), holes: [] };
+  }
+  function buildFrame(p) {
+    if (p.missing) throw new Error(p.missing);
+    const segs = Array.isArray(p.segs) ? p.segs : [];
+    if (!segs.length) throw new Error('Gestell: Die Skizze enthält keine Linien oder Kurven für Profile.');
+    const useSketch = p.profileMode === 'sketch';
+    if (useSketch && (!p.prof || !p.prof.outer)) throw new Error('Gestell: Wähle eine geschlossene Profil-Skizze.');
+    const solids = [];
+    try {
+      for (const s of segs) {
+        if (!s || !s.a || !s.b) continue;
+        if (s.t === 'line') {
+          const dVec = sub(s.b, s.a);
+          const L = len(dVec);
+          if (!(L > 1e-4)) continue;
+          const { U, V, T } = frameBasis(mul(dVec, 1 / L), p.planeN, p.rot);
+          const O = add(s.a, add(mul(U, num(p.offX, 0)), mul(V, num(p.offY, 0))));
+          let solid = null;
+          if (useSketch) {
+            const c = p.prof.c || [0, 0];
+            const oProf = sub(sub(O, mul(U, c[0])), mul(V, c[1]));
+            const M = planeMap({ o: oProf, x: U, n: T });
+            let face = null;
+            try {
+              face = regionFace({ outer: p.prof.outer, holes: p.prof.holes || [] }, M);
+              solid = R.basicFaceExtrusion(face, new R.Vector(mul(T, L)));
+            } finally {
+              safeDelete(face);
+            }
+          } else {
+            let raw = null;
+            try {
+              raw = buildProfile({ spec: { ...p.spec, length: L } });
+              const mat = [
+                U[0], U[1], U[2], 0,
+                V[0], V[1], V[2], 0,
+                T[0], T[1], T[2], 0,
+                O[0], O[1], O[2], 1,
+              ];
+              solid = applyMatrix(raw, mat);
+            } finally {
+              safeDelete(raw);
+            }
+          }
+          if (!isClosedValidSolid(solid)) { safeDelete(solid); throw new Error('Gestell: Ein Profilstab ergab keinen geschlossenen Körper.'); }
+          solids.push(solid);
+        } else {
+          let edge = null, spine = null, outerW = null, outerShape = null;
+          const holeWires = [];
+          try {
+            let T0 = null;
+            if (s.t === 'arc' && s.m) {
+              const u = sub(s.m, s.a), v = sub(s.b, s.a), w = cross(u, v), l2 = dot(w, w);
+              if (l2 > 1e-12) {
+                edge = R.makeThreePointArc(s.a, s.m, s.b);
+                const ca = mul(add(mul(cross(w, u), dot(v, v)), mul(cross(v, w), dot(u, u))), 1 / (2 * l2));
+                const radA = mul(ca, -1);
+                const tCand = cross(w, radA);
+                T0 = len(tCand) > 1e-9 ? norm(tCand) : norm(sub(s.m, s.a));
+              } else if (len(v) > 1e-4) {
+                edge = R.makeLine(s.a, s.b);
+                T0 = norm(v);
+              }
+            } else if (s.t === 'bez' && s.c1 && s.c2) {
+              edge = R.makeBezierCurve([s.a, s.c1, s.c2, s.b]);
+              const d0 = sub(s.c1, s.a), d1 = sub(s.c2, s.a), d2 = sub(s.b, s.a);
+              T0 = len(d0) > 1e-6 ? norm(d0) : len(d1) > 1e-6 ? norm(d1) : len(d2) > 1e-6 ? norm(d2) : null;
+            }
+            if (!edge || !T0) continue;
+            spine = R.assembleWire([edge]);
+            const { U, V, T } = frameBasis(T0, p.planeN, p.rot);
+            const O = add(s.a, add(mul(U, num(p.offX, 0)), mul(V, num(p.offY, 0))));
+            const sweepW = (w) => {
+              try { return R.genericSweep(w, spine, { transitionMode: 'round', forceProfileSpineOthogonality: true }); }
+              catch (_) { return R.genericSweep(w, spine, { transitionMode: 'right', forceProfileSpineOthogonality: true }); }
+            };
+            if (useSketch) {
+              const c = p.prof.c || [0, 0];
+              const oProf = sub(sub(O, mul(U, c[0])), mul(V, c[1]));
+              const M = planeMap({ o: oProf, x: U, n: T });
+              outerW = loopWire(p.prof.outer, M, true);
+              for (const hw of p.prof.holes || []) holeWires.push(loopWire(hw, M, true));
+            } else {
+              const M = planeMap({ o: O, x: U, n: T });
+              const pw = libraryProfileWires(p.spec, M);
+              outerW = pw.outer;
+              for (const hw of pw.holes) holeWires.push(hw);
+            }
+            outerShape = sweepW(outerW);
+            for (const hw of holeWires) {
+              let cutter = null, next = null;
+              try {
+                cutter = sweepW(hw);
+                next = outerShape.cut(cutter);
+                safeDelete(outerShape);
+                outerShape = next;
+                next = null;
+              } finally {
+                safeDelete(cutter);
+                safeDelete(next);
+              }
+            }
+            if (!isClosedValidSolid(outerShape)) throw new Error('Gestell: Ein gebogener Profilstab ergab keinen geschlossenen Körper.');
+            solids.push(outerShape);
+            outerShape = null;
+          } finally {
+            safeDelete(edge); safeDelete(spine); safeDelete(outerW); safeDelete(outerShape);
+            for (const hw of holeWires) safeDelete(hw);
+          }
+        }
+      }
+      if (!solids.length) throw new Error('Gestell: Es konnte kein Profilstab erzeugt werden.');
+      const out = solids.length === 1 ? solids.pop() : R.makeCompound(solids);
+      return out;
+    } finally {
+      for (const s of solids) safeDelete(s);
+    }
+  }
   // ---------- Kanten-Veredelung ----------
   function edgeSig(e) {
     const m = vec(e.pointAt(0.5));
@@ -10436,6 +10611,8 @@ export function createKernel(R, oc) {
         shape = buildSweep(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
       } else if (it.kind === 'helix') {
         shape = buildHelix(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
+      } else if (it.kind === 'frame') {
+        shape = buildFrame(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
       } else if (it.kind === 'import') {
         shape = buildImport(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
       } else if (it.kind === 'part') {
@@ -21886,6 +22063,30 @@ export function createKernel(R, oc) {
   function findSelfIntersections(shape, fl, cachedPayload) {
     let V, T, fg;
     let ownsMesh = null;
+    let faceBody = (cachedPayload && Array.isArray(cachedPayload.faceBody) && cachedPayload.faceBody.length === fl.length) ? cachedPayload.faceBody : null;
+    if (!faceBody) {
+      const sl = sortedSolids(shape);
+      try {
+        if (sl.length > 1) {
+          const fIndex = new Map(fl.map((f, i) => [f.hc, i]));
+          faceBody = new Int32Array(fl.length).fill(-1);
+          const TA = oc.TopAbs_ShapeEnum;
+          for (let bi = 0; bi < sl.length; bi++) {
+            const fx = new oc.TopExp_Explorer(sl[bi].shape.wrapped, TA.TopAbs_FACE, TA.TopAbs_SHAPE);
+            try {
+              while (fx.More()) {
+                const hc = oc.ReplicadShapeHasher.HashCode(fx.Current(), HMAX);
+                const idx = fIndex.get(hc);
+                if (idx !== undefined) faceBody[idx] = bi;
+                fx.Next();
+              }
+            } finally { fx.delete(); }
+          }
+        }
+      } finally {
+        for (const s of sl) safeDelete(s.shape);
+      }
+    }
     if (cachedPayload && cachedPayload.vertices && cachedPayload.triangles && cachedPayload.faceGroups) {
       V = cachedPayload.vertices; T = cachedPayload.triangles; fg = cachedPayload.faceGroups;
     } else {
@@ -21949,6 +22150,7 @@ export function createKernel(R, oc) {
             if (checkedPairs.has(pk)) continue;
             checkedPairs.add(pk);
             const B = tris[j];
+            if (faceBody && A.f >= 0 && B.f >= 0 && faceBody[A.f] >= 0 && faceBody[B.f] >= 0 && faceBody[A.f] !== faceBody[B.f]) continue;
             if (A.mx[0] < B.mn[0] || B.mx[0] < A.mn[0] || A.mx[1] < B.mn[1] || B.mx[1] < A.mn[1] || A.mx[2] < B.mn[2] || B.mx[2] < A.mn[2]) continue;
             let shared = false;
             for (let u = 0; u < 3 && !shared; u++) {
@@ -22105,7 +22307,7 @@ export function createKernel(R, oc) {
         }
       }
       try {
-        const cached = key ? meshCache.get(key + '|' + Q.level) : null;
+        const cached = key ? (meshCache.get(id + '|' + key + '|' + Q.level) || meshCache.get(key + '|' + Q.level)) : null;
         const selfHits = findSelfIntersections(shape, fl, cached);
         for (const h of selfHits) {
           issues.push({

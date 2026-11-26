@@ -2218,5 +2218,10 @@
     "tip": "Norm-Profil (Vierkantrohr, Rundrohr, L-, U-, T-, I-Profil oder Flachstahl) in wählbarer Länge",
     "hilfe": "Erzeugt ein Konstruktionsprofil mit genormtem Querschnitt (Vierkantrohr, Rundrohr, L-Profil, U-Profil, T-Profil, I-Träger oder Flachstahl) und beliebiger Länge. Im Eigenschaften-Panel kannst du jederzeit zwischen allen Profilarten, den passenden Normgrößen oder eigenen Maßen wechseln.",
     "tipp": "Wähle „Eigene Maße“ bei Normgröße (oder gib direkt Breite, Höhe oder Wandstärke ein), um Sonderprofile außerhalb der Standardtabelle zu erzeugen."
+  },
+  "frame": {
+    "tip": "Gestell aus Linien: lässt ein Norm- oder eigenes Skizzenprofil entlang aller Linien einer Skizze oder 3D-Skizze laufen (Profi)",
+    "hilfe": "Erzeugt im Profi-Modus aus jeder Linie, jedem Bogen oder jeder Kurve einer 2D- oder 3D-Skizze automatisch einen eigenen Profilstab – wahlweise mit einem Querschnitt aus der Profil-Sammlung (Vierkant, Rundrohr, L, U, T, I, Flach) oder aus einer eigenen geschlossenen Skizze.",
+    "tipp": "Zeichne zuerst das Grundgerüst (z. B. ein Rechteck oder eine 3D-Skizze) und wähle nach „Fertig“ einfach „Gestell“ – im Eigenschaften-Panel rechts kannst du Querschnitt, Normgröße, eigenes Profil und Drehung jederzeit umschalten."
   }
 }

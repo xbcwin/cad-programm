@@ -931,7 +931,7 @@ const Store = (() => {
   const VALID_T_KEYS = ['x', 'y', 'z', 'rx', 'ry', 'rz'];
   const KNOWN_ITEM_KINDS = new Set([
     'box', 'cylinder', 'tube', 'sphere', 'hemisphere', 'cone', 'pyramid', 'torus', 'prism', 'wedge',
-    'extrude', 'revolve', 'loft', 'sweep', 'helix', 'import', 'group', 'part',
+    'extrude', 'revolve', 'loft', 'sweep', 'helix', 'frame', 'import', 'group', 'part',
     'transform', 'scale', 'deform', 'thicken', 'directFace', 'rib', 'vent', 'fins', 'fillPattern', 'mountPattern', 'portCutout', 'magnetPocket', 'web', 'wrap',
     'emboss', 'splitFace', 'dome', 'deleteFace', 'replaceFace', 'moveEdge', 'editHole', 'editFillet', 'simplify', 'mirrorStep', 'deleteBody', 'boss', 'lipGroove',
     'undercut', 'circlipGroove', 'keyway', 'splineProfile', 'knurl', 'gripPattern', 'sketch3d', 'ref',

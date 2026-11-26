@@ -618,6 +618,33 @@ const Kernel = (() => {
         box = [x0 - pad, y0 - pad, z0 - pad, x1 + pad, y1 + pad, z1 + pad];
         break;
       }
+      case 'frame': {
+        if (!Array.isArray(p.segs) || !p.segs.length) return null;
+        let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+        const add3 = (pt) => {
+          if (!Array.isArray(pt) || pt.length < 3) return false;
+          const px = Number(pt[0]), py = Number(pt[1]), pz = Number(pt[2]);
+          if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz)) return false;
+          if (px < x0) x0 = px; if (py < y0) y0 = py; if (pz < z0) z0 = pz;
+          if (px > x1) x1 = px; if (py > y1) y1 = py; if (pz > z1) z1 = pz;
+          return true;
+        };
+        for (const s of p.segs) {
+          if (!s) continue;
+          if (s.a && !add3(s.a)) return null;
+          if (s.b && !add3(s.b)) return null;
+          if (s.m && !add3(s.m)) return null;
+          if (s.c1 && !add3(s.c1)) return null;
+          if (s.c2 && !add3(s.c2)) return null;
+        }
+        if (!Number.isFinite(x0)) return null;
+        const half = p.spec
+          ? Math.max(numOr(p.spec.w, 20), numOr(p.spec.h, 20)) / 2
+          : (p.prof ? Math.max(numOr(p.prof.w, 20), numOr(p.prof.h, 20)) / 2 : 15);
+        const pad = half + Math.abs(numOr(p.offX, 0)) + Math.abs(numOr(p.offY, 0)) + 2;
+        box = [x0 - pad, y0 - pad, z0 - pad, x1 + pad, y1 + pad, z1 + pad];
+        break;
+      }
       case 'group': {
         const kids = (it.children || []).filter((c) => c && !c.hidden);
         if (!kids.length) return [0, 0, 0, 0, 0, 0];
@@ -751,6 +778,7 @@ const Kernel = (() => {
         }
       }
       if (x.kind === 'sweep' && p.wrapId) unionRef(topIdx, p.wrapId);
+      if (x.kind === 'frame' && p.sketch3dId) unionRef(topIdx, p.sketch3dId);
       if (x.kind === 'extrude' && p.extent === 'toFace' && p.toFace && p.toFace.id) unionRef(topIdx, p.toFace.id);
       if (x.kind === 'revolve' && p.dir === 'toFace' && p.toFace && p.toFace.targetId) unionRef(topIdx, p.toFace.targetId);
       if (x.kind === 'loft') {

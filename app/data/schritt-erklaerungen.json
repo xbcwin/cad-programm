@@ -569,5 +569,10 @@
     "was": "Erzeugt einen Profilstab nach Norm (Vierkantrohr, Rundrohr, L-, U-, T-, I-Profil oder Flachstahl) mit gewähltem Querschnitt und Länge.",
     "wozu": "Baut Rahmen, Gestelle, Maschinenunterbauten, Streben und Stahlbau-Konstruktionen mit echten DIN-/EN-Querschnitten.",
     "achtung": "Profilart, Normgröße und Länge lassen sich jederzeit rechts im Eigenschaften-Panel umschalten oder durch eigene Maße überschreiben."
+  },
+  "frame": {
+    "was": "Setzt entlang jeder Linie, jedes Bogens oder jeder Kurve einer 2D- oder 3D-Skizze automatisch einen Profilstab als eigenen Körper im Gestell.",
+    "wozu": "Baut komplette Rahmen, Maschinengestelle, Tische oder Fachwerke aus Normprofilen oder eigenen Sonderquerschnitten auf einen Schlag.",
+    "achtung": "Für ein eigenes Profil brauchst du zuerst eine geschlossene 2D-Skizze (z. B. Kreis oder eigenes Profil); danach lassen sich Querschnitt, Drehung und Versatz rechts jederzeit ändern."
   }
 }

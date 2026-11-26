@@ -54,6 +54,7 @@ const Toolbar = (() => {
       { id: 'alignFaces', group: T('dlg.tb.grpEdit'), domId: 't-alignFaces', icon: 'alignFaces', label: T('ctx.alignFaces'), tip: T('dlg.tb.alignFacesTip'), cls: 'minor pro', help: 'alignFaces', run: () => Place.startAlignFaces() },
       { id: 'route3d', group: T('dlg.tb.grpEdit'), domId: 't-route3d', icon: 'sweep', label: T('tool.fly.route3d'), tip: T('dlg.tb.route3dTip'), cls: 'minor', help: 'route3d', run: () => Features.route3d() },
       { id: 'helix', group: T('dlg.tb.grpEdit'), domId: 't-helix', icon: 'helix', label: T('kind.helix'), tip: T('dlg.tb.helixTip'), cls: 'minor', help: 'helix', run: () => Features.helix() },
+      { id: 'frame', group: T('dlg.tb.grpEdit'), domId: 't-frame', icon: 'frame', label: T('kind.frame'), tip: T('dlg.tb.frameTip'), cls: 'minor pro', help: 'frame', run: () => Features.startFrame() },
       { id: 'deform', group: T('dlg.tb.grpEdit'), domId: 't-deform', icon: 'deform', label: T('kind.deform'), tip: T('dlg.tb.deformTip'), cls: 'minor pro', help: 'deform', run: () => Features.deform() },
       { id: 'directFace', group: T('dlg.tb.grpEdit'), domId: 't-directFace', icon: 'directFace', label: T('kind.directFace'), tip: T('dlg.tb.directFaceTip'), cls: 'minor pro', help: 'directFace', run: () => Features.startDirectFace() },
       { id: 'undercut', group: T('dlg.tb.grpEdit'), domId: 't-undercut', icon: 'undercut', label: T('kind.undercut'), tip: T('dlg.tb.undercutTip'), cls: 'minor pro', help: 'undercut', run: () => Features.startUndercut() },

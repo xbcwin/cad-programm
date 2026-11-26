@@ -42953,6 +42953,243 @@ def t_a207_profil_sammlung(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a209_gestell_aus_linien(p):
+    p.empty()
+
+    # 1. Profi-Sichtbarkeit (in Einfach aus, in Profi im Profile-Flyout & Befehlssuche)
+    p.ev("ViewPrefs.setLevel('simple'); Commands.setMode('model');")
+    p.wait(160)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#fly-profiles-section', timeout=5000)
+    simple_res = p.ev("""return (() => {
+      const btn = document.querySelector('#add-frame-step');
+      const visible = !!(btn && btn.offsetParent !== null);
+      const cmds = Commands.search('gestell').map(c => c.id);
+      return { visible, hasCmd: cmds.includes('frame') };
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(160)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#fly-profiles-section', timeout=5000)
+    pro_res = p.ev("""return (() => {
+      const btn = document.querySelector('#add-frame-step');
+      const visible = !!(btn && btn.offsetParent !== null && btn.getAttribute('data-help') === 'frame');
+      const cmds = Commands.search('gestell').map(c => c.id);
+      return { visible, hasCmd: cmds.includes('frame') };
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+    ok1 = bool((not simple_res['visible']) and (not simple_res['hasCmd']) and pro_res['visible'] and pro_res['hasCmd'])
+
+    # 2. Skizze mit Rechteck 400×300 → Gestell mit Vierkant 20×20×2 ergibt 4 Körper
+    p.ev("Sketch.startOnPlane('XY');")
+    p.wait(1500)
+    p.ev("""
+      const S = Sketch.state;
+      S.ents.push({ id: 'r1', type: 'rect', a: [-200, -150], b: [200, 150] });
+    """)
+    p.pg.locator('.sketchbar .tool.primary').click()
+    p.pg.wait_for_selector('#st-mode-frame', timeout=5000)
+    p.pg.locator('#st-mode-frame').click()
+    p.pg.wait_for_selector('#st-frame-shape', timeout=5000)
+    p.pg.locator('.stepbox .btn.primary').click()
+    warte_rechnen(p, 50)
+    sq_res = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = it ? App.results.get(it.id) : null;
+      const bodies = r && r.data && r.data.bodies ? r.data.bodies : [];
+      const b = r && r.data && r.data.bbox;
+      const m = await Mass.measure({ ensure: true });
+      const pm = it ? Mass.partOf(m, it.id) : null;
+      const gc = await GeomCheck.run({ silent: true });
+      const treeRows = document.querySelectorAll(`.bodies-wrap[data-bodies-of="${it.id}"] .body-row`).length;
+      return {
+        errs: App.errors.length,
+        kind: it && it.kind,
+        shape: it && it.p && it.p.shape,
+        size: it && it.p && it.p.size,
+        bodyCount: bodies.length,
+        treeRows,
+        vol: pm ? pm.volume : 0,
+        dx: b ? b[3] - b[0] : 0,
+        dy: b ? b[4] - b[1] : 0,
+        dz: b ? b[5] - b[2] : 0,
+        gcIssues: gc.issues.length,
+      };
+    })()""")
+    exp_sq_vol = (20 * 20 - 16 * 16) * (2 * (400 + 300))  # 201600 mm³
+    ok2 = bool(
+        sq_res['errs'] == 0 and sq_res['kind'] == 'frame'
+        and sq_res['shape'] == 'squareTube' and sq_res['size'] == '20x20x2'
+        and sq_res['bodyCount'] == 4 and sq_res['treeRows'] == 4
+        and abs(sq_res['vol'] - exp_sq_vol) / exp_sq_vol < 0.01
+        and abs(sq_res['dx'] - 420) < 0.2 and abs(sq_res['dy'] - 320) < 0.2 and abs(sq_res['dz'] - 20) < 0.2
+        and sq_res['gcIssues'] == 0
+    )
+
+    # 3. Querschnitt auf Rundrohr 25×2 wechseln → 4 Körper mit exaktem Volumen
+    p.pg.wait_for_selector('#fr-shape', timeout=5000)
+    p.pg.select_option('#fr-shape', 'roundTube')
+    warte_rechnen(p, 50)
+    p.pg.select_option('#fr-size', '25x2')
+    warte_rechnen(p, 50)
+    rt_res = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = it ? App.results.get(it.id) : null;
+      const bodies = r && r.data && r.data.bodies ? r.data.bodies : [];
+      const m = await Mass.measure({ ensure: true });
+      const pm = it ? Mass.partOf(m, it.id) : null;
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        shape: it && it.p && it.p.shape,
+        size: it && it.p && it.p.size,
+        bodyCount: bodies.length,
+        vol: pm ? pm.volume : 0,
+        gcIssues: gc.issues.length,
+      };
+    })()""")
+    exp_rt_vol = math.pi * (12.5 ** 2 - 10.5 ** 2) * 1400
+    ok3 = bool(
+        rt_res['errs'] == 0 and rt_res['shape'] == 'roundTube' and rt_res['size'] == '25x2'
+        and rt_res['bodyCount'] == 4 and abs(rt_res['vol'] - exp_rt_vol) / exp_rt_vol < 0.01
+        and rt_res['gcIssues'] == 0
+    )
+
+    # 4. Eigenes Profil aus Kreisskizze (Ø 16 mm, r = 8) übernehmen (PR-06)
+    p.ev("""
+      App.change('Kreis-Profil', (doc) => {
+        const prof = Model.newItem('extrude', {
+          sketch: { plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'c1', type: 'circle', c: [0, 0], r: 8 }], dims: [], cons: [] },
+          dist: 10, dir: 'normal',
+        }, { name: 'Kreis-Profil' });
+        doc.items.push(prof);
+      });
+      App.select([App.doc.items[0].id]);
+    """)
+    warte_rechnen(p, 40)
+    p.pg.wait_for_selector('#fr-prof-mode', timeout=5000)
+    p.pg.select_option('#fr-prof-mode', 'sketch')
+    warte_rechnen(p, 50)
+    circ_res = p.ev("""return (async () => {
+      const fr = App.doc.items[0];
+      const prof = App.doc.items[1];
+      const r = fr ? App.results.get(fr.id) : null;
+      const bodies = r && r.data && r.data.bodies ? r.data.bodies : [];
+      const b = r && r.data && r.data.bbox;
+      const m = await Mass.measure({ ensure: true });
+      const pm = fr ? Mass.partOf(m, fr.id) : null;
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        profMode: fr && fr.p && fr.p.profileMode,
+        profName: fr && fr.p && fr.p.profName,
+        profHidden: !!(prof && prof.hidden),
+        bodyCount: bodies.length,
+        vol: pm ? pm.volume : 0,
+        dx: b ? b[3] - b[0] : 0,
+        dy: b ? b[4] - b[1] : 0,
+        dz: b ? b[5] - b[2] : 0,
+        gcIssues: gc.issues.length,
+      };
+    })()""")
+    exp_circ_vol = math.pi * (8 ** 2) * 1400
+    ok4 = bool(
+        circ_res['errs'] == 0 and circ_res['profMode'] == 'sketch'
+        and circ_res['profName'] == 'Kreis-Profil' and circ_res['profHidden']
+        and circ_res['bodyCount'] == 4
+        and abs(circ_res['vol'] - exp_circ_vol) / exp_circ_vol < 0.01
+        and abs(circ_res['dx'] - 416) < 0.3 and abs(circ_res['dy'] - 316) < 0.3 and abs(circ_res['dz'] - 16) < 0.3
+        and circ_res['gcIssues'] == 0
+    )
+
+    # 5. Gestell aus 3D-Skizze über #sk3-to-frame
+    def warte_ruhig(n=35):
+        for _ in range(n):
+            p.wait(300)
+            if p.ev("return !App.busy"):
+                break
+        p.wait(300)
+
+    p.ev("""
+      App.change('3D-Skizze für Gestell', (doc) => {
+        const sk3 = Model.newItem('sketch3d', {
+          sketch3d: {
+            ents: [
+              { id: 's1', type: 'line', a: [0, 0, 0], b: [100, 0, 0] },
+              { id: 's2', type: 'line', a: [100, 0, 0], b: [100, 80, 0] },
+              { id: 's3', type: 'line', a: [100, 80, 0], b: [100, 80, 60] },
+            ],
+            dims: [],
+          },
+        }, { name: '3D-Gerüst' });
+        doc.items.push(sk3);
+      });
+      App.select([App.doc.items[App.doc.items.length - 1].id]);
+    """)
+    warte_ruhig(20)
+    p.pg.wait_for_selector('#sk3-to-frame', timeout=5000)
+    p.pg.locator('#sk3-to-frame').click()
+    for _ in range(40):
+        p.wait(300)
+        if p.ev("const fr = App.doc.items.find(x => x.kind === 'frame' && x.p && x.p.sketch3dId); return !App.busy && !!(fr && App.results.has(fr.id));"):
+            break
+    p.wait(400)
+    sk3_res = p.ev("""return (async () => {
+      const sk3 = App.doc.items.find(x => x.kind === 'sketch3d');
+      const fr = App.doc.items.find(x => x.kind === 'frame' && x.p && x.p.sketch3dId);
+      const r = fr ? App.results.get(fr.id) : null;
+      const bodies = r && r.data && r.data.bodies ? r.data.bodies : [];
+      const m = await Mass.measure({ ensure: true });
+      const pm = fr ? Mass.partOf(m, fr.id) : null;
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        linked: !!(fr && sk3 && fr.p.sketch3dId === sk3.id),
+        bodyCount: bodies.length,
+        vol: pm ? pm.volume : 0,
+        gcIssues: gc.issues.length,
+      };
+    })()""")
+    exp_sk3_vol = (20 * 20 - 16 * 16) * (100 + 80 + 60)  # 34560 mm³
+    ok5 = bool(
+        sk3_res['errs'] == 0 and sk3_res['linked'] and sk3_res['bodyCount'] == 3
+        and abs(sk3_res['vol'] - exp_sk3_vol) / exp_sk3_vol < 0.01
+        and sk3_res['gcIssues'] == 0
+    )
+
+    # 6. Undo/Redo, Projekt-Validierung, Explain, Hilfen, Erklärungen & DE/EN-Texte
+    p.ev("App.undo();")
+    warte_ruhig(30)
+    undo_cnt = p.ev("return App.doc.items.filter(x => x.kind === 'frame').length")
+    p.ev("App.redo();")
+    warte_ruhig(30)
+    redo_cnt = p.ev("return App.doc.items.filter(x => x.kind === 'frame').length")
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const hOk = !!(wh.frame && wh.frame.tip && wh.frame.hilfe && wh.frame.tipp);
+      const sOk = !!(se.frame && se.frame.was && se.frame.wozu && se.frame.achtung);
+      const fr = App.doc.items.find(x => x.kind === 'frame');
+      const exp = fr ? Explain.local(fr.id) : null;
+      const expOk = !!(exp && exp.lines && exp.lines.some(l => l.k === 'op' && l.t.includes('Gestell')));
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { valOk: !!(val && val.ok), hOk, sOk, expOk, i18nOk };
+    })()""")
+    ok6 = bool(undo_cnt == 1 and redo_cnt == 2 and meta['valOk'] and meta['hOk'] and meta['sOk'] and meta['expOk'] and meta['i18nOk'])
+
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -43274,6 +43511,7 @@ TESTS = [
     ('[A-200] Direkt bearbeiten: Loch und Rundung an Importteilen ändern (DB-05, DB-06)', t_a200_loch_rundung_import),
     ('[A-206] Direkt bearbeiten: Vereinfachen und Körper an Körper ausrichten', t_vereinfachen_ausrichten),
     ('[A-207] Profile, Schritt 1: Profil-Sammlung (PR-01)', t_a207_profil_sammlung),
+    ('[A-209] Profile, Schritt 3: Gestell aus Linien (PR-03, PR-06)', t_a209_gestell_aus_linien),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

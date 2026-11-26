@@ -269,6 +269,14 @@ const Explain = (() => {
       const spanTxt = m.form === 'spiral' ? `${fmt(m.turns, 2)} Windungen` : `${fmt(m.turns, 2)} Windungen, Steigung ${Units.fmtLenU(m.pitch, 2, doc)}, Höhe ${Units.fmtLenU(m.height, 2, doc)}`;
       lines.push({ k: 'op', t: `${formTxt} mit ${spanTxt} (${m.dir === 'left' ? 'linksgängig' : 'rechtsgängig'}), Querschnitt ${profTxt}.` });
     }
+    if (it.kind === 'frame') {
+      const m = Model.frameMetrics(it, V);
+      const profTxt = m.profileMode === 'sketch'
+        ? `eigenes Profil${m.profName ? ` („${m.profName}“)` : ''}`
+        : `${m.spec ? m.spec.shapeLabel : 'Profil'}${m.spec && m.spec.sizeLabel ? ` (${m.spec.sizeLabel})` : ''}`;
+      const srcTxt = m.sourceKind === 'sketch3d' ? 'einer 3D-Skizze' : 'einer Skizze';
+      lines.push({ k: 'op', t: `Erzeugt ein Gestell aus ${m.count === 1 ? '1 Stab' : `${m.count} Stäben`} entlang ${srcTxt} mit Querschnitt ${profTxt} (Gesamtlänge ${Units.fmtLenU(m.totalLength, 1, doc)}).` });
+    }
     if (it.kind === 'mirrorStep') {
       const p = it.p || {};
       const fNames = (Array.isArray(p.features) ? p.features : []).map((fid) => Model.find(doc, fid)).filter(Boolean).map((x) => `„${Model.label(x.item)}“`);

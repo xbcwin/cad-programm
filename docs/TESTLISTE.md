@@ -3099,6 +3099,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Alle 7 Profilarten bauen mit `GeomCheck` = 0 Fehlern und korrektem Volumen; Rückgängig/Wiederherstellen, Projekt-Validierung, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-207]`)
 - [ ] **Von Hand**: Im Browser im Einfach- und Profi-Modus über „Bauteile → Profile“ ein I-Träger- und ein Rundrohr-Profil auf eine Körperfläche ziehen und verschiedene Normgrößen durchschalten.
 
+## Profile, Schritt 3: Gestell aus Linien (Auto [A-209], PR-03, PR-06)
+- [x] Im **Einfach**-Modus ausgeblendet, im **Profi**-Modus im Bauteile-/Profile-Bereich (`#add-frame-step` mit `data-help="frame"`), im Skizzen-Abschluss (`#st-mode-frame`), an 3D-Skizzen (`#sk3-to-frame`), in der Werkzeugleiste und über die Befehlssuche (`frame`, `frame-from-sketch`) erreichbar (Klicktest `[A-209]`)
+- [x] 2D-Skizze mit Rechteck 400 × 300 mm → Formschritt „Gestell“ mit Vierkantrohr 20 × 20 × 2 mm erzeugt 4 einzelne Profilkörper (`bodies.length === 4`, Baum zeigt 4 Körperzeilen, Volumen `201600 mm³` ±1 %, Hüllmaße `420 × 320 × 20 mm`, `GeomCheck` = 0 Fehler) (Klicktest `[A-209]`)
+- [x] Wechsel auf Rundrohr Ø 25 × 2 mm sowie Wechsel auf ein eigenes geschlossenes Profil aus einer Kreisskizze (Ø 16 mm, PR-06) erzeugt jeweils 4 saubere Körper mit exaktem Volumen und `GeomCheck` = 0 Fehlern (Klicktest `[A-209]`)
+- [x] 3D-Skizze mit 3 Linien (100, 80, 60 mm) → `#sk3-to-frame` erzeugt 3 Profilkörper (`34560 mm³`, `GeomCheck` = 0 Fehler); Rückgängig/Wiederherstellen, Projekt-Validierung, `Explain.local()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-209]`)
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine gemischte Skizze aus Linien und Bögen sowie eine 3D-Skizze zeichnen, als Gestell mit L- oder U-Profil erzeugen, Drehung/Versatz rechts testen und einzelne Stäbe im Verlauf links ein- und ausblenden.
+
 ## Fehler melden
 
 ```

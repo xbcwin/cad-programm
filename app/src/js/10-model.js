@@ -24,6 +24,7 @@ const KINDS = {
   loft: { get label() { return T('kind.loft'); }, params: [] },
   sweep: { get label() { return T('kind.sweep'); }, params: [] },
   helix: { get label() { return T('kind.helix'); }, params: [] },
+  frame: { get label() { return T('kind.frame'); }, params: [] },
   import: { get label() { return T('kind.import'); }, params: [] },
   group: { get label() { return T('kind.group'); }, params: [] },
   part: { get label() { return T('kind.part'); }, params: [] },
@@ -572,6 +573,8 @@ const Model = (() => {
       if (it.kind === 'wrap' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'wickelt um' });
       if (it.kind === 'sweep' && it.p && it.p.wrapId) out.push({ from: me, to: top(it.p.wrapId), what: 'folgt gewickelter Linie von' });
       if (it.kind === 'sweep' && it.p && it.p.sketch3dId) out.push({ from: me, to: top(it.p.sketch3dId), what: 'folgt 3D-Skizze' });
+      if (it.kind === 'frame' && it.p && it.p.sketch3dId) out.push({ from: me, to: top(it.p.sketch3dId), what: 'folgt 3D-Skizze' });
+      if (it.kind === 'frame' && it.p && it.p.profId && find(doc, it.p.profId)) out.push({ from: me, to: top(it.p.profId), what: 'nutzt Profil-Skizze' });
       if (it.kind === 'sweep' && it.p && it.p.cable) {
         if (it.p.cable.bindA && it.p.cable.bindA.id) out.push({ from: me, to: top(it.p.cable.bindA.id), what: 'angeschlossen an' });
         if (it.p.cable.bindB && it.p.cable.bindB.id) out.push({ from: me, to: top(it.p.cable.bindB.id), what: 'angeschlossen an' });
@@ -833,6 +836,7 @@ const Model = (() => {
       else if (it.kind === 'loft') o.p = loftParams(it, ownV);
       else if (it.kind === 'sweep') o.p = sweepParams(it, ownV);
       else if (it.kind === 'helix') o.p = helixParams(it, ownV);
+      else if (it.kind === 'frame') o.p = frameParams(it, ownV);
       else if (it.kind === 'rib') o.p = ribParams(it, ownV);
       else if (it.kind === 'vent') o.p = ventParams(it, ownV);
       else if (it.kind === 'fins') o.p = finsParams(it, ownV);
@@ -2773,6 +2777,239 @@ const Model = (() => {
     }
     return { form: m.form, by: m.by, dir: m.dir, startAngle: m.startAngle, d: m.d, r1: m.r1, r2: m.r2, turns: m.turns, pitch: m.pitch, height: m.height, shape: m.shape === 'sketch' && !prof ? 'circle' : m.shape, wireD: m.wireD, profW: m.profW, profH: m.profH, wall: m.wall, prof };
   }
+  // Gestell aus Linien (PR-03, PR-06): alle Linien/Kurven einer 2D- oder 3D-Skizze als Profile
+  function frameSegsFrom2d(sketch, V = {}) {
+    const ents = sketch ? Solver.cached(sketch, V).ents : [];
+    const pl = (sketch && sketch.plane) || { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const o = Array.isArray(pl.o) && pl.o.length >= 3 ? pl.o.map(Number) : [0, 0, 0];
+    const nv0 = Array.isArray(pl.n) && pl.n.length >= 3 ? pl.n.map(Number) : [0, 0, 1];
+    const nl = v3.len(nv0);
+    const nv = nl > 1e-12 ? v3.mul(nv0, 1 / nl) : [0, 0, 1];
+    const xvRaw = Array.isArray(pl.x) && pl.x.length >= 3 ? pl.x.map(Number) : [1, 0, 0];
+    let xv0 = v3.sub(xvRaw, v3.mul(nv, v3.dot(xvRaw, nv)));
+    if (v3.len(xv0) < 1e-9) {
+      const ref = Math.abs(nv[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+      xv0 = v3.cross(ref, nv);
+    }
+    const xv = v3.mul(xv0, 1 / v3.len(xv0));
+    const yv = v3.cross(nv, xv);
+    const P3 = (q) => [
+      o[0] + q[0] * xv[0] + q[1] * yv[0],
+      o[1] + q[0] * xv[1] + q[1] * yv[1],
+      o[2] + q[0] * xv[2] + q[1] * yv[2],
+    ];
+    const segs = [];
+    const seenLines = new Set();
+    const qpt = (pt) => pt.map((v) => Math.round(v * 1e4)).join(',');
+    let totalLength = 0;
+    const segLen2d = (s) => {
+      if (s.t === 'line') return Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
+      if (typeof SK !== 'undefined' && SK.segPoints) {
+        const pts = SK.segPoints(s);
+        let l = 0;
+        for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+        return l;
+      }
+      return Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
+    };
+    const push2d = (s) => {
+      if (!s) return;
+      const L = segLen2d(s);
+      if (!(L > 1e-4)) return;
+      if (s.t === 'line') {
+        const a = P3(s.a), b = P3(s.b);
+        const k = [qpt(a), qpt(b)].sort().join('|');
+        if (seenLines.has(k)) return;
+        seenLines.add(k);
+        segs.push({ t: 'line', a, b });
+        totalLength += L;
+      } else if (s.t === 'arc') {
+        segs.push({ t: 'arc', a: P3(s.a), m: P3(s.m), b: P3(s.b) });
+        totalLength += L;
+      } else if (s.t === 'bez') {
+        segs.push({ t: 'bez', a: P3(s.a), c1: P3(s.c1), c2: P3(s.c2), b: P3(s.b) });
+        totalLength += L;
+      }
+    };
+    for (const e of ents) {
+      if (!e || e.con || e.type === 'point' || e.type === 'text') continue;
+      if (e.type === 'line') {
+        if (e.a && e.b) push2d({ t: 'line', a: e.a, b: e.b });
+      } else if (e.type === 'arc') {
+        if (e.a && e.m && e.b) push2d({ t: 'arc', a: e.a, m: e.m, b: e.b });
+      } else if (e.type === 'rect' || e.type === 'poly' || e.type === 'slot') {
+        if (e.type === 'slot' && SK.d2(e.a, e.b) < 1e-9) {
+          const cx = e.a[0], cy = e.a[1], r = e.r;
+          if (r > 1e-4) {
+            push2d({ t: 'arc', a: [cx + r, cy], m: [cx, cy + r], b: [cx - r, cy] });
+            push2d({ t: 'arc', a: [cx - r, cy], m: [cx, cy - r], b: [cx + r, cy] });
+          }
+        } else {
+          for (const s of SK.segsOf(e) || []) push2d(s);
+        }
+      } else if (e.type === 'circle') {
+        const cx = e.c[0], cy = e.c[1], r = e.r;
+        if (r > 1e-4) {
+          push2d({ t: 'arc', a: [cx + r, cy], m: [cx, cy + r], b: [cx - r, cy] });
+          push2d({ t: 'arc', a: [cx - r, cy], m: [cx, cy - r], b: [cx + r, cy] });
+        }
+      } else if (e.type === 'ellipse') {
+        if (e.rx > 1e-4 && e.ry > 1e-4 && SK.ellArcBez) {
+          for (const s of SK.ellArcBez(e.c, e.rx, e.ry, e.rot || 0, 0, Math.PI * 2, true)) push2d(s);
+        }
+      } else if (e.type === 'ellarc') {
+        if (e.rx > 1e-4 && e.ry > 1e-4 && SK.ellArcBez) {
+          for (const s of SK.ellArcBez(e.c, e.rx, e.ry, e.rot || 0, e.a0, e.a1, e.ccw !== false)) push2d(s);
+        }
+      } else if (e.type === 'spline') {
+        if (e.pts && e.pts.length >= 2 && SK.splineBez) {
+          for (const s of SK.splineBez(e.pts, !!e.closed, e)) push2d(s);
+        }
+      } else if (e.type === 'conic') {
+        if (e.a && e.m && e.b && SK.conicBez) {
+          for (const s of SK.conicBez(e.a, e.m, e.b, e.rho)) push2d(s);
+        }
+      } else if (e.type === 'bridge') {
+        if (e.pts && e.pts.length >= 4 && SK.bridgeBez) {
+          for (const s of SK.bridgeBez(e.pts)) push2d(s);
+        } else if (e.a && e.b) {
+          push2d({ t: 'line', a: e.a, b: e.b });
+        }
+      }
+    }
+    return { segs, planeN: nv, totalLength };
+  }
+  function frameSegsFrom3d(sk3, V = {}, relMat = null) {
+    const res = sketch3dResolve(sk3, V);
+    const tp = (q) => (relMat ? new THREE.Vector3(q[0], q[1], q[2]).applyMatrix4(relMat).toArray() : q.slice());
+    const segs = [];
+    let totalLength = 0;
+    for (const e of res.ents || []) {
+      if (!e || e.con) continue;
+      const L = sketch3dEntLen(e);
+      if (!(L > 1e-4)) continue;
+      if (e.type === 'arc' && e.m) {
+        const a = tp(e.a), m = tp(e.m), b = tp(e.b);
+        const cr = v3.cross(v3.sub(m, a), v3.sub(b, a));
+        if (v3.len(cr) > 1e-6) segs.push({ t: 'arc', a, m, b });
+        else segs.push({ t: 'line', a, b });
+      } else if (e.a && e.b) {
+        segs.push({ t: 'line', a: tp(e.a), b: tp(e.b) });
+      }
+      totalLength += L;
+    }
+    return { segs, planeN: null, totalLength };
+  }
+  function frameProfileInfo(p = {}, V = {}) {
+    const profileMode = p.profileMode === 'sketch' ? 'sketch' : 'library';
+    if (profileMode === 'sketch') {
+      let profSk = p.prof || null;
+      if (!profSk && p.profId) {
+        const doc = curDoc || (typeof App !== 'undefined' ? App.doc : null);
+        const pf = doc ? find(doc, p.profId) : null;
+        if (pf && pf.item && pf.item.p && pf.item.p.sketch) profSk = pf.item.p.sketch;
+      }
+      let prof = null;
+      if (profSk && typeof SK !== 'undefined') {
+        const regs = SK.regions(Solver.cached(profSk, V).ents).sort((a, b) => b.area - a.area);
+        if (regs.length) {
+          const Lp = regs[0].outer;
+          let cx = 0, cy = 0, x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+          for (const q of Lp.poly) {
+            cx += q[0]; cy += q[1];
+            if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0];
+            if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1];
+          }
+          const n = Lp.poly.length || 1;
+          cx /= n; cy /= n;
+          const w = Math.max(0.5, x1 - x0), h = Math.max(0.5, y1 - y0);
+          const holesArea = regs[0].holes.reduce((s, x) => s + (x.area || 0), 0);
+          const area = Math.max(0.01, regs[0].area - holesArea);
+          prof = { outer: Lp.k, holes: regs[0].holes.map((x) => x.k), c: [cx, cy], w, h, area };
+        }
+      }
+      return {
+        profileMode: 'sketch', prof, spec: null,
+        area: prof ? prof.area : 0,
+        halfExt: prof ? Math.hypot(prof.w, prof.h) / 2 : 10,
+        profName: p.profName || '',
+      };
+    }
+    const shape = p.shape || 'squareTube';
+    const defSz = typeof profileDefaultSize === 'function' ? profileDefaultSize(shape) : '20x20x2';
+    const size = p.size || (shape === 'squareTube' ? '20x20x2' : defSz);
+    const rw = num(p.w, V, 0), rh = num(p.h, V, 0), rt = num(p.t, V, 0), rtf = num(p.tf, V, 0);
+    const spec = typeof profileMetrics === 'function'
+      ? profileMetrics({ shape, size, w: rw > 0 ? rw : null, h: rh > 0 ? rh : null, t: rt > 0 ? rt : null, tf: rtf > 0 ? rtf : null, length: 100 })
+      : { shape, shapeLabel: 'Vierkantrohr', norm: 'DIN EN 10219', size, sizeLabel: '20 × 20 × 2 mm', w: 20, h: 20, t: 2, tf: 2, area: 144 };
+    return {
+      profileMode: 'library', prof: null, spec,
+      area: spec.area || 0,
+      halfExt: Math.hypot(spec.w || 20, spec.h || 20) / 2,
+      profName: '',
+    };
+  }
+  function frameParams(it, V = {}) {
+    const p = it && it.p ? it.p : it || {};
+    const rot = num(p.rot, V, 0);
+    const offX = num(p.offX, V, 0);
+    const offY = num(p.offY, V, 0);
+    const pi = frameProfileInfo(p, V);
+    const base = {
+      segs: [], planeN: null, profileMode: pi.profileMode,
+      spec: pi.spec, prof: pi.prof, rot, offX, offY,
+      ...(p.sketch3dId ? { sketch3dId: p.sketch3dId } : {}),
+    };
+    let segRes = null, missing = null;
+    if (p.sketch3dId) {
+      const doc = curDoc || (typeof App !== 'undefined' ? App.doc : null);
+      const act = doc ? activeItems(doc) : [];
+      const skItem = act.find((x) => x.id === p.sketch3dId);
+      if (!skItem || skItem.kind !== 'sketch3d') {
+        missing = 'Gestell: Die 3D-Skizze fehlt, ist unterdrückt oder liegt hinter dem Marker.';
+      } else {
+        const rel = it && it.id ? localMatrix(it, new THREE.Matrix4()).invert().multiply(localMatrix(skItem, new THREE.Matrix4())) : null;
+        segRes = frameSegsFrom3d(skItem.p && skItem.p.sketch3d, V, rel);
+        if (!segRes.segs.length) missing = 'Gestell: Die 3D-Skizze enthält noch keine Linien oder Bögen.';
+      }
+    } else {
+      segRes = frameSegsFrom2d(p.sketch, V);
+      if (!segRes.segs.length) missing = 'Gestell: Die Skizze enthält noch keine Linien oder Kurven.';
+    }
+    if (!missing && pi.profileMode === 'sketch' && !pi.prof) {
+      missing = 'Gestell: Wähle eine geschlossene Profil-Skizze.';
+    }
+    return {
+      ...base,
+      segs: segRes ? segRes.segs : [],
+      planeN: segRes ? segRes.planeN : null,
+      totalLength: segRes ? segRes.totalLength : 0,
+      ...(missing ? { missing } : {}),
+    };
+  }
+  function frameMetrics(it, V = {}) {
+    const p = it && it.p ? it.p : it || {};
+    const fp = frameParams(it, V);
+    const pi = frameProfileInfo(p, V);
+    const totalLength = fp.totalLength || 0;
+    const area = pi.area || 0;
+    return {
+      count: fp.segs.length,
+      totalLength: round(totalLength, 2),
+      sourceKind: p.sketch3dId ? 'sketch3d' : 'sketch',
+      profileMode: fp.profileMode,
+      spec: fp.spec,
+      prof: fp.prof,
+      profName: pi.profName,
+      rot: fp.rot,
+      offX: fp.offX,
+      offY: fp.offY,
+      area: round(area, 2),
+      approxVolume: round(area * totalLength, 1),
+      steelKg: round((area * totalLength * 7.85) / 1e6, 3),
+      missing: fp.missing || null,
+    };
+  }
   // Zeitleiste: nur Schritte vor dem Marker zählen, unterdrückte Schritte werden übersprungen
   function activeItems(doc) {
     const end = doc.rollback == null ? doc.items.length : clamp(doc.rollback, 0, doc.items.length);
@@ -2921,6 +3158,23 @@ const Model = (() => {
       const rmax = Math.max(m.r1, m.r2) + m.radHalf;
       return [-rmax, -rmax, 0, rmax, rmax, m.totalHeight];
     }
+    if (it.kind === 'frame') {
+      const fp = frameParams(it, V);
+      if (fp.segs.length) {
+        const box = new THREE.Box3();
+        for (const s of fp.segs) {
+          for (const pk of ['a', 'b', 'm', 'c1', 'c2']) {
+            if (Array.isArray(s[pk]) && s[pk].length >= 3) box.expandByPoint(new THREE.Vector3(...s[pk]));
+          }
+        }
+        const pad = fp.spec
+          ? Math.max(fp.spec.w || 20, fp.spec.h || 20) / 2
+          : (fp.prof ? Math.max(fp.prof.w || 20, fp.prof.h || 20) / 2 : 15);
+        box.expandByScalar(pad + Math.abs(fp.offX || 0) + Math.abs(fp.offY || 0));
+        if (!box.isEmpty()) return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
+      }
+      return null;
+    }
     if (it.kind === 'part') {
       const p = resolveP(it.p || {}, V);
       const r = Math.max(1, Number(p.d) || 6) / 2, dep = Math.max(2, Number(p.depth || p.length || p.h) || 10);
@@ -3000,6 +3254,14 @@ const Model = (() => {
         if (m.form === 'spiral') return `Spirale R ${f(m.r1)}→${f(m.r2)}${u} · ${fmt(m.turns, 1)} Wdg`;
         if (m.form === 'cone') return `R ${f(m.r1)}→${f(m.r2)}${u} · ${fmt(m.turns, 1)} Wdg · H ${f(m.height)}${u}`;
         return `Ø ${f(m.d)}${u} · ${fmt(m.turns, 1)} Wdg · P ${f(m.pitch)}${u}`;
+      }
+      case 'frame': {
+        const fm = frameMetrics(it, V);
+        const cntTxt = fm.count === 1 ? '1 Stab' : `${fm.count} Stäbe`;
+        const profTxt = fm.profileMode === 'sketch'
+          ? (fm.profName ? `Skizze „${fm.profName}“` : 'Eigenes Profil')
+          : `${fm.spec ? fm.spec.shapeLabel : 'Profil'}${fm.spec && fm.spec.isNorm ? ' ' + fm.spec.size : ''}`;
+        return `${cntTxt} · ${profTxt}${fm.totalLength > 0 ? ` · ${f(fm.totalLength)}${u}` : ''}`;
       }
       case 'extrude': {
         if (p.extent === 'toNext' || p.extent === 'toFace') {
@@ -3864,6 +4126,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { TEXTURE_KINDS, normalizeTexture, normalizeDecal, matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, remapChildIds, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, cableGeometry, cableMetrics, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, mountPatternParams, portCutoutParams, magnetPocketParams, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, withPartVariant, withSkeletonOverrides, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { TEXTURE_KINDS, normalizeTexture, normalizeDecal, matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, remapChildIds, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, cableGeometry, cableMetrics, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, frameSegsFrom2d, frameParams, frameMetrics, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, mountPatternParams, portCutoutParams, magnetPocketParams, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, withPartVariant, withSkeletonOverrides, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

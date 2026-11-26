@@ -43,7 +43,7 @@ const Timeline = (() => {
   }
   function iconFor(it) {
     if (it.kind === 'part') { const d = LIBMAP[(it.p || {}).lib]; return d && d.icon ? d.icon : 'bolt'; }
-    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', helix: 'helix', import: 'folder', group: 'group', ref: 'parts', transform: 'moveStep', scale: 'scaleBody', deform: 'deform', thicken: 'thicken', directFace: 'directFace', rib: 'rib', vent: 'vent', fins: 'fins', fillPattern: 'patternFill', mountPattern: 'mountPattern', portCutout: 'portCutout', magnetPocket: 'magnetPocket', web: 'web', wrap: 'wrap', emboss: 'emboss', splitFace: 'splitFace', dome: 'dome', deleteFace: 'deleteFace', replaceFace: 'replaceFace', moveEdge: 'moveEdge', editHole: 'editHole', editFillet: 'editFillet', simplify: 'simplify', mirrorStep: 'mirror', deleteBody: 'deleteBody', boss: 'boss', lipGroove: 'lipGroove', undercut: 'undercut', circlipGroove: 'circlipGroove', keyway: 'keyway', splineProfile: 'splineShaft', knurl: 'knurl', gripPattern: 'gripPattern', sketch3d: 'sketch3d', stackHole: 'holeWizard', asmCut: 'boolSubtract' })[it.kind] || 'cube';
+    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', helix: 'helix', frame: 'frame', import: 'folder', group: 'group', ref: 'parts', transform: 'moveStep', scale: 'scaleBody', deform: 'deform', thicken: 'thicken', directFace: 'directFace', rib: 'rib', vent: 'vent', fins: 'fins', fillPattern: 'patternFill', mountPattern: 'mountPattern', portCutout: 'portCutout', magnetPocket: 'magnetPocket', web: 'web', wrap: 'wrap', emboss: 'emboss', splitFace: 'splitFace', dome: 'dome', deleteFace: 'deleteFace', replaceFace: 'replaceFace', moveEdge: 'moveEdge', editHole: 'editHole', editFillet: 'editFillet', simplify: 'simplify', mirrorStep: 'mirror', deleteBody: 'deleteBody', boss: 'boss', lipGroove: 'lipGroove', undercut: 'undercut', circlipGroove: 'circlipGroove', keyway: 'keyway', splineProfile: 'splineShaft', knurl: 'knurl', gripPattern: 'gripPattern', sketch3d: 'sketch3d', stackHole: 'holeWizard', asmCut: 'boolSubtract' })[it.kind] || 'cube';
   }
   // Zeitleiste des Projekts – oder des Bauteils, das gerade bearbeitet wird
   function owner(doc = App.doc) { const c = App.ctx ? doc.items.find((x) => x.id === App.ctx) : null; return c || doc; }
@@ -191,6 +191,7 @@ const Timeline = (() => {
     if (it.kind === 'sketch3d') {
       add('edit', T('sk3.editBtn'), () => Sketch.edit3d(it.id));
       add('sweep', T('ctx.alongPath'), () => Features.sweepFromSketch3d(it.id));
+      if (!ViewPrefs.simple) add('frame', T('kind.frame'), () => Features.frameFromSketch3d(it.id));
     } else {
       add('edit', T('common.edit'), () => App.select([it.id]));
     }

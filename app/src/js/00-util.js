@@ -775,6 +775,7 @@ const IC = {
   profileT: '<path d="M4 4h16v4.5h-5.75V20h-4.5V8.5H4z" fill="currentColor" opacity=".18"/><path d="M4 4h16v4.5h-5.75V20h-4.5V8.5H4z"/>',
   profileI: '<path d="M5 4h14v4h-5v8h5v4H5v-4h5V8H5z" fill="currentColor" opacity=".18"/><path d="M5 4h14v4h-5v8h5v4H5v-4h5V8H5z"/>',
   profileFlat: '<rect x="3" y="9" width="18" height="6" rx=".8" fill="currentColor" opacity=".18"/><rect x="3" y="9" width="18" height="6" rx=".8"/>',
+  frame: '<rect x="3.5" y="4.5" width="17" height="15" rx="1"/><rect x="7" y="8" width="10" height="8" rx=".4"/><path d="M3.5 4.5 7 8M20.5 4.5 17 8M3.5 19.5 7 16M20.5 19.5 17 16" opacity=".7"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -3021,6 +3022,11 @@ const HELP = {
   "tip": "Norm-Profil (Vierkantrohr, Rundrohr, L-, U-, T-, I-Profil oder Flachstahl) in wählbarer Länge",
   "hilfe": "Erzeugt ein Konstruktionsprofil mit genormtem Querschnitt (Vierkantrohr, Rundrohr, L-Profil, U-Profil, T-Profil, I-Träger oder Flachstahl) und beliebiger Länge. Im Eigenschaften-Panel kannst du jederzeit zwischen allen Profilarten, den passenden Normgrößen oder eigenen Maßen wechseln.",
   "tipp": "Wähle „Eigene Maße“ bei Normgröße (oder gib direkt Breite, Höhe oder Wandstärke ein), um Sonderprofile außerhalb der Standardtabelle zu erzeugen."
+ },
+ "frame": {
+  "tip": "Gestell aus Linien: lässt ein Norm- oder eigenes Skizzenprofil entlang aller Linien einer Skizze oder 3D-Skizze laufen (Profi)",
+  "hilfe": "Erzeugt im Profi-Modus aus jeder Linie, jedem Bogen oder jeder Kurve einer 2D- oder 3D-Skizze automatisch einen eigenen Profilstab – wahlweise mit einem Querschnitt aus der Profil-Sammlung (Vierkant, Rundrohr, L, U, T, I, Flach) oder aus einer eigenen geschlossenen Skizze.",
+  "tipp": "Zeichne zuerst das Grundgerüst (z. B. ein Rechteck oder eine 3D-Skizze) und wähle nach „Fertig“ einfach „Gestell“ – im Eigenschaften-Panel rechts kannst du Querschnitt, Normgröße, eigenes Profil und Drehung jederzeit umschalten."
  }
 };
 
