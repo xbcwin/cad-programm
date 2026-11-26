@@ -3037,6 +3037,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Befehlssuche (`svgLogo`, `ral-colors`), Speichern/Laden, Hilfetexte (`HELP.svgLogo`, `HELP.ralColors`), Erklärungen und DE/EN-Texte geprüft (Klicktest `[A-194]`)
 - [ ] **Von Hand**: Im Browser ein eigenes Vereins- oder Firmen-Logo als `.svg` laden, einmal auf einer Platte vertieft und einmal als Prägung auf einen Quader setzen sowie im 3D-Bild mit RAL 3020 Verkehrsrot und RAL 7016 Anthrazitgrau einfärben.
 
+## Direkt bearbeiten: Fläche löschen und Lücke heilen (Auto [A-199], DB-03)
+- [x] Profi-Sichtbarkeit & Befehlssuche (`delete-face`, `#ctx-delete-face` nur im Profi-Modus) (Klicktest `[A-199]`)
+- [x] Quader 20×20×20 mit Durchgangsbohrung Ø 8 (`op: 'cut'` und Top-Level-`role: 'hole'`) sowie Sackloch: Bohrungsfläche löschen → 6 ebene Flächen, 0 Zylinderflächen, Volumen = `8000,0 mm³`, `GeomCheck` = 0 Fehler (Klicktest `[A-199]`)
+- [x] Quader mit einzelner und vierfachen Kantenrundungen: Rundungsflächen löschen → Nachbarflächen verlängern und schließen Lücke exakt zu `8000,0 mm³` mit 0 Geometriefehlern (Klicktest `[A-199]`)
+- [x] Unterdrücken, Rückgängig/Wiederherstellen, Fehlerfall bei unheilbarer Außenwand, `Store.validateProject()`, `Explain.local()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-199]`)
+- [ ] **Von Hand**: Im Browser im Profi-Modus an einem Bauteil mit Bohrungen, Sackloch und abgerundeten Kanten per Klick oder Rechtsklick „Fläche löschen“ wählen und die geheilte Geometrie prüfen.
+
 ## Fehler melden
 
 ```

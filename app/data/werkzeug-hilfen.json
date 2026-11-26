@@ -2163,5 +2163,10 @@
     "tip": "Farbe aus der genormten RAL-Classic-Farbtafel wählen (z. B. RAL 3020 Verkehrsrot)",
     "hilfe": "Öffnet die lokale RAL-Classic-Farbtabelle mit über 100 Standard-Farbtönen aus allen neun Farbgruppen (Gelb 1000 bis Weiß/Schwarz 9000). Du kannst nach RAL-Nummer oder Farbname suchen und die Farbe direkt auf Körper, Flächen oder Teilkörper anwenden.",
     "tipp": "Tippe im Suchfeld einfach die vierstellige Nummer wie „3020“ oder „7016“ ein und drücke Enter, um den Farbton sofort zu übernehmen."
+  },
+  "deleteFace": {
+    "tip": "Fläche (z. B. Loch, Rundung oder Fase) löschen und Lücke durch Verlängern der Nachbarflächen schließen (Profi)",
+    "hilfe": "Entfernt eine oder mehrere gewählte Flächen direkt aus einem Körper (auch an importierten STEP-/BREP-Teilen) und heilt die Lücke, indem Nachbarflächen verlängert oder Innenkonturen geschlossen werden. So verschwinden Bohrungen, Sacklöcher, Zapfen, Rundungen oder Fasen mit einem Klick als unterdrückbarer Schritt im Verlauf.",
+    "tipp": "Halte Umschalt beim Klicken, um mehrere Flächen (z. B. alle vier Rundungen einer Kante) auf einmal zu wählen, oder füge rechts im Eigenschaften-Panel weitere Flächen hinzu."
   }
 }

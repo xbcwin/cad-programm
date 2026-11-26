@@ -704,6 +704,7 @@ const IC = {
   extSpring: '<circle cx="12" cy="5" r="2.2"/><path d="M10.5 7.5 16 9.5 8 11.8 16 14 8 16.2l5.5 1.3"/><circle cx="12" cy="19.5" r="2.2"/>',
   replace: '<path d="M16 3l4 4-4 4 M20 7H8a4 4 0 0 0-4 4v1 M8 21l-4-4 4-4 M4 17h12a4 4 0 0 0 4-4v-1"/>',
   deleteBody: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z" stroke-dasharray="2.5 2" opacity=".55"/><path d="M9 9l6 6M15 9l-6 6" />',
+  deleteFace: '<rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="currentColor" opacity=".16"/><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="12" cy="12" r="4" stroke-dasharray="2.2 1.6"/><path d="M10 10l4 4M14 10l-4 4" />',
   helix: '<path d="M6 6.5c0-1.9 2.7-3 6-3s6 1.1 6 3-2.7 3-6 3-6 1.1-6 3 2.7 3 6 3 6 1.1 6 3-2.7 3-6 3-6-1.1-6-3" /><path d="M6 6.5c0 1.4 1.6 2.3 4 2.8 M18 12.5c0 1.4-1.6 2.3-4 2.8" opacity=".45"/>',
   stretch: '<path d="M3 7h11v10H3z" opacity=".45"/><path d="M10 4h8v16h-8z" stroke-dasharray="2.5 2"/><path d="M14 12h7M18 9l3 3-3 3"/>',
   patternFill: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="16" r="1.4" fill="currentColor" stroke="none"/>',
@@ -2951,6 +2952,11 @@ const HELP = {
   "tip": "Farbe aus der genormten RAL-Classic-Farbtafel wählen (z. B. RAL 3020 Verkehrsrot)",
   "hilfe": "Öffnet die lokale RAL-Classic-Farbtabelle mit über 100 Standard-Farbtönen aus allen neun Farbgruppen (Gelb 1000 bis Weiß/Schwarz 9000). Du kannst nach RAL-Nummer oder Farbname suchen und die Farbe direkt auf Körper, Flächen oder Teilkörper anwenden.",
   "tipp": "Tippe im Suchfeld einfach die vierstellige Nummer wie „3020“ oder „7016“ ein und drücke Enter, um den Farbton sofort zu übernehmen."
+ },
+ "deleteFace": {
+  "tip": "Fläche (z. B. Loch, Rundung oder Fase) löschen und Lücke durch Verlängern der Nachbarflächen schließen (Profi)",
+  "hilfe": "Entfernt eine oder mehrere gewählte Flächen direkt aus einem Körper (auch an importierten STEP-/BREP-Teilen) und heilt die Lücke, indem Nachbarflächen verlängert oder Innenkonturen geschlossen werden. So verschwinden Bohrungen, Sacklöcher, Zapfen, Rundungen oder Fasen mit einem Klick als unterdrückbarer Schritt im Verlauf.",
+  "tipp": "Halte Umschalt beim Klicken, um mehrere Flächen (z. B. alle vier Rundungen einer Kante) auf einmal zu wählen, oder füge rechts im Eigenschaften-Panel weitere Flächen hinzu."
  }
 };
 

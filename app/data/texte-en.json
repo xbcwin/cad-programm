@@ -5302,5 +5302,16 @@
   "ral.empty": "No matching RAL color found.",
   "ral.pickedToast": "Selected {code} ({name})",
   "ral.selectBodyFirst": "Select at least one body first to assign a RAL color.",
-  "ral.approxHint": "Note: Digital sRGB approximations for RAL Classic (D65); screens vary slightly."
+  "ral.approxHint": "Note: Digital sRGB approximations for RAL Classic (D65); screens vary slightly.",
+  "kind.deleteFace": "Delete face",
+  "ctx.deleteFaces": "Delete faces",
+  "ctx.deleteFaceTip": "Delete selected face and heal the gap by extending neighboring faces (Pro)",
+  "ctx.deleteFaceStepLabel": "Delete face",
+  "dlg.tb.deleteFaceTip": "Delete a face (e.g. hole or fillet) and heal the gap",
+  "panel.deleteFace.facesTitle": "Deleted faces",
+  "panel.deleteFace.addFace": "Delete another face",
+  "panel.deleteFace.pickFace": "Re-pick face",
+  "panel.deleteFace.removeFace": "Remove face from this step",
+  "panel.deleteFace.hint": "Removes the chosen faces (e.g. hole, pocket, fillet or chamfer) and heals the gap by extending neighboring faces – undoable and suppressible.",
+  "toast.deleteFaceAdded": "Face deleted and gap healed. Add more faces in the panel on the right."
 }

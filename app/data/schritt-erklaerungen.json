@@ -529,5 +529,10 @@
     "was": "Erzeugt aus einer SVG-Vektorgrafik (Datei, Quelltext oder Symbol) ein 3D-Logo – als freistehenden erhabenen Körper, auf einer abgerundeten Platte oder als Prägung auf einer Körperfläche.",
     "wozu": "Bringt Firmenlogos, Embleme, Schriftzüge oder eigene Grafiken sauber und maßhaltig auf Gehäuse, Schilder und Bauteile.",
     "achtung": "Schriften müssen in der SVG-Datei vorher in Pfade umgewandelt sein; offene Linien ohne geschlossene Kontur ergeben keinen Körper."
+  },
+  "deleteFace": {
+    "was": "Löscht eine oder mehrere gewählte Flächen (z. B. Bohrung, Tasche, Zapfen, Rundung oder Fase) aus einem Körper und schließt die entstandene Lücke wieder zu einem geschlossenen Volumen.",
+    "wozu": "Ideal zum schnellen Entfernen von Löchern, Rundungen oder Fasen – besonders an importierten STEP-/BREP-Teilen ohne eigenen Skizzen-Verlauf.",
+    "achtung": "Wenn eine gelöschte Fläche den Körper nicht eindeutig schließen lässt (etwa eine einzelne Außenwand eines Quaders), meldet der Kern einen Fehler; unterdrücke den Schritt oder wähle die passenden Flächen zusammen."
   }
 }
