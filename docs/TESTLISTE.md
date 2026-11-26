@@ -3106,6 +3106,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] 3D-Skizze mit 3 Linien (100, 80, 60 mm) → `#sk3-to-frame` erzeugt 3 Profilkörper (`34560 mm³`, `GeomCheck` = 0 Fehler); Rückgängig/Wiederherstellen, Projekt-Validierung, `Explain.local()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-209]`)
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine gemischte Skizze aus Linien und Bögen sowie eine 3D-Skizze zeichnen, als Gestell mit L- oder U-Profil erzeugen, Drehung/Versatz rechts testen und einzelne Stäbe im Verlauf links ein- und ausblenden.
 
+## Profile, Schritt 2: Alu-Nutprofile mit Zubehör (Auto [A-208], PR-02)
+- [x] Unter „Bibliothek → Profile“ sind „Alu-Nutprofile & Zubehör“ (Alu-Nutprofil, Profil-Winkel, Nutenstein, Profil-Endkappe) in **Einfach** und **Profi** sichtbar sowie über die Befehlssuche einfügbar (Klicktest `[A-208]`)
+- [x] Nutprofil 20×20, Länge 300 mm einfügen ergibt geschlossenen B-Rep-Körper (`20 × 20 × 300 mm`, exaktes Volumen < 1 % Abweichung) mit 4 echten T-Nuten (4 Nutböden, 8 Lippenflanken) und 1 Mittelbohrung Ø 5 mm (Klicktest `[A-208]`)
+- [x] Winkel 20, Nutenstein 20 und Endkappe 20×20 setzen sich per 1-Klick-Knopf (und ein separat eingefügter Winkel per „Winkel ans Profil setzen“) bündig ans Profil mit 0 Durchdringungen im `clashes`-Check (Klicktest `[A-208]`)
+- [x] Alle Baureihen 20, 30, 40, 45 (Nut 6/8/10) inkl. Doppelprofil 20×40 (2 Bohrungen) und Zubehör (inkl. Winkel mit Zentriernasen) bestehen `GeomCheck` = 0 Fehler; Rückgängig/Wiederherstellen, Validierung, Hilfen, Erklärungen und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-208]`)
+- [ ] **Von Hand**: Im Browser im Einfach- und Profi-Modus ein Alu-Nutprofil 30×30 oder 40×40 einfügen, Winkel, Nutenstein und Endkappe per Knopf ans Profil setzen und im 3D-Blick (auch im Schnitt) prüfen.
+
 ## Fehler melden
 
 ```

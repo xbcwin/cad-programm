@@ -5545,5 +5545,20 @@
   "toast.frameNeedProf": "Wähle eine geschlossene Profil-Skizze als Querschnitt.",
   "toast.frameAdded": "Gestell angelegt. Rechts passt du Profilart, Größe oder eigenes Profil jederzeit an.",
   "undo.frameAdded": "Gestell angelegt",
-  "undo.frameChanged": "Gestell geändert"
+  "undo.frameChanged": "Gestell geändert",
+  "fly.tSlotProfiles": "Alu-Nutprofile & Zubehör",
+  "panel.item.tSlotProfileHint": "<b>Alu-Nutprofil {size}</b> ({norm}) · <b>{slots} Nuten</b> (Nut {slotW}) · Kernbohrung Ø {bore} · Fläche <b>{area} mm²</b> · Länge {L} · ca. {kgm} kg/m (Alu).",
+  "panel.item.addTSlotBracket": "Winkel ansetzen",
+  "panel.item.addTSlotNut": "Nutenstein in Nut",
+  "panel.item.addTSlotEndCap": "Endkappe aufsetzen",
+  "panel.item.tSlotBracketHint": "<b>Profil-Winkel {series}</b> (Nut {slotW}) · Schenkel <b>{leg}</b> × Breite {w} · Bohrung Ø {hole} ({screw}).",
+  "panel.item.tSlotNutHint": "<b>Nutenstein {series}</b> (Nut {slotW}) · Gewinde <b>{thread}</b> (Kern Ø {bore}) · Fuß {bw} × Länge {L}.",
+  "panel.item.tSlotEndCapHint": "<b>Endkappe {size}</b> · Kappendicke <b>{t}</b> · Zapfen Ø {pinD} × {pinL}.",
+  "panel.item.snapBracketToProfile": "Winkel ans Profil setzen",
+  "panel.item.snapNutToProfile": "Nutenstein in Profil-Nut setzen",
+  "panel.item.snapEndCapToProfile": "Endkappe aufs Profil setzen",
+  "undo.tSlotSize": "Nutprofil-Größe geändert",
+  "undo.tSlotSeries": "Nutprofil-Baureihe geändert",
+  "undo.tSlotAttach": "Zubehör ans Nutprofil gesetzt",
+  "toast.tSlotAttached": "Bündig an „{name}“ gesetzt."
 }

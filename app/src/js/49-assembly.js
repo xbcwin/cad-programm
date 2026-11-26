@@ -1462,7 +1462,7 @@ const Assembly = (() => {
   }
 
   // ================= Schrauben automatisch einsetzen (BG-23) =================
-  const NORM_FASTENER_LIBS = new Set(['stdScrew', 'stdNut', 'stdWasher', 'stdPin', 'stdKey', 'stdBearing', 'stdSleeve', 'stdORing', 'stdShaftSeal', 'stdCompSpring', 'stdExtSpring', 'shaftCollar', 'shaftCoupling', 'stdPipe', 'pipeElbow', 'pipeTee', 'pipeFlange', 'stdBelt', 'stdChain']);
+  const NORM_FASTENER_LIBS = new Set(['stdScrew', 'stdNut', 'stdWasher', 'stdPin', 'stdKey', 'stdBearing', 'stdSleeve', 'stdORing', 'stdShaftSeal', 'stdCompSpring', 'stdExtSpring', 'shaftCollar', 'shaftCoupling', 'stdPipe', 'pipeElbow', 'pipeTee', 'pipeFlange', 'stdBelt', 'stdChain', 'tSlotProfile', 'tSlotNut', 'tSlotEndCap']);
   function isNormFastener(it) {
     return !!(it && it.kind === 'part' && it.p && NORM_FASTENER_LIBS.has(it.p.lib));
   }

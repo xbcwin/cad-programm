@@ -661,6 +661,37 @@ const Panels = (() => {
         frBtn.innerHTML = icon('frame') + esc(T('fly.frameBtn'));
         frBtn.onclick = () => { closeFlyout(); Features.startFrame(); };
         profSec.append(h('div', { class: 'btn-row pro', style: { marginTop: '6px' } }, frBtn));
+        if (LIBMAP.tSlotProfile && LIBMAP.tSlotBracket && LIBMAP.tSlotNut && LIBMAP.tSlotEndCap) {
+          const tSlotItems = [
+            { def: LIBMAP.tSlotProfile, params: { size: '20x20', length: 300 }, name: 'Nutprofil 20×20', role: '20/30/40/45', simpleId: 'add-tslot-profile', simpleLabel: 'Alu-Nutprofil' },
+            { def: LIBMAP.tSlotBracket, params: { series: '20', guides: 'nein' }, name: 'Winkel 20', role: '20/30/40/45', simpleId: 'add-tslot-bracket', simpleLabel: 'Profil-Winkel' },
+            { def: LIBMAP.tSlotNut, params: { series: '20', thread: 'auto' }, name: 'Nutenstein 20', role: 'Nut 6/8/10', simpleId: 'add-tslot-nut', simpleLabel: 'Nutenstein' },
+            { def: LIBMAP.tSlotEndCap, params: { size: '20x20' }, name: 'Endkappe 20×20', role: '20/30/40/45', simpleId: 'add-tslot-endcap', simpleLabel: 'Endkappe' },
+          ];
+          profSec.append(h('h3', { id: 'fly-tslot-head', style: { marginTop: '8px' }, 'data-help': 'tSlotProfile' }, T('fly.tSlotProfiles')));
+          const tsTiles = h('div', { class: 'tiles pro', id: 'fly-tslot-tiles' });
+          const tsSimple = h('div', { class: 'btn-row simple-only', id: 'fly-tslot-simple' });
+          for (const ts of tSlotItems) {
+            const t = h('div', {
+              class: 'tile pro', role: 'button', tabindex: '0',
+              'data-lib': ts.def.lib, 'aria-label': ts.def.label, 'data-tip': ts.def.desc, 'data-help': ts.def.lib,
+            });
+            t.innerHTML = partSVG(ts.def);
+            t.append(h('span', { class: 'lbl' }, hyph(ts.def.label)), h('span', { class: 'role' }, ts.role));
+            Place.bindTile(t, { part: ts.def, params: ts.params, name: ts.name });
+            t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); Actions.addPart(ts.def, ts.params, { name: ts.name }); closeFlyout(); } });
+            tsTiles.append(t);
+
+            const b = h('button', {
+              type: 'button', class: 'btn small simple-only', id: ts.simpleId,
+              'data-lib': ts.def.lib, 'data-help': ts.def.lib, 'data-tip': ts.def.desc,
+            });
+            b.innerHTML = icon(ts.def.icon) + esc(ts.simpleLabel);
+            b.onclick = () => { Actions.addPart(ts.def, ts.params, { name: ts.name }); closeFlyout(); };
+            tsSimple.append(b);
+          }
+          profSec.append(tsTiles, tsSimple);
+        }
         el.append(profSec);
       }
       if (stds.length) {
@@ -2549,7 +2580,37 @@ const Panels = (() => {
                   item.p.size = v;
                   if (v !== 'custom') { item.p.w = null; item.p.h = null; item.p.t = null; item.p.tf = null; }
                 })
-                : (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v);
+                : def.lib === 'tSlotProfile' && q.k === 'size'
+                  ? (v) => App.change(T('undo.tSlotSize'), (doc) => {
+                    const item = Model.find(doc, it.id).item;
+                    item.p.size = v;
+                    if (!item.name || item.name === def.label || /^Nutprofil\b/.test(item.name)) item.name = `Nutprofil ${String(v).replace('x', '×')}`;
+                  })
+                  : def.lib === 'tSlotBracket' && q.k === 'series'
+                    ? (v) => App.change(T('undo.tSlotSeries'), (doc) => {
+                      const item = Model.find(doc, it.id).item;
+                      item.p.series = v;
+                      item.p.legLen = null; item.p.width = null; item.p.holeD = null;
+                      if (!item.name || item.name === def.label || /^Winkel\b/.test(item.name)) item.name = `Winkel ${v}`;
+                    })
+                    : def.lib === 'tSlotNut' && q.k === 'series'
+                      ? (v) => App.change(T('undo.tSlotSeries'), (doc) => {
+                        const item = Model.find(doc, it.id).item;
+                        item.p.series = v;
+                        item.p.length = null;
+                        if (!item.name || item.name === def.label || /^Nutenstein\b/.test(item.name)) {
+                          const nm = typeof tSlotNutMetrics === 'function' ? tSlotNutMetrics(item.p) : null;
+                          item.name = nm ? `Nutenstein ${v} (${nm.thread})` : `Nutenstein ${v}`;
+                        }
+                      })
+                      : def.lib === 'tSlotEndCap' && q.k === 'size'
+                        ? (v) => App.change(T('undo.tSlotSize'), (doc) => {
+                          const item = Model.find(doc, it.id).item;
+                          item.p.size = v;
+                          item.p.thickness = null;
+                          if (!item.name || item.name === def.label || /^Endkappe\b/.test(item.name)) item.name = `Endkappe ${String(v).replace('x', '×')}`;
+                        })
+                        : (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v);
             fld = UI.selectField({ id: 'lp-' + q.k, label: qLabel, value: selVal, options: opts, onChange: onSel });
           } else if (q.type === 'text') {
             fld = UI.textField({ id: 'lp-' + q.k, label: qLabel, value: it.p[q.k] ?? q.def ?? '', placeholder: q.placeholder || '', onCommit: (v) => setP(q.k, v) });
@@ -3108,6 +3169,104 @@ const Panels = (() => {
             dims: esc(dimsTxt), area: fmt(m.area, 1),
             L: Units.fmtLenU(m.length, 1), kgm: fmt(m.steelKgPerM, 2),
           }) }));
+        } else if (def.lib === 'tSlotProfile' && typeof tSlotMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = tSlotMetrics(rp);
+          sec.append(h('div', { id: 'p-tslot-hint', class: 'hint-box', html: T('panel.item.tSlotProfileHint', {
+            size: esc(m.size.replace('x', '×')), norm: esc(m.norm),
+            slots: m.slotCount, slotW: Units.fmtLenU(m.slotW, 1),
+            bore: Units.fmtLenU(m.boreD, 1), area: fmt(m.area, 1),
+            L: Units.fmtLenU(m.length, 1), kgm: fmt(m.aluKgPerM, 2),
+          }) }));
+          const addAccessory = (lib, fit, name, color, mat, undoTxt) => {
+            let added = null;
+            App.change(undoTxt, (doc) => {
+              const found = Model.find(doc, it.id);
+              const list = found && found.parent ? found.parent.children : doc.items;
+              added = Model.newItem('part', { lib, ...fit.params }, { name, role: 'solid', color, mat });
+              Object.assign(added.t, fit.t);
+              list.push(added);
+            });
+            if (added) App.select([added.id]);
+          };
+          const row = h('div', { class: 'btn-row' });
+          const brBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-tslot-bracket' }, T('panel.item.addTSlotBracket'));
+          brBtn.onclick = () => {
+            const fit = tSlotBracketOnProfileTransform(rp, it.t);
+            addAccessory('tSlotBracket', fit, `Winkel ${fit.bracket.series}`, '#8c96a0', 'Alu 6061', 'Winkel ans Profil gesetzt');
+          };
+          const nutBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-tslot-nut' }, T('panel.item.addTSlotNut'));
+          nutBtn.onclick = () => {
+            const fit = tSlotNutOnProfileTransform(rp, it.t);
+            addAccessory('tSlotNut', fit, `Nutenstein ${fit.nut.series} (${fit.nut.thread})`, '#4f6272', 'Baustahl', 'Nutenstein in Nut gesetzt');
+          };
+          const capBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-tslot-cap' }, T('panel.item.addTSlotEndCap'));
+          capBtn.onclick = () => {
+            const fit = tSlotEndCapOnProfileTransform(rp, it.t);
+            addAccessory('tSlotEndCap', fit, `Endkappe ${fit.cap.size.replace('x', '×')}`, '#2f353b', 'PA6', 'Endkappe aufs Profil gesetzt');
+          };
+          row.append(brBtn, nutBtn, capBtn);
+          sec.append(row);
+        } else if ((def.lib === 'tSlotBracket' || def.lib === 'tSlotNut' || def.lib === 'tSlotEndCap') && typeof tSlotMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          let targetSeries = rp.series;
+          if (def.lib === 'tSlotBracket' && typeof tSlotBracketMetrics === 'function') {
+            const m = tSlotBracketMetrics(rp);
+            sec.append(h('div', { id: 'p-tslot-bracket-hint', class: 'hint-box', html: T('panel.item.tSlotBracketHint', {
+              series: esc(m.series), slotW: Units.fmtLenU(m.slotW, 1),
+              leg: Units.fmtLenU(m.legLen, 1), w: Units.fmtLenU(m.width, 1),
+              hole: Units.fmtLenU(m.holeD, 1), screw: esc(m.screw),
+            }) }));
+          } else if (def.lib === 'tSlotNut' && typeof tSlotNutMetrics === 'function') {
+            const m = tSlotNutMetrics(rp);
+            sec.append(h('div', { id: 'p-tslot-nut-hint', class: 'hint-box', html: T('panel.item.tSlotNutHint', {
+              series: esc(m.series), slotW: Units.fmtLenU(m.slotW, 1),
+              thread: esc(m.thread), bore: Units.fmtLenU(m.boreD, 1),
+              bw: Units.fmtLenU(m.baseW, 1), L: Units.fmtLenU(m.length, 1),
+            }) }));
+          } else if (def.lib === 'tSlotEndCap' && typeof tSlotEndCapMetrics === 'function') {
+            const m = tSlotEndCapMetrics(rp);
+            targetSeries = m.series;
+            sec.append(h('div', { id: 'p-tslot-endcap-hint', class: 'hint-box', html: T('panel.item.tSlotEndCapHint', {
+              size: esc(m.size.replace('x', '×')), t: Units.fmtLenU(m.capT, 1),
+              pinD: Units.fmtLenU(m.pinD, 1), pinL: Units.fmtLenU(m.pinL, 1),
+            }) }));
+          }
+          const findTargetTSlotProfile = (doc, prefSeries) => {
+            let fallback = null, matched = null;
+            Model.walk(doc.items, (x) => {
+              if (x && !x.suppressed && x.kind === 'part' && x.p && x.p.lib === 'tSlotProfile') {
+                fallback = x;
+                const xPm = tSlotMetrics(Model.resolveP(x.p, V));
+                if (!prefSeries || xPm.series === String(prefSeries)) matched = x;
+              }
+            });
+            return matched || fallback;
+          };
+          const targetProf = findTargetTSlotProfile(App.doc, targetSeries);
+          if (targetProf) {
+            const snapCfg = def.lib === 'tSlotBracket'
+              ? { id: 'btn-snap-tslot-bracket', label: T('panel.item.snapBracketToProfile'), fn: (pp, pt) => tSlotBracketOnProfileTransform(pp, pt, { guides: rp.guides }) }
+              : def.lib === 'tSlotNut'
+                ? { id: 'btn-snap-tslot-nut', label: T('panel.item.snapNutToProfile'), fn: (pp, pt) => tSlotNutOnProfileTransform(pp, pt, { thread: rp.thread }) }
+                : { id: 'btn-snap-tslot-endcap', label: T('panel.item.snapEndCapToProfile'), fn: (pp, pt) => tSlotEndCapOnProfileTransform(pp, pt) };
+            const snapBtn = h('button', { type: 'button', class: 'btn small', id: snapCfg.id }, snapCfg.label);
+            snapBtn.onclick = () => {
+              let profName = '';
+              App.change(T('undo.tSlotAttach'), (doc) => {
+                const cur = Model.find(doc, it.id);
+                const prof = Model.find(doc, targetProf.id);
+                if (!cur || !prof) return false;
+                const profP = Model.resolveP(prof.item.p, V);
+                const fit = snapCfg.fn(profP, prof.item.t);
+                Object.assign(cur.item.p, fit.params);
+                Object.assign(cur.item.t, fit.t);
+                profName = Model.label(prof.item);
+              });
+              if (profName) UI.toast(T('toast.tSlotAttached', { name: profName }), { icon: 'check' });
+            };
+            sec.append(h('div', { class: 'btn-row' }, snapBtn));
+          }
         }
         w.append(sec);
       }

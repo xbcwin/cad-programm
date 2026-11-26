@@ -1283,6 +1283,129 @@ function profileMetrics(p = {}) {
     length: round(length, 3), area: round(area, 2), volume, steelKgPerM,
   };
 }
+// Alu-Nutprofile 20, 30, 40, 45 (Nut 6/8/10) mit Zubehör Winkel, Nutenstein, Endkappe (PR-02)
+const TSLOT_SERIES = [
+  { id: '20', label: '20 (Nut 6)', grid: 20, slotW: 6.0, lipT: 1.8, cavityW: 10.4, cavityH: 2.0, slotD: 6.0, boreD: 5.0, chamfer: 1.0, screw: 'M5', norm: 'B-Typ Nut 6' },
+  { id: '30', label: '30 (Nut 8)', grid: 30, slotW: 8.0, lipT: 2.5, cavityW: 16.4, cavityH: 3.0, slotD: 9.0, boreD: 6.8, chamfer: 1.5, screw: 'M6', norm: 'B-Typ Nut 8' },
+  { id: '40', label: '40 (Nut 8)', grid: 40, slotW: 8.0, lipT: 4.0, cavityW: 19.6, cavityH: 4.0, slotD: 12.0, boreD: 6.8, chamfer: 1.5, screw: 'M8', norm: 'I-Typ Nut 8' },
+  { id: '45', label: '45 (Nut 10)', grid: 45, slotW: 10.0, lipT: 4.5, cavityW: 22.0, cavityH: 4.5, slotD: 12.5, boreD: 10.2, chamfer: 2.0, screw: 'M8', norm: 'B-Typ Nut 10' },
+];
+const TSLOT_SERIES_BY_ID = new Map(TSLOT_SERIES.map((x) => [x.id, x]));
+const TSLOT_SERIES_OPTIONS = TSLOT_SERIES.map((x) => [x.id, `Baureihe ${x.id} (Nut ${x.slotW})`]);
+
+const TSLOT_SIZES = [
+  { id: '20x20', series: '20', nx: 1, ny: 1, label: '20 × 20 mm (Nut 6 · 4 Nuten)' },
+  { id: '20x40', series: '20', nx: 1, ny: 2, label: '20 × 40 mm (Nut 6 · 6 Nuten)' },
+  { id: '30x30', series: '30', nx: 1, ny: 1, label: '30 × 30 mm (Nut 8 · 4 Nuten)' },
+  { id: '30x60', series: '30', nx: 1, ny: 2, label: '30 × 60 mm (Nut 8 · 6 Nuten)' },
+  { id: '40x40', series: '40', nx: 1, ny: 1, label: '40 × 40 mm (Nut 8 · 4 Nuten)' },
+  { id: '40x80', series: '40', nx: 1, ny: 2, label: '40 × 80 mm (Nut 8 · 6 Nuten)' },
+  { id: '45x45', series: '45', nx: 1, ny: 1, label: '45 × 45 mm (Nut 10 · 4 Nuten)' },
+  { id: '45x90', series: '45', nx: 1, ny: 2, label: '45 × 90 mm (Nut 10 · 6 Nuten)' },
+];
+const TSLOT_SIZE_BY_ID = new Map(TSLOT_SIZES.map((x) => [x.id.toLowerCase(), x]));
+const TSLOT_SIZE_OPTIONS = TSLOT_SIZES.map((x) => [x.id, x.label]);
+
+function tSlotSeriesInfo(series) {
+  const s = String(series ?? '20').trim().replace(/[^0-9]/g, '');
+  return TSLOT_SERIES_BY_ID.get(s) || TSLOT_SERIES[0];
+}
+function tSlotSizeEntry(size) {
+  const s = String(size || '20x20').trim().toLowerCase().replace(/\s+/g, '').replace(/×/g, 'x');
+  return TSLOT_SIZE_BY_ID.get(s) || TSLOT_SIZES[0];
+}
+function tSlotMetrics(p = {}) {
+  const sz = tSlotSizeEntry(p.size);
+  const sr = tSlotSeriesInfo(sz.series);
+  const length = Math.max(5, Number(p.length ?? 300) || 300);
+  const w = sz.nx * sr.grid;
+  const h = sz.ny * sr.grid;
+  const slotCount = 2 * (sz.nx + sz.ny);
+  const boreCount = sz.nx * sz.ny;
+  const slotArea = sr.slotW * sr.lipT + sr.cavityW * sr.cavityH + ((sr.cavityW + sr.slotW) / 2) * (sr.slotD - sr.lipT - sr.cavityH);
+  const outerArea = w * h - 2 * sr.chamfer * sr.chamfer;
+  const boreArea = boreCount * Math.PI * Math.pow(sr.boreD / 2, 2);
+  const area = outerArea - slotCount * slotArea - boreArea;
+  const volume = round(area * length, 2);
+  const aluKgPerM = round((area * 1000 * 2.70) / 1e6, 3);
+  return {
+    size: sz.id, series: sr.id, norm: sr.norm, grid: sr.grid, nx: sz.nx, ny: sz.ny,
+    w, h, length: round(length, 3), slotW: sr.slotW, lipT: sr.lipT, cavityW: sr.cavityW,
+    cavityH: sr.cavityH, slotD: sr.slotD, boreD: sr.boreD, chamfer: sr.chamfer,
+    slotCount, boreCount, area: round(area, 2), volume, aluKgPerM,
+  };
+}
+
+const TSLOT_BRACKET_SPECS = {
+  '20': { series: '20', slotW: 6.0, legLen: 20, width: 18, wallT: 3.5, ribT: 2.5, holeD: 5.5, holePos: 10.5, lugW: 5.6, lugH: 1.4, screw: 'M5' },
+  '30': { series: '30', slotW: 8.0, legLen: 28, width: 26, wallT: 4.5, ribT: 3.2, holeD: 6.6, holePos: 15.0, lugW: 7.6, lugH: 2.0, screw: 'M6' },
+  '40': { series: '40', slotW: 8.0, legLen: 38, width: 36, wallT: 5.5, ribT: 4.0, holeD: 8.5, holePos: 20.0, lugW: 7.6, lugH: 3.0, screw: 'M8' },
+  '45': { series: '45', slotW: 10.0, legLen: 43, width: 40, wallT: 6.0, ribT: 4.5, holeD: 8.5, holePos: 22.5, lugW: 9.6, lugH: 3.5, screw: 'M8' },
+};
+function tSlotBracketMetrics(p = {}) {
+  const sr = tSlotSeriesInfo(p.series);
+  const sp = TSLOT_BRACKET_SPECS[sr.id] || TSLOT_BRACKET_SPECS['20'];
+  const rawLeg = Number(p.legLen);
+  const rawW = Number(p.width);
+  const rawWall = Number(p.wallT);
+  const rawHole = Number(p.holeD);
+  const legLen = Math.max(12, Math.min(120, rawLeg > 0 ? rawLeg : sp.legLen));
+  const width = Math.max(10, Math.min(100, rawW > 0 ? rawW : sp.width));
+  const wallT = clamp(rawWall > 0 ? rawWall : sp.wallT, 2, legLen * 0.35);
+  const ribT = clamp(sp.ribT, 1.5, width * 0.25);
+  const holeD = clamp(rawHole > 0 ? rawHole : sp.holeD, 2.5, Math.min(width - 2 * ribT - 1.2, legLen - wallT - 2));
+  const holePos = rawLeg > 0
+    ? round(Math.max(wallT + holeD / 2 + 1.5, Math.min(legLen - holeD / 2 - 2, (wallT + legLen) / 2)), 2)
+    : sp.holePos;
+  return {
+    series: sr.id, slotW: sp.slotW, screw: sp.screw,
+    legLen: round(legLen, 3), width: round(width, 3), wallT: round(wallT, 3),
+    ribT: round(ribT, 3), holeD: round(holeD, 3), holePos,
+    guides: p.guides === 'ja' ? 'ja' : 'nein', lugW: sp.lugW, lugH: sp.lugH,
+  };
+}
+
+const TSLOT_NUT_SPECS = {
+  '20': { series: '20', slotW: 6.0, baseW: 9.8, baseH: 1.6, neckW: 5.6, neckH: 1.6, length: 10.0, defThread: 'M5' },
+  '30': { series: '30', slotW: 8.0, baseW: 15.6, baseH: 2.5, neckW: 7.6, neckH: 2.2, length: 16.0, defThread: 'M6' },
+  '40': { series: '40', slotW: 8.0, baseW: 18.8, baseH: 3.4, neckW: 7.6, neckH: 3.5, length: 18.0, defThread: 'M8' },
+  '45': { series: '45', slotW: 10.0, baseW: 21.0, baseH: 3.8, neckW: 9.6, neckH: 4.0, length: 20.0, defThread: 'M8' },
+};
+const TSLOT_NUT_THREAD_CORE = { M4: 3.3, M5: 4.2, M6: 5.0, M8: 6.8 };
+function tSlotNutMetrics(p = {}) {
+  const sr = tSlotSeriesInfo(p.series);
+  const sp = TSLOT_NUT_SPECS[sr.id] || TSLOT_NUT_SPECS['20'];
+  const thread = !p.thread || p.thread === 'auto' || !TSLOT_NUT_THREAD_CORE[p.thread] ? sp.defThread : p.thread;
+  const coreD = TSLOT_NUT_THREAD_CORE[thread] || 4.2;
+  const boreD = round(Math.min(coreD, sp.neckW - 0.8), 2);
+  const rawLen = Number(p.length);
+  const length = Math.max(boreD + 3, Math.min(60, rawLen > 0 ? rawLen : sp.length));
+  return {
+    series: sr.id, slotW: sp.slotW, thread, boreD,
+    baseW: sp.baseW, baseH: sp.baseH, neckW: sp.neckW, neckH: sp.neckH,
+    totalH: round(sp.baseH + sp.neckH, 3), length: round(length, 3),
+  };
+}
+
+const TSLOT_ENDCAP_SPECS = {
+  '20': { capT: 2.5, pinL: 6.0, pinClear: 0.3 },
+  '30': { capT: 3.0, pinL: 8.0, pinClear: 0.3 },
+  '40': { capT: 4.0, pinL: 10.0, pinClear: 0.4 },
+  '45': { capT: 4.0, pinL: 10.0, pinClear: 0.4 },
+};
+function tSlotEndCapMetrics(p = {}) {
+  const sz = tSlotSizeEntry(p.size);
+  const sr = tSlotSeriesInfo(sz.series);
+  const ec = TSLOT_ENDCAP_SPECS[sr.id] || TSLOT_ENDCAP_SPECS['20'];
+  const rawT = Number(p.thickness);
+  const capT = Math.max(1.2, Math.min(12, rawT > 0 ? rawT : ec.capT));
+  const pinD = round(Math.max(2, sr.boreD - ec.pinClear), 2);
+  return {
+    size: sz.id, series: sr.id, grid: sr.grid, nx: sz.nx, ny: sz.ny,
+    w: sz.nx * sr.grid, h: sz.ny * sr.grid, chamfer: sr.chamfer, slotW: sr.slotW,
+    capT: round(capT, 3), pinD, pinL: ec.pinL, pinCount: sz.nx * sz.ny,
+  };
+}
 // Griffe, Drehknöpfe, Rändelschrauben & Gerätefüße (BI-14)
 function pullHandleMetrics(p = {}) {
   const style = p.style === 'bridge' || p.style === 'tHandle' ? p.style : 'bow';
@@ -2956,6 +3079,34 @@ const LIB = [
       { k: 't', label: (p) => (p && (p.shape === 'channel' || p.shape === 'tee' || p.shape === 'ibeam') ? 'Stegdicke (s)' : p && p.shape === 'flat' ? 'Dicke (t)' : 'Wandstärke (t)'), type: 'num', def: null, auto: true },
       { k: 'tf', label: 'Flanschdicke (t_f)', type: 'num', def: null, auto: true, show: (p) => !!(p && (p.shape === 'channel' || p.shape === 'tee' || p.shape === 'ibeam')) },
     ] },
+  { lib: 'tSlotProfile', label: 'Alu-Nutprofil', role: 'solid', icon: 'tSlotProfile', profile: true, mat: 'Alu 6061',
+    kw: 'alu nutprofil alunutenprofil aluprofil systemprofil item bosch rexroth 20 30 40 45 20x20 30x30 40x40 45x45 nut 6 8 10 gestell profil pr-02',
+    desc: 'Alu-Nutprofil (Baureihe 20, 30, 40, 45 mit Nut 6/8/10) in wählbarer Länge', params: [
+      { k: 'size', label: 'Größe', type: 'select', options: TSLOT_SIZE_OPTIONS, def: '20x20' },
+      { k: 'length', label: 'Länge (L)', type: 'num', def: 300 },
+    ] },
+  { lib: 'tSlotBracket', label: 'Profil-Winkel', role: 'solid', icon: 'tSlotBracket', profile: true, mat: 'Alu 6061',
+    kw: 'winkel eckwinkel profilwinkel verbinder nutprofil alu 20 30 40 45 nut 6 8 10 zubehoer zubehör pr-02',
+    desc: '90°-Eckwinkel mit Seitenrippen für Alu-Nutprofile 20, 30, 40 und 45', params: [
+      { k: 'series', label: 'Baureihe', type: 'select', options: TSLOT_SERIES_OPTIONS, def: '20' },
+      { k: 'guides', label: 'Zentriernasen', type: 'select', options: [['nein', 'Ohne Nasen (glatt)'], ['ja', 'Mit Zentriernasen']], def: 'nein' },
+      { k: 'legLen', label: 'Schenkellänge', type: 'num', def: null, auto: true },
+      { k: 'width', label: 'Breite', type: 'num', def: null, auto: true },
+      { k: 'holeD', label: 'Bohrung Ø', type: 'num', def: null, auto: true },
+    ] },
+  { lib: 'tSlotNut', label: 'Nutenstein', role: 'solid', icon: 'tSlotNut', profile: true, mat: 'Baustahl',
+    kw: 'nutenstein hammermutter gleitstein nutmutter nut 6 8 10 nutprofil alu 20 30 40 45 m4 m5 m6 m8 zubehoer zubehör pr-02',
+    desc: 'Nutenstein mit Gewindebohrung passend für Nut 6, 8 und 10', params: [
+      { k: 'series', label: 'Baureihe', type: 'select', options: TSLOT_SERIES_OPTIONS, def: '20' },
+      { k: 'thread', label: 'Gewinde', type: 'select', options: [['auto', 'Passend zur Nut'], ['M4', 'M4 (Kern Ø 3,3)'], ['M5', 'M5 (Kern Ø 4,2)'], ['M6', 'M6 (Kern Ø 5,0)'], ['M8', 'M8 (Kern Ø 6,8)']], def: 'auto' },
+      { k: 'length', label: 'Länge (L)', type: 'num', def: null, auto: true },
+    ] },
+  { lib: 'tSlotEndCap', label: 'Profil-Endkappe', role: 'solid', icon: 'tSlotEndCap', profile: true, mat: 'PA6',
+    kw: 'endkappe abdeckkappe kappe abschlusskappe stopfen nutprofil alu 20 30 40 45 zubehoer zubehör pr-02',
+    desc: 'Abdeckkappe mit Zapfen für Alu-Nutprofile 20, 30, 40 und 45', params: [
+      { k: 'size', label: 'Größe', type: 'select', options: TSLOT_SIZE_OPTIONS, def: '20x20' },
+      { k: 'thickness', label: 'Kappendicke', type: 'num', def: null, auto: true },
+    ] },
 ];
 // Kaufteile mit ihrer echten Form (kommen über die Drohnen-Bibliothek, nicht ins Fenster „Bauteile“)
 const N = (k, label, def, unit) => ({ k, label, type: 'num', def, ...(unit ? { unit } : {}) });
@@ -3263,6 +3414,75 @@ function pipeTeeOnPipeTransform(pipeP = {}, pipeT = null) {
     t: gearComposeWorldTransform(pipeT, { x: 0, y: 0, z: pm.length, rx: 0, ry: 0, rz: 0 }),
     pipe: pm,
     tee: tm,
+  };
+}
+
+// Passenden Eckwinkel bündig an eine Außenseite des Alu-Nutprofils setzen
+function tSlotBracketOnProfileTransform(profP = {}, profT = null, opts = {}) {
+  const pm = tSlotMetrics(profP);
+  const params = {
+    series: pm.series,
+    guides: opts.guides === 'ja' ? 'ja' : 'nein',
+    legLen: null,
+    width: null,
+    holeD: null,
+  };
+  const bm = tSlotBracketMetrics(params);
+  const slotY = pm.ny === 1 ? 0 : round(((pm.ny - 1) * pm.grid) / 2, 4);
+  const slotX = pm.nx === 1 ? 0 : round(((pm.nx - 1) * pm.grid) / 2, 4);
+  const zPos = round(clamp(Number(opts.z ?? 0) || 0, 0, Math.max(0, pm.length - bm.legLen)), 4);
+  const side = opts.side || '+x';
+  let rel;
+  if (side === '-x') rel = { x: -pm.w / 2, y: slotY, z: zPos, rx: 0, ry: 0, rz: 180 };
+  else if (side === '+y') rel = { x: slotX, y: pm.h / 2, z: zPos, rx: 0, ry: 0, rz: 90 };
+  else if (side === '-y') rel = { x: slotX, y: -pm.h / 2, z: zPos, rx: 0, ry: 0, rz: -90 };
+  else rel = { x: pm.w / 2, y: slotY, z: zPos, rx: 0, ry: 0, rz: 0 };
+  return {
+    params,
+    t: gearComposeWorldTransform(profT, rel),
+    profile: pm,
+    bracket: bm,
+  };
+}
+
+// Passenden Nutenstein ohne Durchdringung in die Nutkammer des Alu-Nutprofils setzen
+function tSlotNutOnProfileTransform(profP = {}, profT = null, opts = {}) {
+  const pm = tSlotMetrics(profP);
+  const params = {
+    series: pm.series,
+    thread: opts.thread || 'auto',
+    length: null,
+  };
+  const nm = tSlotNutMetrics(params);
+  const bm = tSlotBracketMetrics({ series: pm.series });
+  const slotY = pm.ny === 1 ? 0 : round(((pm.ny - 1) * pm.grid) / 2, 4);
+  const defZ = pm.length >= bm.holePos + nm.length / 2 + 1 ? bm.holePos : pm.length / 2;
+  const minZ = Math.min(pm.length / 2, nm.length / 2 + 0.5);
+  const maxZ = Math.max(minZ, pm.length - nm.length / 2 - 0.5);
+  const zPos = round(clamp(opts.z != null ? Number(opts.z) : defZ, minZ, maxZ), 4);
+  const x0 = round(pm.w / 2 - pm.lipT - nm.baseH - 0.1, 4);
+  const rel = { x: x0, y: slotY, z: zPos, rx: 90, ry: 90, rz: 0 };
+  return {
+    params,
+    t: gearComposeWorldTransform(profT, rel),
+    profile: pm,
+    nut: nm,
+  };
+}
+
+// Passende Endkappe bündig ans Profilende setzen
+function tSlotEndCapOnProfileTransform(profP = {}, profT = null, opts = {}) {
+  const pm = tSlotMetrics(profP);
+  const params = { size: pm.size, thickness: null };
+  const cm = tSlotEndCapMetrics(params);
+  const rel = opts.end === 'bottom'
+    ? { x: 0, y: 0, z: 0, rx: 180, ry: 0, rz: 0 }
+    : { x: 0, y: 0, z: pm.length, rx: 0, ry: 0, rz: 0 };
+  return {
+    params,
+    t: gearComposeWorldTransform(profT, rel),
+    profile: pm,
+    cap: cm,
   };
 }
 

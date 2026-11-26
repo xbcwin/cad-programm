@@ -43190,6 +43190,291 @@ def t_a209_gestell_aus_linien(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_a208_alu_nutprofile(p):
+    p.empty()
+
+    # 1. Bibliothek -> Profile (Profi & Einfach) + Befehlssuche
+    p.ev("ViewPrefs.setLevel('pro'); Commands.setMode('model');")
+    p.wait(180)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#fly-tslot-tiles [data-lib="tSlotProfile"]', timeout=5000)
+    pro_fly = p.ev("""return (() => {
+      const libs = ['tSlotProfile', 'tSlotBracket', 'tSlotNut', 'tSlotEndCap'];
+      const head = document.querySelector('#fly-tslot-head');
+      const tilesOk = libs.every(l => {
+        const el = document.querySelector(`#fly-tslot-tiles .tile[data-lib="${l}"]`);
+        return !!(el && el.offsetParent !== null && el.getAttribute('data-help') === l);
+      });
+      const queries = ['nutprofil 20', 'nutprofil 30', 'nutprofil 40', 'nutprofil 45', 'profil-winkel', 'nutenstein', 'profil-endkappe'];
+      const cmdOk = queries.every(q => Commands.search(q).length > 0);
+      return {
+        headOk: !!(head && head.offsetParent !== null && /nutprofile/i.test(head.textContent)),
+        tilesOk,
+        cmdOk,
+      };
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.wait(180)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#fly-tslot-simple', timeout=5000)
+    simple_fly = p.ev("""return (() => {
+      const ids = [
+        ['add-tslot-profile', 'tSlotProfile'],
+        ['add-tslot-bracket', 'tSlotBracket'],
+        ['add-tslot-nut', 'tSlotNut'],
+        ['add-tslot-endcap', 'tSlotEndCap'],
+      ];
+      const btnsOk = ids.every(([id, lib]) => {
+        const el = document.getElementById(id);
+        return !!(el && el.offsetParent !== null && el.getAttribute('data-help') === lib);
+      });
+      const tileCnt = [...document.querySelectorAll('.flyout.parts .tile')].filter(t => t.offsetParent !== null).length;
+      return { btnsOk, tileCnt };
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+    ok1 = bool(
+        pro_fly['headOk'] and pro_fly['tilesOk'] and pro_fly['cmdOk']
+        and simple_fly['btnsOk'] and simple_fly['tileCnt'] == 5
+    )
+
+    # 2. Nutprofil 20x20, Länge 300 einfügen -> Querschnitt hat 4 Nuten & 1 Kernbohrung
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#fly-tslot-tiles [data-lib="tSlotProfile"]', timeout=5000)
+    p.pg.locator('#fly-tslot-tiles [data-lib="tSlotProfile"]').click()
+    warte_rechnen(p, 45)
+    prof_res = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const m = await Mass.measure({ ensure: true });
+      const pm = Mass.partOf(m, it.id);
+      const ki = Model.kernelItem(it);
+      const expVol = (ki && ki.p && ki.p.spec && ki.p.spec.volume) || 0;
+      const r = App.results.get(it.id);
+      const b = r && r.data && r.data.bbox;
+      const faces = (r && r.data && r.data.faces) || [];
+      const slotFloors = faces.filter(f => {
+        if (!f || f.t !== 'PLANE' || !Array.isArray(f.c) || !Array.isArray(f.n)) return false;
+        const [cx, cy, cz] = f.c, [nx, ny, nz] = f.n;
+        const onX = Math.abs(Math.abs(cx) - 4.0) < 0.05 && Math.abs(cy) < 0.05 && Math.abs(Math.abs(nx) - 1) < 0.05;
+        const onY = Math.abs(Math.abs(cy) - 4.0) < 0.05 && Math.abs(cx) < 0.05 && Math.abs(Math.abs(ny) - 1) < 0.05;
+        return Math.abs(cz - 150) < 0.5 && Math.abs(nz) < 0.05 && (onX || onY);
+      });
+      const lipFaces = faces.filter(f => {
+        if (!f || f.t !== 'PLANE' || !Array.isArray(f.c) || !Array.isArray(f.n)) return false;
+        const [cx, cy, cz] = f.c, [nx, ny, nz] = f.n;
+        const onX = Math.abs(Math.abs(cx) - 8.2) < 0.05 && Math.abs(Math.abs(cy) - 4.1) < 0.2 && Math.abs(Math.abs(nx) - 1) < 0.05;
+        const onY = Math.abs(Math.abs(cy) - 8.2) < 0.05 && Math.abs(Math.abs(cx) - 4.1) < 0.2 && Math.abs(Math.abs(ny) - 1) < 0.05;
+        return Math.abs(cz - 150) < 0.5 && Math.abs(nz) < 0.05 && (onX || onY);
+      });
+      const bores = faces.filter(f => f && f.t === 'CYLINDRE' && Math.abs((f.r || 0) - 2.5) < 0.05);
+      const hint = document.querySelector('#p-tslot-hint')?.textContent || '';
+      return {
+        errs: App.errors.length,
+        lib: it && it.p && it.p.lib,
+        size: it && it.p && it.p.size,
+        len: it && it.p && it.p.length,
+        mat: it && it.mat,
+        vol: pm ? pm.volume : 0,
+        expVol,
+        dx: b ? b[3] - b[0] : 0,
+        dy: b ? b[4] - b[1] : 0,
+        dz: b ? b[5] - b[2] : 0,
+        slotFloorCount: slotFloors.length,
+        lipFaceCount: lipFaces.length,
+        boreCount: bores.length,
+        hint,
+      };
+    })()""")
+    ok2 = bool(
+        prof_res['errs'] == 0
+        and prof_res['lib'] == 'tSlotProfile' and prof_res['size'] == '20x20'
+        and abs(prof_res['len'] - 300) < 1e-3 and prof_res['mat'] == 'Alu 6061'
+        and prof_res['expVol'] > 0 and abs(prof_res['vol'] - prof_res['expVol']) / prof_res['expVol'] < 0.01
+        and abs(prof_res['dx'] - 20) < 0.1 and abs(prof_res['dy'] - 20) < 0.1 and abs(prof_res['dz'] - 300) < 0.1
+        and prof_res['slotFloorCount'] == 4 and prof_res['lipFaceCount'] == 8 and prof_res['boreCount'] == 1
+        and '4 Nuten' in prof_res['hint'] and 'Nut 6' in prof_res['hint']
+    )
+
+    # 3. Winkel 20, Nutenstein & Endkappe ans Profil setzen (0 Durchdringungen) + separates Teil andocken
+    p.pg.wait_for_selector('#btn-add-tslot-bracket', timeout=5000)
+    p.pg.locator('#btn-add-tslot-bracket').click()
+    warte_rechnen(p, 45)
+    br_res = p.ev("""return (async () => {
+      const prof = App.doc.items[0], br = App.doc.items[1];
+      const wb = (id) => { const b = Actions.worldBox(id); return b ? [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] : null; };
+      const bp = wb(prof.id), bb = wb(br.id);
+      const clash = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      return {
+        errs: App.errors.length,
+        count: App.doc.items.length,
+        lib: br && br.p && br.p.lib,
+        series: br && br.p && br.p.series,
+        bp, bb,
+        clashes: (clash.pairs || []).length,
+        clashErrs: (clash.errors || []).length,
+        hint: document.querySelector('#p-tslot-bracket-hint')?.textContent || '',
+      };
+    })()""")
+
+    p.ev("App.select([App.doc.items[0].id]);")
+    p.pg.wait_for_selector('#btn-add-tslot-nut', timeout=5000)
+    p.pg.locator('#btn-add-tslot-nut').click()
+    warte_rechnen(p, 45)
+
+    p.ev("App.select([App.doc.items[0].id]);")
+    p.pg.wait_for_selector('#btn-add-tslot-cap', timeout=5000)
+    p.pg.locator('#btn-add-tslot-cap').click()
+    warte_rechnen(p, 45)
+
+    acc_res = p.ev("""return (async () => {
+      const wb = (id) => { const b = Actions.worldBox(id); return b ? [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] : null; };
+      const bNut = wb(App.doc.items[2].id);
+      const bCap = wb(App.doc.items[3].id);
+      const clash = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      return {
+        errs: App.errors.length,
+        count: App.doc.items.length,
+        bNut, bCap,
+        checked: clash.checkedCount,
+        clashes: (clash.pairs || []).length,
+        clashErrs: (clash.errors || []).length,
+      };
+    })()""")
+
+    # Separaten Winkel einfügen, wegschieben und über Button ans Profil setzen
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#fly-tslot-tiles [data-lib="tSlotBracket"]', timeout=5000)
+    p.pg.locator('#fly-tslot-tiles [data-lib="tSlotBracket"]').click()
+    warte_rechnen(p, 45)
+    p.ev("""
+      App.change('Winkel verschieben', (doc) => { doc.items[4].t.x = 120; });
+      App.select([App.doc.items[4].id]);
+    """)
+    warte_rechnen(p, 35)
+    p.pg.wait_for_selector('#btn-snap-tslot-bracket', timeout=5000)
+    p.pg.locator('#btn-snap-tslot-bracket').click()
+    warte_rechnen(p, 45)
+    snap_res = p.ev("""return (() => {
+      const b = Actions.worldBox(App.doc.items[4].id);
+      return {
+        errs: App.errors.length,
+        minX: b ? b.min.x : 0,
+        maxX: b ? b.max.x : 0,
+        minZ: b ? b.min.z : 0,
+      };
+    })()""")
+
+    ok3 = bool(
+        br_res['errs'] == 0 and br_res['count'] == 2 and br_res['lib'] == 'tSlotBracket' and br_res['series'] == '20'
+        and br_res['bp'] and br_res['bb']
+        and abs(br_res['bb'][0] - br_res['bp'][3]) < 0.05
+        and abs((br_res['bb'][3] - br_res['bb'][0]) - 20) < 0.1
+        and abs((br_res['bb'][4] - br_res['bb'][1]) - 18) < 0.1
+        and abs((br_res['bb'][5] - br_res['bb'][2]) - 20) < 0.1
+        and br_res['clashes'] == 0 and br_res['clashErrs'] == 0
+        and 'Nut 6' in br_res['hint']
+        and acc_res['errs'] == 0 and acc_res['count'] == 4
+        and acc_res['bNut'] and acc_res['bNut'][0] > 4.0 and acc_res['bNut'][3] < 10.0
+        and acc_res['bCap'] and abs(acc_res['bCap'][5] - 302.5) < 0.05 and abs(acc_res['bCap'][2] - 294.0) < 0.05
+        and acc_res['checked'] == 4 and acc_res['clashes'] == 0 and acc_res['clashErrs'] == 0
+        and snap_res['errs'] == 0 and abs(snap_res['minX'] - 10.0) < 0.05 and abs(snap_res['minZ']) < 0.05
+    )
+
+    # 4. Alle Baureihen 20, 30, 40, 45 (Nut 6/8/10) inkl. 20x40 (6 Nuten) & Zubehör + GeomCheck = 0 Fehler
+    p.ev("""
+      App.change('Alle Nutprofile und Zubehör', (doc) => {
+        const defs = [
+          ['tSlotProfile', { size: '20x20', length: 120 }],
+          ['tSlotProfile', { size: '20x40', length: 120 }],
+          ['tSlotProfile', { size: '30x30', length: 120 }],
+          ['tSlotProfile', { size: '40x40', length: 120 }],
+          ['tSlotProfile', { size: '45x45', length: 120 }],
+          ['tSlotBracket', { series: '30', guides: 'nein' }],
+          ['tSlotBracket', { series: '40', guides: 'ja' }],
+          ['tSlotBracket', { series: '45', guides: 'nein' }],
+          ['tSlotNut', { series: '30', thread: 'M6' }],
+          ['tSlotNut', { series: '40', thread: 'M8' }],
+          ['tSlotNut', { series: '45', thread: 'M8' }],
+          ['tSlotEndCap', { size: '30x30' }],
+          ['tSlotEndCap', { size: '40x40' }],
+          ['tSlotEndCap', { size: '45x45' }],
+        ];
+        doc.items = defs.map(([lib, params], i) => {
+          const it = Model.newItem('part', { lib, ...params }, { name: lib + '_' + i });
+          it.t.x = i * 90;
+          return it;
+        });
+      });
+    """)
+    warte_rechnen(p, 60)
+    all_res = p.ev("""return (async () => {
+      const items = App.doc.items;
+      const m = await Mass.measure({ ensure: true });
+      const profVols = [];
+      for (const it of items) {
+        if (it.p.lib !== 'tSlotProfile') continue;
+        const pm = Mass.partOf(m, it.id);
+        const ki = Model.kernelItem(it);
+        const exp = (ki && ki.p && ki.p.spec && ki.p.spec.volume) || 0;
+        profVols.push({ size: it.p.size, vol: pm ? pm.volume : 0, exp });
+      }
+      const r20x40 = App.results.get(items[1].id);
+      const faces20x40 = (r20x40 && r20x40.data && r20x40.data.faces) || [];
+      const bores20x40 = faces20x40.filter(f => f && f.t === 'CYLINDRE' && Math.abs((f.r || 0) - 2.5) < 0.05).length;
+      const b40Br = App.results.get(items[6].id)?.data?.bbox;
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        count: items.length,
+        profVols,
+        bores20x40,
+        b40BrMinX: b40Br ? b40Br[0] : 0,
+        gcIssues: gc.issues.length,
+        gcChecked: gc.checkedCount,
+      };
+    })()""")
+    ok4 = bool(
+        all_res['errs'] == 0 and all_res['count'] == 14
+        and all(v['exp'] > 0 and abs(v['vol'] - v['exp']) / v['exp'] < 0.01 for v in all_res['profVols'])
+        and all_res['bores20x40'] == 2
+        and all_res['b40BrMinX'] < -2.5
+        and all_res['gcIssues'] == 0 and all_res['gcChecked'] == 14
+    )
+
+    # 5. Undo/Redo, Validierung, Hilfen, Erklärungen & DE/EN-Texte
+    p.ev("App.undo();")
+    warte_rechnen(p, 40)
+    undo_len = p.ev("return App.doc.items.length")
+    p.ev("App.redo();")
+    warte_rechnen(p, 40)
+    redo_len = p.ev("return App.doc.items.length")
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const keys = ['tSlotProfile', 'tSlotBracket', 'tSlotNut', 'tSlotEndCap'];
+      const hOk = keys.every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const sOk = keys.every(k => se[k] && se[k].was && se[k].wozu && se[k].achtung);
+      const exp = Explain.local(App.doc.items[0].id);
+      const expOk = !!(exp && exp.lines && exp.lines.some(l => l.k === 'was' && l.t.includes('Alu-Nutprofil')));
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { valOk: !!(val && val.ok), hOk, sOk, expOk, i18nOk };
+    })()""")
+    ok5 = bool(undo_len == 5 and redo_len == 14 and meta['valOk'] and meta['hOk'] and meta['sOk'] and meta['expOk'] and meta['i18nOk'])
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -43512,6 +43797,7 @@ TESTS = [
     ('[A-206] Direkt bearbeiten: Vereinfachen und Körper an Körper ausrichten', t_vereinfachen_ausrichten),
     ('[A-207] Profile, Schritt 1: Profil-Sammlung (PR-01)', t_a207_profil_sammlung),
     ('[A-209] Profile, Schritt 3: Gestell aus Linien (PR-03, PR-06)', t_a209_gestell_aus_linien),
+    ('[A-208] Profile, Schritt 2: Alu-Nutprofile mit Zubehör (PR-02)', t_a208_alu_nutprofile),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

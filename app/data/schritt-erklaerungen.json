@@ -574,5 +574,25 @@
     "was": "Setzt entlang jeder Linie, jedes Bogens oder jeder Kurve einer 2D- oder 3D-Skizze automatisch einen Profilstab als eigenen Körper im Gestell.",
     "wozu": "Baut komplette Rahmen, Maschinengestelle, Tische oder Fachwerke aus Normprofilen oder eigenen Sonderquerschnitten auf einen Schlag.",
     "achtung": "Für ein eigenes Profil brauchst du zuerst eine geschlossene 2D-Skizze (z. B. Kreis oder eigenes Profil); danach lassen sich Querschnitt, Drehung und Versatz rechts jederzeit ändern."
+  },
+  "tSlotProfile": {
+    "was": "Erzeugt ein Alu-Nutprofil der Baureihe 20, 30, 40 oder 45 (Nut 6, 8 oder 10) mit echten T-Nuten und Kernbohrungen.",
+    "wozu": "Grundbaustein für verwindungssteife Aluminium-Gestelle, 3D-Drucker-Rahmen, Einhausungen und Vorrichtungen.",
+    "achtung": "Über die Knöpfe rechts im Eigenschaften-Panel setzt du passende Winkel, Nutensteine und Endkappen direkt bündig und ohne Durchdringung ans Profil."
+  },
+  "tSlotBracket": {
+    "was": "Erzeugt einen 90°-Profil-Winkel mit Verstärkungsrippen, zwei Durchgangsbohrungen und optionalen Zentriernasen.",
+    "wozu": "Verbindet zwei Alu-Nutprofile rechtwinklig miteinander.",
+    "achtung": "Achte darauf, dass die Baureihe des Winkels (20, 30, 40 oder 45) zum Nutprofil passt; über „Winkel ans Profil setzen“ richtet er sich automatisch bündig aus."
+  },
+  "tSlotNut": {
+    "was": "Erzeugt einen T-förmigen Nutenstein mit Gewinde-Kernbohrung passend zur Nut 6, 8 oder 10.",
+    "wozu": "Verankert Winkel, Platten oder Anbauteile mit Schrauben in der Nut eines Alu-Nutprofils.",
+    "achtung": "Bei sehr schmaler Nut (Nut 6) werden große Gewinde automatisch auf den zulässigen Steg begrenzt."
+  },
+  "tSlotEndCap": {
+    "was": "Erzeugt eine abgeschrägte Abdeckkappe mit Haltezapfen für die Stirnseite eines Alu-Nutprofils.",
+    "wozu": "Schließt scharfe Sägekanten von Alu-Nutprofilen sauber und verletzungssicher ab.",
+    "achtung": "Für Doppelprofile (z. B. 20×40 oder 40×80) besitzt die Endkappe automatisch zwei passende Haltezapfen."
   }
 }
