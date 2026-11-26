@@ -41546,6 +41546,141 @@ def t_a202_einlinien_schrift(p):
         p.ev("try { if (Sketch.active) Sketch.cancel(true); ViewPrefs.setLevel('pro'); } catch (_) {}")
 
 
+def t_a203_gravieren(p):
+    p.empty()
+    try:
+        # 1. Quader 40×30×10 anlegen, Ausgangsvolumen messen, Oberseite wählen -> „Gravieren“ in Einfach & Profi sichtbar + Hilfe
+        p.ev("Actions.addPrimitive('box', { p: { w: 40, d: 30, h: 10 }, name: 'Platte' });")
+        warte_rechnen(p, 30)
+        vol0 = p.ev("return Mass.measure().then(m => m?.parts?.[0]?.volume || 0)")
+        p.ev("""
+          const b = App.doc.items[0];
+          const r = App.results.get(b.id);
+          const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+          App.select([b.id], { face: { id: b.id, faceIdx: fi, info: r.data.faces[fi] } });
+        """)
+        p.wait(300)
+        pro_ctx = p.ev("""
+          const btn = document.querySelector('#ctx-engrave');
+          return {
+            exists: !!btn,
+            vis: !!(btn && btn.offsetParent),
+            label: btn ? btn.textContent.trim() : '',
+            help: btn ? btn.dataset.help : '',
+          };
+        """)
+        p.ev("ViewPrefs.setLevel('simple'); Panels.renderCtx();")
+        p.wait(250)
+        simple_ctx = p.ev("""
+          const btn = document.querySelector('#ctx-engrave');
+          return { exists: !!btn, vis: !!(btn && btn.offsetParent), label: btn ? btn.textContent.trim() : '' };
+        """)
+        ok1 = (
+            abs(vol0 - 12000.0) < 0.5
+            and pro_ctx['exists'] and pro_ctx['vis'] and pro_ctx['label'] == 'Gravieren'
+            and pro_ctx['help'] == 'engrave'
+            and simple_ctx['exists'] and simple_ctx['vis'] and simple_ctx['label'] == 'Gravieren'
+        )
+
+        # 2. Über Feature-Leiste „Gravieren“ öffnen und „AB“ mit 0,5 mm Tiefe & 0,4 mm Breite einfräsen -> Volumen kleiner, 0 Geometriefehler
+        p.pg.locator('#ctx-engrave').click(); p.wait(350)
+        bar_open = p.ev("return !!document.querySelector('#engrave-bar') && Features.engraving && SK.isFontLoaded('gravur');")
+        p.pg.fill('#eng-text', 'AB')
+        p.pg.fill('#eng-height', '10')
+        p.pg.fill('#eng-width', '0.4')
+        p.pg.fill('#eng-depth', '0.5')
+        p.pg.fill('#eng-u', '0')
+        p.pg.fill('#eng-v', '0')
+        p.pg.fill('#eng-rot', '0')
+        p.pg.locator('#eng-apply').click()
+        warte_rechnen(p, 45)
+        st1 = p.ev("""return (async () => {
+          const step = App.doc.items.find(x => x.p && x.p.engrave);
+          const ms = await Mass.measure();
+          const gc = await GeomCheck.run({ silent: true });
+          const editBtn = document.querySelector('#ctx-engrave-edit');
+          return {
+            errs: App.errors.length,
+            barGone: !document.querySelector('#engrave-bar') && !Features.engraving,
+            stepOk: !!(step && step.kind === 'extrude' && step.op && step.op.type === 'cut'),
+            eg: step ? step.p.engrave : null,
+            partsCount: ms?.parts?.length || 0,
+            vol: ms?.parts?.[0]?.volume || 0,
+            gcBad: gc.issues.filter(x => x.s === 'bad').length,
+            hasEditCtx: !!(editBtn && editBtn.offsetParent),
+          };
+        })()""")
+        vol1 = st1['vol']
+        ok2 = (
+            bar_open and st1['errs'] == 0 and st1['barGone'] and st1['stepOk']
+            and st1['eg'] is not None and st1['eg']['text'] == 'AB' and st1['eg']['font'] == 'gravur'
+            and abs(st1['eg']['width'] - 0.4) < 1e-6 and abs(st1['eg']['depth'] - 0.5) < 1e-6
+            and st1['partsCount'] == 1 and vol1 < vol0 - 3.0 and vol1 > vol0 - 40.0
+            and st1['gcBad'] == 0 and st1['hasEditCtx']
+        )
+
+        # 3. „Gravur bearbeiten“ (Profi & Einfach) -> 0,6 mm breit, 1,0 mm tief -> Volumen weiter kleiner
+        p.ev("ViewPrefs.setLevel('pro'); Panels.renderCtx();")
+        p.wait(200)
+        p.pg.locator('#ctx-engrave-edit').click(); p.wait(300)
+        p.pg.fill('#eng-width', '0.6')
+        p.pg.fill('#eng-depth', '1.0')
+        p.pg.locator('#eng-apply').click()
+        warte_rechnen(p, 45)
+        st2 = p.ev("""return (async () => {
+          const ms = await Mass.measure();
+          const gc = await GeomCheck.run({ silent: true });
+          return { errs: App.errors.length, vol: ms?.parts?.[0]?.volume || 0, gcBad: gc.issues.filter(x => x.s === 'bad').length };
+        })()""")
+        vol2 = st2['vol']
+        ok3 = st2['errs'] == 0 and st2['gcBad'] == 0 and vol2 < vol1 - 3.0
+
+        # 4. Rückgängig (2× Strg+Z) stellt zuerst vol1 und dann exakt vol0 wieder her
+        p.pg.keyboard.press('Control+z')
+        warte_rechnen(p, 30)
+        v_undo1 = p.ev("return Mass.measure().then(m => m?.parts?.[0]?.volume || 0)")
+        p.pg.keyboard.press('Control+z')
+        warte_rechnen(p, 30)
+        v_undo2 = p.ev("return Mass.measure().then(m => m?.parts?.[0]?.volume || 0)")
+        n_items = p.ev("return App.doc.items.length")
+        ok4 = abs(v_undo1 - vol1) < 0.05 and abs(v_undo2 - vol0) < 0.05 and n_items == 1
+
+        # 5. Auch komplexe Zeichen (S, e, 3) fräsen sauber ohne Fehler + DE/EN-Textschlüssel gleich
+        st3 = p.ev("""return (async () => {
+          const b = App.doc.items[0];
+          const r = App.results.get(b.id);
+          const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+          const face = { id: b.id, faceIdx: fi, info: r.data.faces[fi] };
+          const step = await Features.engrave(face, { text: 'Se3', height: 8, width: 0.4, depth: 0.5 });
+          return !!step;
+        })()""")
+        warte_rechnen(p, 45)
+        st3_res = p.ev("""return (async () => {
+          const ms = await Mass.measure();
+          const gc = await GeomCheck.run({ silent: true });
+          const [de, en, helps] = await Promise.all([
+            fetch('data/texte-de.json').then(r => r.json()),
+            fetch('data/texte-en.json').then(r => r.json()),
+            fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+          ]);
+          const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+          const i18nMatch = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+          const hasHelp = !!(helps.engrave && helps.engrave.tip && helps.engrave.hilfe && helps.engrave.tipp);
+          return { errs: App.errors.length, vol: ms?.parts?.[0]?.volume || 0, gcBad: gc.issues.filter(x => x.s === 'bad').length, i18nMatch, hasHelp };
+        })()""")
+        p.pg.keyboard.press('Control+z')
+        warte_rechnen(p, 30)
+        v_undo3 = p.ev("return Mass.measure().then(m => m?.parts?.[0]?.volume || 0)")
+        ok5 = (
+            st3 and st3_res['errs'] == 0 and st3_res['gcBad'] == 0
+            and st3_res['vol'] < vol0 - 3.0 and st3_res['i18nMatch'] and st3_res['hasHelp']
+            and abs(v_undo3 - vol0) < 0.05
+        )
+        return [ok1, ok2, ok3, ok4, ok5]
+    finally:
+        p.ev("try { Features.stopEngrave(); ViewPrefs.setLevel('pro'); } catch (_) {}")
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -41861,6 +41996,7 @@ TESTS = [
     ('[A-197] STEP-Teile aus Hersteller-Katalogen einsortieren (BI-29)', t_a197_step_katalog_bibliothek),
     ('[A-194] Bibliothek: Logo aus SVG und RAL-Farben (BI-24, BI-25)', t_a194_svg_logo_ral_farben),
     ('[A-202] Einlinien-Schrift: „AB“ mit Einlinig (Gravur) nur offene Kurven / keine geschlossenen Umrisse / Rückgängig', t_a202_einlinien_schrift),
+    ('[A-203] Einlinien-Schrift gravieren: „AB“ 0,5 mm tief, 0,4 mm breit auf Quader / Einfach & Profi / Bearbeiten / Rückgängig', t_a203_gravieren),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

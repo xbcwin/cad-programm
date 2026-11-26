@@ -1487,6 +1487,7 @@ const Features = (() => {
   }
   function syncPatternMarkers() {
     clearPatternMarkers();
+    if (typeof syncEngraveCtxBtn === 'function') syncEngraveCtxBtn();
     if (typeof Viewer === 'undefined' || !Viewer.container || App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging || Views.exploded || App.sel.length !== 1) return;
     const f = Model.find(App.doc, App.sel[0]); if (!f) return;
     const it = f.item;
@@ -7058,6 +7059,643 @@ const Features = (() => {
     sec.append(viaBtn, h('div', { class: 'hint-box', html: T('asm.cableHint') }));
   }
 
+  // ---------- Einlinien-Schrift gravieren (SK-49) ----------
+  let engraveState = null;
+  function engraveD2(a, b) { return Math.hypot(b[0] - a[0], b[1] - a[1]); }
+  function engravePr(p) { return [Math.round(p[0] * 1e5) / 1e5, Math.round(p[1] * 1e5) / 1e5]; }
+  function engravePolyArea(pts) {
+    let a = 0;
+    for (let i = 0, n = pts.length; i < n; i++) {
+      const p = pts[i], q = pts[(i + 1) % n];
+      a += p[0] * q[1] - q[0] * p[1];
+    }
+    return Math.abs(a / 2);
+  }
+  function engraveInPoly(pt, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+      if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi + 1e-300) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function engraveSegCross(a, b, c, d) {
+    const ccw = (p, q, s) => (q[0] - p[0]) * (s[1] - p[1]) - (q[1] - p[1]) * (s[0] - p[0]);
+    const d1 = ccw(a, b, c), d2v = ccw(a, b, d), d3 = ccw(c, d, a), d4 = ccw(c, d, b);
+    return ((d1 > 1e-9 && d2v < -1e-9) || (d1 < -1e-9 && d2v > 1e-9)) && ((d3 > 1e-9 && d4 < -1e-9) || (d3 < -1e-9 && d4 > 1e-9));
+  }
+  function engraveIsSelfX(poly) {
+    const n = poly ? poly.length : 0;
+    if (n < 3) return true;
+    for (let i = 0; i < n; i++) {
+      const a = poly[i], b = poly[(i + 1) % n];
+      if (engraveD2(a, b) < 1e-5) return true;
+      for (let j = i + 2; j < n; j++) {
+        if (i === 0 && j === n - 1) continue;
+        if (engraveSegCross(a, b, poly[j], poly[(j + 1) % n])) return true;
+      }
+    }
+    return false;
+  }
+  function engraveCleanPoly(pts, minSeg = 0.04) {
+    let P = [];
+    for (let i = 0; i < pts.length; i++) {
+      const q = pts[i];
+      if (!P.length) { P.push([q[0], q[1]]); continue; }
+      const d = engraveD2(P[P.length - 1], q);
+      if (i === pts.length - 1) {
+        if (d < minSeg && P.length >= 2) P[P.length - 1] = [q[0], q[1]];
+        else if (d > 1e-4) P.push([q[0], q[1]]);
+      } else if (d >= minSeg) {
+        P.push([q[0], q[1]]);
+      }
+    }
+    let changed = true, guard = 0;
+    while (changed && guard++ < 8 && P.length >= 3) {
+      changed = false;
+      const next = [P[0]];
+      for (let i = 1; i < P.length - 1; i++) {
+        const a = next[next.length - 1], b = P[i], c = P[i + 1];
+        const abx = b[0] - a[0], aby = b[1] - a[1], lab = Math.hypot(abx, aby);
+        const bcx = c[0] - b[0], bcy = c[1] - b[1], lbc = Math.hypot(bcx, bcy);
+        if (lab < minSeg || lbc < minSeg) { changed = true; continue; }
+        const dt = (abx * bcx + aby * bcy) / (lab * lbc);
+        if (dt < -0.85 && Math.min(lab, lbc) < 0.8) { changed = true; continue; }
+        next.push(b);
+      }
+      next.push(P[P.length - 1]);
+      P = next;
+    }
+    if (P.length === 2) {
+      P = [P[0], [(P[0][0] + P[1][0]) / 2, (P[0][1] + P[1][1]) / 2], P[1]];
+    }
+    return P;
+  }
+  function engraveRibbonPoly(ptsIn, r) {
+    const P = ptsIn.length === 2 ? [ptsIn[0], [(ptsIn[0][0] + ptsIn[1][0]) / 2, (ptsIn[0][1] + ptsIn[1][1]) / 2], ptsIn[1]] : ptsIn;
+    if (P.length < 2) return null;
+    const nSeg = P.length - 1, dirs = [], norms = [];
+    for (let i = 0; i < nSeg; i++) {
+      const dx = P[i + 1][0] - P[i][0], dy = P[i + 1][1] - P[i][1], L = Math.hypot(dx, dy);
+      if (L < 1e-6) return null;
+      dirs.push([dx / L, dy / L]); norms.push([-dy / L, dx / L]);
+    }
+    const left = [engravePr([P[0][0] + norms[0][0] * r, P[0][1] + norms[0][1] * r])];
+    const right = [engravePr([P[0][0] - norms[0][0] * r, P[0][1] - norms[0][1] * r])];
+    for (let i = 1; i < P.length - 1; i++) {
+      const n0 = norms[i - 1], n1 = norms[i];
+      const cr = dirs[i - 1][0] * dirs[i][1] - dirs[i - 1][1] * dirs[i][0];
+      const bx = n0[0] + n1[0], by = n0[1] + n1[1], den = 1 + n0[0] * n1[0] + n0[1] * n1[1];
+      if (den > 0.35 && (1 / Math.sqrt(Math.max(1e-6, den / 2))) <= 2.2) {
+        const mx = (bx / den) * r, my = (by / den) * r, mL = Math.hypot(mx, my), s = mL > r * 1.6 ? (r * 1.6) / mL : 1;
+        left.push(engravePr([P[i][0] + mx * s, P[i][1] + my * s]));
+        right.push(engravePr([P[i][0] - mx * s, P[i][1] - my * s]));
+      } else if (cr > 0) {
+        const mx = (bx / Math.max(0.25, den)) * r, my = (by / Math.max(0.25, den)) * r, mL = Math.hypot(mx, my), s = mL > r * 1.2 ? (r * 1.2) / mL : 1;
+        left.push(engravePr([P[i][0] + mx * s, P[i][1] + my * s]));
+        right.push(engravePr([P[i][0] - n0[0] * r, P[i][1] - n0[1] * r]), engravePr([P[i][0] - n1[0] * r, P[i][1] - n1[1] * r]));
+      } else {
+        left.push(engravePr([P[i][0] + n0[0] * r, P[i][1] + n0[1] * r]), engravePr([P[i][0] + n1[0] * r, P[i][1] + n1[1] * r]));
+        const mx = (bx / Math.max(0.25, den)) * r, my = (by / Math.max(0.25, den)) * r, mL = Math.hypot(mx, my), s = mL > r * 1.2 ? (r * 1.2) / mL : 1;
+        right.push(engravePr([P[i][0] - mx * s, P[i][1] - my * s]));
+      }
+    }
+    const nL = norms[nSeg - 1], dL = dirs[nSeg - 1], d0 = dirs[0], n0 = norms[0], s2 = Math.SQRT1_2;
+    left.push(engravePr([P[nSeg][0] + nL[0] * r, P[nSeg][1] + nL[1] * r]));
+    right.push(engravePr([P[nSeg][0] - nL[0] * r, P[nSeg][1] - nL[1] * r]));
+    const ring = [
+      ...left,
+      engravePr([P[nSeg][0] + (nL[0] * s2 + dL[0] * s2) * r, P[nSeg][1] + (nL[1] * s2 + dL[1] * s2) * r]),
+      engravePr([P[nSeg][0] + dL[0] * r, P[nSeg][1] + dL[1] * r]),
+      engravePr([P[nSeg][0] + (-nL[0] * s2 + dL[0] * s2) * r, P[nSeg][1] + (-nL[1] * s2 + dL[1] * s2) * r]),
+      ...right.slice().reverse(),
+      engravePr([P[0][0] + (-n0[0] * s2 - d0[0] * s2) * r, P[0][1] + (-n0[1] * s2 - d0[1] * s2) * r]),
+      engravePr([P[0][0] - d0[0] * r, P[0][1] - d0[1] * r]),
+      engravePr([P[0][0] + (n0[0] * s2 - d0[0] * s2) * r, P[0][1] + (n0[1] * s2 - d0[1] * s2) * r]),
+    ];
+    const out = [];
+    for (const q of ring) if (!out.length || engraveD2(out[out.length - 1], q) > 1e-4) out.push(q);
+    if (out.length > 1 && engraveD2(out[0], out[out.length - 1]) < 1e-4) out.pop();
+    return out.length >= 3 ? out : null;
+  }
+  function engraveStrokeToPolys(rawPts, r) {
+    const P = engraveCleanPoly(rawPts, Math.max(0.015, r * 0.22));
+    if (P.length < 2) return [];
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const q of P) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
+    if (Math.hypot(x1 - x0, y1 - y0) <= r * 2.2) {
+      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, rad = Math.max(r, Math.hypot(x1 - x0, y1 - y0) / 2 + r * 0.5);
+      const ring = [];
+      for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2; ring.push(engravePr([cx + Math.cos(a) * rad, cy + Math.sin(a) * rad])); }
+      return [ring];
+    }
+    const splitRec = (pts, depth = 0) => {
+      const poly = engraveRibbonPoly(pts, r);
+      if (poly && !engraveIsSelfX(poly) && engravePolyArea(poly) > 1e-5) return [poly];
+      if (pts.length <= 2 || depth > 8) {
+        const segs = [];
+        for (let i = 0; i < pts.length - 1; i++) {
+          const sp = engraveRibbonPoly([pts[i], pts[i + 1]], r);
+          if (sp && !engraveIsSelfX(sp) && engravePolyArea(sp) > 1e-5) segs.push(sp);
+        }
+        return segs;
+      }
+      const mid = Math.floor(pts.length / 2);
+      const leftPts = pts.slice(0, mid + 1);
+      const rightPts = pts.slice(mid);
+      if (rightPts.length >= 2) {
+        const a = rightPts[0], b = rightPts[1], L = engraveD2(a, b);
+        if (L > r * 0.6) {
+          const d = Math.min(r * 0.45, L * 0.4);
+          rightPts[0] = [a[0] + ((b[0] - a[0]) / L) * d, a[1] + ((b[1] - a[1]) / L) * d];
+        }
+      }
+      return [...splitRec(leftPts, depth + 1), ...splitRec(rightPts, depth + 1)];
+    };
+    return splitRec(P);
+  }
+  function engraveTrimPolylines(rawStrokes, r) {
+    const minSeg = Math.max(0.015, r * 0.22);
+    let strokes = rawStrokes.map((pts) => engraveCleanPoly(pts, minSeg)).filter((p) => p.length >= 2);
+    const ptDistSeg = (pt, a, b) => {
+      const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+      const t = l2 > 1e-12 ? clamp(((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / l2, 0, 1) : 0;
+      return Math.hypot(pt[0] - (a[0] + t * dx), pt[1] - (a[1] + t * dy));
+    };
+    const keyOf = (q) => Math.round(q[0] * 1e3) + ',' + Math.round(q[1] * 1e3);
+    // Grad-2-Ecken zwischen verschiedenen Linien zu einem durchgängigen Zug verschmelzen
+    let merged = true;
+    while (merged) {
+      merged = false;
+      const map = new Map();
+      strokes.forEach((s, idx) => {
+        for (const end of [0, 1]) {
+          const k = keyOf(end === 0 ? s[0] : s[s.length - 1]);
+          if (!map.has(k)) map.set(k, []);
+          map.get(k).push({ idx, end });
+        }
+      });
+      for (const list of map.values()) {
+        if (list.length !== 2) continue;
+        const [a, b] = list;
+        if (a.idx === b.idx) continue;
+        const sA = strokes[a.idx], sB = strokes[b.idx];
+        const pt = a.end === 0 ? sA[0] : sA[sA.length - 1];
+        // Nicht verschmelzen, wenn ein dritter Zug durch denselben Punkt läuft
+        const hitMid = strokes.some((s, si) => {
+          if (si === a.idx || si === b.idx) return false;
+          for (let j = 0; j < s.length - 1; j++) if (ptDistSeg(pt, s[j], s[j + 1]) < r * 0.2) return true;
+          return false;
+        });
+        if (hitMid) continue;
+        const p1 = a.end === 1 ? sA.slice() : sA.slice().reverse();
+        const p2 = b.end === 0 ? sB.slice(1) : sB.slice(0, -1).reverse();
+        const combined = [...p1, ...p2];
+        if (engraveD2(combined[0], combined[combined.length - 1]) < r * 0.5) continue;
+        const lo = Math.min(a.idx, b.idx), hi = Math.max(a.idx, b.idx);
+        strokes.splice(hi, 1);
+        strokes.splice(lo, 1, combined);
+        merged = true;
+        break;
+      }
+    }
+    // Enden, die auf einem anderen Strich oder demselben Zug (T-Stoß / Schleife) landen, leicht einrücken,
+    // damit keine deckungsgleichen Endkappen und winzigen Kanten beim Verschneiden entstehen
+    const inset = r * 0.55;
+    const touchesOther = (pt, si, isEnd) => {
+      for (let j = 0; j < strokes.length; j++) {
+        const s = strokes[j];
+        for (let k = 0; k < s.length - 1; k++) {
+          if (j === si && ((isEnd === 0 && k === 0) || (isEnd === 1 && k === s.length - 2))) continue;
+          if (j > si && ((k === 0 && engraveD2(pt, s[0]) < r * 0.2) || (k === s.length - 2 && engraveD2(pt, s[s.length - 1]) < r * 0.2))) continue;
+          if (ptDistSeg(pt, s[k], s[k + 1]) < r * 0.2) return true;
+        }
+      }
+      return false;
+    };
+    const trimEnd = (s, atStart, si) => {
+      if (s.length < 2) return s;
+      const a = atStart ? s[0] : s[s.length - 1];
+      const b = atStart ? s[1] : s[s.length - 2];
+      const L = engraveD2(a, b);
+      if (L <= r * 0.8) return s;
+      const f = 0.45 + 0.25 * ((si + (atStart ? 0 : 1)) % 3);
+      const d = Math.min(r * f, L * 0.45);
+      const q = [a[0] + ((b[0] - a[0]) / L) * d, a[1] + ((b[1] - a[1]) / L) * d];
+      const out = s.slice();
+      if (atStart) out[0] = q; else out[out.length - 1] = q;
+      return out;
+    };
+    strokes = strokes.map((s, si) => {
+      let cur = s;
+      if (touchesOther(cur[0], si, 0)) cur = trimEnd(cur, true, si);
+      if (touchesOther(cur[cur.length - 1], si, 1)) cur = trimEnd(cur, false, si);
+      return cur;
+    });
+    return strokes;
+  }
+  function engraveContoursToEnts(contours, width, refTextEnt = null) {
+    const r = Math.max(0.02, width / 2);
+    const rawStrokes = [];
+    for (const segs of contours || []) {
+      const pts = [];
+      for (const s of segs || []) {
+        const sp = SK.segPoints(s);
+        for (const q of sp) if (!pts.length || engraveD2(pts[pts.length - 1], q) > 1e-6) pts.push(q);
+      }
+      if (pts.length >= 2) rawStrokes.push(pts);
+    }
+    const polys = [];
+    for (const pts of engraveTrimPolylines(rawStrokes, r)) {
+      polys.push(...engraveStrokeToPolys(pts, r));
+    }
+    const withArea = polys.map((p) => ({ p, area: engravePolyArea(p) })).filter((x) => x.area > 1e-5).sort((a, b) => b.area - a.area);
+    const kept = [];
+    for (const item of withArea) {
+      let ring = item.p;
+      const isNested = (rg) => kept.some((C) => C.area > item.area + 1e-9 && engraveInPoly(rg[0], C.p) && engraveInPoly(rg[Math.floor(rg.length / 2)], C.p));
+      if (isNested(ring)) {
+        let found = -1;
+        for (let i = 0; i < ring.length; i++) {
+          if (!kept.some((C) => C.area > item.area + 1e-9 && engraveInPoly(ring[i], C.p))) { found = i; break; }
+        }
+        if (found < 0) continue;
+        ring = [...ring.slice(found), ...ring.slice(0, found)];
+      }
+      kept.push({ p: ring, area: item.area });
+    }
+    const qkey = (pt) => Math.round(pt[0] * 1e4) + ',' + Math.round(pt[1] * 1e4);
+    const used = new Set();
+    const ents = [];
+    if (refTextEnt) ents.push({ ...deepClone(refTextEnt), con: true });
+    for (const item of kept) {
+      const ring = item.p;
+      for (let i = 0; i < ring.length; i++) {
+        let pt = ring[i], tries = 0;
+        while (used.has(qkey(pt)) && tries++ < 8) {
+          pt = engravePr([pt[0] + 0.002 * Math.cos(tries * 1.1), pt[1] + 0.002 * Math.sin(tries * 1.1)]);
+        }
+        ring[i] = pt;
+        used.add(qkey(pt));
+      }
+      for (let i = 0; i < ring.length; i++) {
+        ents.push({ id: uid('e'), type: 'line', a: ring[i].slice(), b: ring[(i + 1) % ring.length].slice() });
+      }
+    }
+    return ents;
+  }
+  function engraveTextEntity(text, height, opts = {}) {
+    const u = Number(opts.u) || 0, v = Number(opts.v) || 0;
+    const rotDeg = Number(opts.rot) || 0;
+    const rotRad = (rotDeg * Math.PI) / 180;
+    const align = opts.align === 'l' || opts.align === 'r' ? opts.align : 'm';
+    const ax = round(u + Math.sin(rotRad) * (height / 2), 5);
+    const ay = round(v - Math.cos(rotRad) * (height / 2), 5);
+    return { id: uid('e'), type: 'text', a: [ax, ay], s: text, h: height, font: 'gravur', align, rot: rotRad, mir: false, con: true };
+  }
+  function engraveLocalPlane(face, tgt) {
+    const fr = Actions.faceFrame(face.info);
+    const Wface = face.id && face.id !== tgt.id ? Model.worldMatrix(App.doc, face.id) : null;
+    if (!Wface) return { o: fr.o.map((x) => round(x, 6)), x: fr.x.map((x) => round(x, 9)), n: fr.n.map((x) => round(x, 9)) };
+    const Mrel = Model.worldMatrix(App.doc, tgt.id).invert().multiply(Wface);
+    return {
+      o: new THREE.Vector3(...fr.o).applyMatrix4(Mrel).toArray().map((x) => round(x, 6)),
+      x: new THREE.Vector3(...fr.x).transformDirection(Mrel).normalize().toArray().map((x) => round(x, 9)),
+      n: new THREE.Vector3(...fr.n).transformDirection(Mrel).normalize().toArray().map((x) => round(x, 9)),
+    };
+  }
+  async function engrave(face = null, opts = {}) {
+    if (App.ctx) { UI.toast(T('engrave.mainOnly'), { icon: 'info' }); return null; }
+    const editIt = opts.editId ? Model.find(App.doc, opts.editId)?.item : null;
+    const eg0 = editIt && editIt.p && editIt.p.engrave ? editIt.p.engrave : null;
+    let tgt = null, sig = null, plane = null;
+    if (editIt) {
+      const tid = (eg0 && eg0.target) || (editIt.op && editIt.op.target);
+      tgt = tid ? resolveTopTarget(tid) : null;
+      sig = (eg0 && eg0.face) || null;
+      plane = editIt.p && editIt.p.sketch && editIt.p.sketch.plane ? deepClone(editIt.p.sketch.plane) : null;
+      if (!tgt || tgt.role === 'hole' || !plane) { UI.toast(T('engrave.needFace'), { icon: 'info' }); return null; }
+    } else {
+      face = face || Actions.selectedFace();
+      tgt = face ? resolveTopTarget(face.id) : null;
+      sig = faceSigOf(face);
+      if (!tgt || tgt.role === 'hole' || !sig || !face.info || face.info.t !== 'PLANE') {
+        UI.toast(T('engrave.needFace'), { icon: 'info' });
+        return null;
+      }
+      plane = engraveLocalPlane(face, tgt);
+    }
+    const text = opts.text != null ? String(opts.text) : (eg0 ? eg0.text : 'Tracery');
+    const height = Number(opts.height ?? (eg0 ? eg0.height : 8));
+    const width = Number(opts.width ?? (eg0 ? eg0.width : 0.4));
+    const depth = Number(opts.depth ?? (eg0 ? eg0.depth : 0.5));
+    const u = Number(opts.u ?? (eg0 ? eg0.u : 0)) || 0;
+    const v = Number(opts.v ?? (eg0 ? eg0.v : 0)) || 0;
+    const rot = Number(opts.rot ?? (eg0 ? eg0.rot : 0)) || 0;
+    const align = (opts.align || (eg0 && eg0.align)) === 'l' || (opts.align || (eg0 && eg0.align)) === 'r' ? (opts.align || eg0.align) : 'm';
+    if (!(width > 1e-4 && depth > 1e-4 && height > 1e-4 && isFinite(width) && isFinite(depth) && isFinite(height))) {
+      UI.toast(T('engrave.badParams'), { kind: 'bad' });
+      return null;
+    }
+    let contours = [], refText = null;
+    if (opts.sketch && Array.isArray(opts.sketch.ents)) {
+      await SK.ensureEntsFonts(opts.sketch.ents, 'gravur');
+      const skEnts = opts.sketch.ents;
+      const singleIds = new Set();
+      for (const e of skEnts) {
+        if (e && !e.con && e.type === 'text' && SK.isSingleLineFont(e.font)) singleIds.add(e.id);
+      }
+      contours = SK.chains(skEnts).map((ch) => ch.segs);
+      if (!contours.length && singleIds.size) {
+        for (const e of skEnts) if (singleIds.has(e.id)) contours.push(...SK.textContours(e));
+      }
+    } else {
+      if (!text.trim()) { UI.toast(T('engrave.needText'), { kind: 'bad' }); return null; }
+      await SK.loadFont('gravur');
+      refText = engraveTextEntity(text, height, { u, v, rot, align });
+      contours = SK.textContours(refText);
+    }
+    const ents = engraveContoursToEnts(contours, width, refText);
+    if (!ents.some((e) => !e.con)) {
+      UI.toast(T('engrave.noStrokes'), { kind: 'bad' });
+      return null;
+    }
+    const labelTxt = text.trim() || 'Text';
+    const meta = { text: labelTxt, height, width, depth, u, v, rot, align, font: 'gravur', target: tgt.id, face: sig };
+    let step = null;
+    if (editIt) {
+      App.change(T('engrave.undoEdit'), (doc) => {
+        const f = Model.find(doc, editIt.id);
+        if (!f || !f.item || !f.item.p) return false;
+        f.item.name = opts.name || T('engrave.stepName', { text: labelTxt.slice(0, 20) });
+        f.item.p.sketch = { plane: deepClone(plane), ents, dims: [], cons: [] };
+        f.item.p.dist = depth;
+        f.item.p.dir = 'reverse';
+        f.item.p.extra = 0.05;
+        f.item.p.engrave = meta;
+        f.item.op = { type: 'cut', target: tgt.id };
+        step = f.item;
+      });
+      if (step) {
+        App.select([step.id]);
+        UI.toast(T('engrave.toastUpdated'), { icon: 'check' });
+      }
+      return step;
+    }
+    App.change(T('engrave.undoAdd'), (doc) => {
+      step = Model.newItem('extrude', {
+        sketch: { plane, ents, dims: [], cons: [] },
+        dist: depth,
+        dir: 'reverse',
+        extra: 0.05,
+        engrave: meta,
+      }, {
+        name: opts.name || T('engrave.stepName', { text: labelTxt.slice(0, 20) }),
+        role: 'solid',
+        color: tgt.color,
+        mat: tgt.mat,
+      });
+      step.op = { type: 'cut', target: tgt.id };
+      Model.setFromMatrix(step, Model.worldMatrix(doc, tgt.id));
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('engrave.toastAdded', { width: fmt(width, 2), depth: fmt(depth, 2) }), { icon: 'check' });
+    }
+    return step;
+  }
+  function updateEngrave(stepId, opts = {}) {
+    return engrave(null, { ...opts, editId: stepId });
+  }
+  function clearEngravePreview() {
+    if (!engraveState || !engraveState.obj) return;
+    const o = engraveState.obj;
+    if (Viewer.groups && Viewer.groups.overlay) Viewer.groups.overlay.remove(o);
+    o.traverse((x) => {
+      if (x.geometry) x.geometry.dispose();
+      if (x.material) {
+        if (x.isLineSegments2 || x.isLine2) Viewer.disposeFat(x);
+        else x.material.dispose();
+      }
+    });
+    engraveState.obj = null;
+    Viewer.requestRender();
+  }
+  function stopEngrave() {
+    if (!engraveState) return;
+    clearEngravePreview();
+    if (engraveState.bar) engraveState.bar.remove();
+    if (engraveState.key) window.removeEventListener('keydown', engraveState.key, true);
+    engraveState = null;
+    UI.hint(null);
+  }
+  function drawEngravePreview() {
+    if (!engraveState || !App.doc) return;
+    clearEngravePreview();
+    if (!SK.isFontLoaded('gravur')) {
+      SK.loadFont('gravur').then(() => { if (engraveState) drawEngravePreview(); }).catch(() => {});
+      return;
+    }
+    const st = engraveState;
+    const text = String(st.vals.text || '');
+    if (!text.trim() || !(st.vals.height > 0)) return;
+    const txtEnt = engraveTextEntity(text, st.vals.height, st.vals);
+    const contours = SK.textContours(txtEnt);
+    if (!contours.length) return;
+    const W = Model.worldMatrix(App.doc, st.tgtId);
+    const pl = st.plane;
+    const o = new THREE.Vector3(...pl.o);
+    const x = new THREE.Vector3(...pl.x).normalize();
+    const n = new THREE.Vector3(...pl.n).normalize();
+    const y = new THREE.Vector3().crossVectors(n, x).normalize();
+    const toW = (uv) => o.clone().addScaledVector(x, uv[0]).addScaledVector(y, uv[1]).addScaledVector(n, 0.06).applyMatrix4(W);
+    const pos = [];
+    for (const segs of contours) {
+      for (const s of segs) {
+        const pts = SK.segPoints(s);
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = toW(pts[i]), b = toW(pts[i + 1]);
+          pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+        }
+      }
+    }
+    if (!pos.length) return;
+    const g = new THREE.Group();
+    const col = Viewer.theme ? Viewer.theme.accent : '#2f9e91';
+    g.add(Viewer.makeFat(pos, col, 2.2, { depthTest: false, order: 28 }));
+    Viewer.groups.overlay.add(g);
+    st.obj = g;
+    Viewer.requestRender();
+  }
+  function startEngrave(face = null, opts = {}) {
+    if (App.ctx) { UI.toast(T('engrave.mainOnly'), { icon: 'info' }); return false; }
+    stopPick();
+    stopEngrave();
+    let editIt = opts.editId ? Model.find(App.doc, opts.editId)?.item : null;
+    let tgt = null, plane = null, vals = null;
+    if (editIt && editIt.p && editIt.p.engrave) {
+      const eg = editIt.p.engrave;
+      tgt = resolveTopTarget(eg.target || (editIt.op && editIt.op.target));
+      plane = editIt.p.sketch && editIt.p.sketch.plane ? deepClone(editIt.p.sketch.plane) : null;
+      if (!tgt || !plane) { UI.toast(T('engrave.needFace'), { icon: 'info' }); return false; }
+      vals = { text: eg.text || 'Tracery', height: eg.height ?? 8, width: eg.width ?? 0.4, depth: eg.depth ?? 0.5, u: eg.u ?? 0, v: eg.v ?? 0, rot: eg.rot ?? 0, align: eg.align || 'm' };
+    } else {
+      editIt = null;
+      face = face || Actions.selectedFace();
+      tgt = face ? resolveTopTarget(face.id) : null;
+      if (!tgt || tgt.role === 'hole' || !face || !face.info || face.info.t !== 'PLANE') {
+        if (!ribTargets().length) { UI.toast(T('engrave.needBody'), { icon: 'info' }); return false; }
+        pickPlanarBodyFace(T('engrave.pickFaceHint'), (picked) => startEngrave(picked, opts));
+        return true;
+      }
+      plane = engraveLocalPlane(face, tgt);
+      const bb = Actions.worldBox(tgt.id);
+      const sz = bb && !bb.isEmpty() ? bb.getSize(new THREE.Vector3()) : null;
+      const defH = sz ? round(clamp(Math.min(sz.x, sz.y, sz.z) > 0 ? Math.max(sz.x, sz.y) * 0.22 : 8, 4, 12), 1) : 8;
+      vals = {
+        text: opts.text != null ? String(opts.text) : 'Tracery',
+        height: Number(opts.height) || defH,
+        width: Number(opts.width) || 0.4,
+        depth: Number(opts.depth) || 0.5,
+        u: Number(opts.u) || 0,
+        v: Number(opts.v) || 0,
+        rot: Number(opts.rot) || 0,
+        align: opts.align || 'm',
+      };
+    }
+    const bar = h('div', { class: 'viewbar', id: 'engrave-bar', role: 'toolbar', 'aria-label': T('engrave.title'), 'data-help': 'engrave' });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, T('engrave.title')));
+    const xBtn = h('button', { type: 'button', class: 'vb-x', id: 'eng-close', 'aria-label': T('common.cancel'), 'data-tip': T('common.cancel') });
+    xBtn.innerHTML = icon('close');
+    xBtn.onclick = () => stopEngrave();
+    head.append(xBtn);
+
+    const stopK = (el) => {
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopEngrave(); return; }
+        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); commit(); return; }
+        e.stopPropagation();
+      });
+    };
+    const txtIn = h('input', { type: 'text', id: 'eng-text', class: 'vb-sel', value: vals.text, 'aria-label': T('engrave.text'), style: { width: '130px' } });
+    const numIn = (id, label, val, min, step, w = '58px') => {
+      const inp = h('input', { type: 'number', id, class: 'vb-sel', value: val, min, step, 'aria-label': label, style: { width: w } });
+      stopK(inp);
+      return inp;
+    };
+    stopK(txtIn);
+    const hIn = numIn('eng-height', T('engrave.height'), vals.height, 0.5, 0.5);
+    const wIn = numIn('eng-width', T('engrave.width'), vals.width, 0.05, 0.1);
+    const dIn = numIn('eng-depth', T('engrave.depth'), vals.depth, 0.05, 0.1);
+    const uIn = numIn('eng-u', T('engrave.offsetX'), vals.u, -1000, 1, '52px');
+    const vIn = numIn('eng-v', T('engrave.offsetY'), vals.v, -1000, 1, '52px');
+    const rIn = numIn('eng-rot', T('engrave.rot'), vals.rot, -360, 15, '52px');
+    const syncVals = () => {
+      if (!engraveState) return;
+      const numV = (el, fb) => { const n = parseFloat(String(el.value).replace(',', '.')); return isFinite(n) ? n : fb; };
+      engraveState.vals.text = txtIn.value;
+      engraveState.vals.height = Math.max(0.2, numV(hIn, engraveState.vals.height));
+      engraveState.vals.width = Math.max(0.05, numV(wIn, engraveState.vals.width));
+      engraveState.vals.depth = Math.max(0.05, numV(dIn, engraveState.vals.depth));
+      engraveState.vals.u = numV(uIn, 0);
+      engraveState.vals.v = numV(vIn, 0);
+      engraveState.vals.rot = numV(rIn, 0);
+      drawEngravePreview();
+    };
+    txtIn.oninput = syncVals;
+    [hIn, wIn, dIn, uIn, vIn, rIn].forEach((el) => { el.oninput = syncVals; el.onchange = syncVals; });
+
+    const okBtn = h('button', { type: 'button', class: 'btn small primary', id: 'eng-apply' });
+    okBtn.innerHTML = icon('check') + esc(T(editIt ? 'engrave.updateBtn' : 'engrave.applyBtn'));
+    const cancelBtn = h('button', { type: 'button', class: 'btn small ghost', id: 'eng-cancel' }, T('common.cancel'));
+    cancelBtn.onclick = () => stopEngrave();
+
+    const commit = async () => {
+      if (!engraveState) return;
+      syncVals();
+      const vCopy = { ...engraveState.vals };
+      const faceRef = engraveState.face;
+      const editId = engraveState.editId;
+      okBtn.disabled = true;
+      try {
+        const res = await engrave(faceRef, { ...vCopy, ...(editId ? { editId } : {}) });
+        if (res) stopEngrave();
+        else if (engraveState) okBtn.disabled = false;
+      } catch (err) {
+        if (engraveState) okBtn.disabled = false;
+        UI.toast(err && err.message ? err.message : String(err), { kind: 'bad' });
+      }
+    };
+    okBtn.onclick = () => commit();
+
+    bar.append(
+      head,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, T('engrave.text')), txtIn, h('span', { class: 'vb-l' }, T('engrave.height')), hIn, h('span', { class: 'vb-hint' }, 'mm')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, T('engrave.width')), wIn, h('span', { class: 'vb-hint' }, 'mm'), h('span', { class: 'vb-l' }, T('engrave.depth')), dIn, h('span', { class: 'vb-hint' }, 'mm')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, T('engrave.offsetX')), uIn, h('span', { class: 'vb-l' }, T('engrave.offsetY')), vIn, h('span', { class: 'vb-l' }, T('engrave.rot')), rIn, h('span', { class: 'vb-hint' }, '°')),
+      h('div', { class: 'vb-row' }, okBtn, cancelBtn, h('span', { class: 'vb-hint' }, T('engrave.hint')))
+    );
+    const key = (e) => {
+      if (!engraveState) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopEngrave(); }
+    };
+    engraveState = { bar, face, tgtId: tgt.id, plane, editId: editIt ? editIt.id : null, vals, obj: null, key };
+    Views.bars().append(bar);
+    window.addEventListener('keydown', key, true);
+    UI.hint(T('engrave.barHint'));
+    drawEngravePreview();
+    setTimeout(() => { try { txtIn.focus(); txtIn.select(); } catch (_) {} }, 0);
+    return true;
+  }
+  function syncEngraveCtxBtn() {
+    if (typeof document === 'undefined') return;
+    const bar = $('#overlay .ctxbar');
+    if (!bar || bar.classList.contains('inactive') || App.ctx || App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) return;
+    if ((App.edges && App.edges.length) || (App.faces && App.faces.length > 1)) return;
+    const items = App.selectedItems();
+    if (items.length !== 1) return;
+    const it = items[0].item;
+    const face = Actions.selectedFace();
+    let changed = false;
+    if (face && face.info && face.info.t === 'PLANE' && it.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) {
+      if (!bar.querySelector('#ctx-engrave')) {
+        const btn = h('button', { type: 'button', id: 'ctx-engrave', 'data-tip': T('ctx.engraveTip'), 'aria-label': T('ctx.engrave'), 'data-help': 'engrave' });
+        btn.innerHTML = icon('text') + `<span>${esc(T('ctx.engrave'))}</span>`;
+        btn.onclick = (e) => { e.stopPropagation(); startEngrave(face); };
+        const emb = bar.querySelector('button[data-help="emboss"]');
+        const sep = bar.querySelector('.vsep');
+        if (emb) emb.after(btn);
+        else if (sep) bar.insertBefore(btn, sep);
+        else bar.append(btn);
+        changed = true;
+      }
+    } else if (!face && it.kind === 'extrude' && it.p && it.p.engrave) {
+      if (!bar.querySelector('#ctx-engrave-edit')) {
+        const btn = h('button', { type: 'button', id: 'ctx-engrave-edit', class: 'accent', 'data-tip': T('ctx.engraveEditTip'), 'aria-label': T('ctx.engraveEdit'), 'data-help': 'engrave' });
+        btn.innerHTML = icon('edit') + `<span>${esc(T('ctx.engraveEdit'))}</span>`;
+        btn.onclick = (e) => { e.stopPropagation(); startEngrave(null, { editId: it.id }); };
+        const lbl = bar.querySelector('.lbl');
+        if (lbl) lbl.after(btn);
+        else bar.prepend(btn);
+        changed = true;
+      }
+    }
+    if (changed) {
+      const crEl = $('#center');
+      if (crEl && !bar.hidden && bar.offsetWidth > 0) {
+        const cr = crEl.getBoundingClientRect();
+        const bw = bar.offsetWidth;
+        const curL = parseFloat(bar.style.left);
+        if (isFinite(curL)) bar.style.left = clamp(curL, bw / 2 + 8, cr.width - bw / 2 - 8) + 'px';
+      }
+    }
+  }
+  if (typeof App !== 'undefined' && App.on) {
+    App.on('docLoaded', stopEngrave);
+    App.on('mode', stopEngrave);
+  }
+
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, portCutout, startPortCutout, pickPortCutoutFace, renderPortCutout, magnetPocket, startMagnetPocket, pickMagnetPocketFace, renderMagnetPocket, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, directFace, startDirectFace, pickDirectFace, pickDirectFaceRotAxis, directFaceFrame, renderDirectFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, portCutout, startPortCutout, pickPortCutoutFace, renderPortCutout, magnetPocket, startMagnetPocket, pickMagnetPocketFace, renderMagnetPocket, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, directFace, startDirectFace, pickDirectFace, pickDirectFaceRotAxis, directFaceFrame, renderDirectFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut, startEngrave, engrave, updateEngrave, stopEngrave, get engraving() { return !!engraveState; } };
 })();

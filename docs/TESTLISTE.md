@@ -3058,6 +3058,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Rückgängig (`Strg+Z`) entfernt den gesetzten Einlinien-Text vollständig; „In Kurven umwandeln“ behält offene Linien ohne geschlossene Flächen (Klicktest `[A-202]`)
 - [ ] **Von Hand**: Im Browser eine Skizze starten, im Text-Werkzeug „Einlinig (Gravur)“ wählen, einen Satz mit Umlauten und Ziffern setzen und das Linienbild im 2D-Fenster prüfen.
 
+## Einlinien-Schrift gravieren (Auto [A-203], SK-49)
+- [x] Knopf `#ctx-engrave` („Gravieren“) erscheint an ebenen Körperflächen in der Feature-Leiste sowohl in **Einfach** als auch in **Profi** samt Hilfetext (`HELP.engrave`) und DE/EN-Übersetzungen (Klicktest `[A-203]`)
+- [x] Einliniger Text „AB“ (10 mm hoch, 0,4 mm breit, 0,5 mm tief) wird auf einem Quader (40 × 30 × 10 mm) ohne Geometriefehler eingefräst (`Volumen < Ausgangsvolumen`) und lässt sich über „Gravur bearbeiten“ (`#ctx-engrave-edit`) anpassen (Klicktest `[A-203]`)
+- [x] Rückgängig (`Strg+Z`) stellt das exakte Ausgangsvolumen wieder her; auch komplexe Zeichen (`Se3`) gravieren fehlerfrei (Klicktest `[A-203]`)
+- [ ] **Von Hand**: Im Browser eine ebene Fläche eines Körpers anklicken, „Gravieren“ wählen, während der Eingabe die 3D-Linienvorschau prüfen und eine mehrzeilige bzw. gedrehte Gravur auf einem 3D-Druckteil begutachten.
+
 ## Fehler melden
 
 ```

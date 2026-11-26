@@ -2962,6 +2962,11 @@ const HELP = {
   "tip": "Farbe aus der genormten RAL-Classic-Farbtafel wählen (z. B. RAL 3020 Verkehrsrot)",
   "hilfe": "Öffnet die lokale RAL-Classic-Farbtabelle mit über 100 Standard-Farbtönen aus allen neun Farbgruppen (Gelb 1000 bis Weiß/Schwarz 9000). Du kannst nach RAL-Nummer oder Farbname suchen und die Farbe direkt auf Körper, Flächen oder Teilkörper anwenden.",
   "tipp": "Tippe im Suchfeld einfach die vierstellige Nummer wie „3020“ oder „7016“ ein und drücke Enter, um den Farbton sofort zu übernehmen."
+ },
+ "engrave": {
+  "tip": "Einlinigen Text mit wählbarer Breite und Tiefe in eine ebene Fläche gravieren",
+  "hilfe": "Fräst die offene Einlinien-Gravurschrift („Einlinig (Gravur)“) mit eigener Linienbreite, Frästiefe, Schrifthöhe, Versatz und Drehung sauber als Vertiefung in die gewählte ebene Körperfläche ein – wie mit einem Stichel auf der CNC-Fräse.",
+  "tipp": "Für feine Beschriftungen auf 3D-Druckteilen oder Frontplatten wähle etwa 0,4 mm Breite und 0,5 mm Tiefe; über „Gravur bearbeiten“ passt du Text und Maße jederzeit wieder an."
  }
 };
 
