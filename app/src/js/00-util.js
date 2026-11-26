@@ -753,6 +753,8 @@ const IC = {
   nameplate: '<rect x="2.5" y="5.5" width="19" height="13" rx="2" fill="currentColor" opacity=".14"/><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M7 10h10M7 14h6"/><circle cx="5" cy="8" r=".8" fill="currentColor" stroke="none"/><circle cx="19" cy="8" r=".8" fill="currentColor" stroke="none"/><circle cx="5" cy="16" r=".8" fill="currentColor" stroke="none"/><circle cx="19" cy="16" r=".8" fill="currentColor" stroke="none"/>',
   qrCode: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="5.2" y="5.2" width="2.6" height="2.6" fill="currentColor" stroke="none"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="16.2" y="5.2" width="2.6" height="2.6" fill="currentColor" stroke="none"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="5.2" y="16.2" width="2.6" height="2.6" fill="currentColor" stroke="none"/><path d="M14 14h3v3h-3zM18 14h3M14 20h4M19 17v4" stroke-width="2"/>',
   barcode: '<rect x="2.5" y="4.5" width="19" height="15" rx="1.5" opacity=".35"/><path d="M5.5 7.5v9M8 7.5v9M10.5 7.5v9M12.5 7.5v9M15.5 7.5v9M18.5 7.5v9" stroke-width="1.6"/>',
+  svgLogo: '<rect x="3" y="3" width="18" height="18" rx="3" opacity=".35"/><path d="M12 6.2l1.7 3.6 3.9.5-2.9 2.7.8 3.9-3.5-1.9-3.5 1.9.8-3.9-2.9-2.7 3.9-.5z" fill="currentColor" opacity=".24"/><path d="M12 6.2l1.7 3.6 3.9.5-2.9 2.7.8 3.9-3.5-1.9-3.5 1.9.8-3.9-2.9-2.7 3.9-.5z"/>',
+  palette: '<path d="M12 3a9 9 0 0 0 0 18c1.4 0 2.3-.9 2.3-2.1 0-.6-.2-1.1-.6-1.5-.4-.4-.5-.9-.5-1.4 0-1.1.9-2 2-2h2.3A4.5 4.5 0 0 0 21 9.5C21 5.9 17 3 12 3z" fill="currentColor" opacity=".14"/><path d="M12 3a9 9 0 0 0 0 18c1.4 0 2.3-.9 2.3-2.1 0-.6-.2-1.1-.6-1.5-.4-.4-.5-.9-.5-1.4 0-1.1.9-2 2-2h2.3A4.5 4.5 0 0 0 21 9.5C21 5.9 17 3 12 3z"/><circle cx="7.8" cy="10.2" r="1.1" fill="currentColor" stroke="none"/><circle cx="10.8" cy="7.3" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.2" cy="7.8" r="1.1" fill="currentColor" stroke="none"/>',
   stdPipe: '<ellipse cx="7" cy="12" rx="3" ry="6" fill="currentColor" opacity=".18"/><ellipse cx="7" cy="12" rx="3" ry="6"/><path d="M7 6h10a3 6 0 0 1 0 12H7"/><ellipse cx="7" cy="12" rx="1.3" ry="3"/>',
   pipeElbow: '<path d="M5 19v-4A10 10 0 0 1 15 5h4v6h-4a4 4 0 0 0-4 4v4z" fill="currentColor" opacity=".18"/><path d="M5 19v-4A10 10 0 0 1 15 5h4v6h-4a4 4 0 0 0-4 4v4z"/>',
   pipeTee: '<path d="M4 15v-6h16v6h-5v5h-6v-5z" fill="currentColor" opacity=".18"/><path d="M4 15v-6h16v6h-5v5h-6v-5z"/>',
@@ -2945,6 +2947,21 @@ const HELP = {
   "tip": "Fläche direkt verschieben, drehen oder versetzen – auch an importierten STEP-Teilen",
   "hilfe": "Im Profi-Modus bearbeitest du jede Körperfläche direkt mit dem grünen Pfeil oder als Schritt im Verlauf: Verschieben rückt ebene Flächen in Normalen- oder Achsrichtung, Drehen neigt ebene Flächen um ihre Mitte oder eine gewählte Kante, und Versetzen macht Wände dicker/dünner oder Löcher größer/kleiner (auch auf Zylindern und Kuppeln).",
   "tipp": "Zieh am grünen Pfeil an einer gewählten Fläche und tippe einfach den genauen Wert (z. B. 5 oder -3) ein – Enter übernimmt ihn sofort als Schritt."
+ },
+ "stepCatalog": {
+  "tip": "Eigene STEP-Teile aus Hersteller-Katalogen mit Kategorie, Hersteller und Vorschaubild in die Bibliothek legen",
+  "hilfe": "Ziehe eine oder mehrere STEP-Dateien (.step / .stp) direkt auf „Meine Teile“ (oder klicke auf „STEP einsortieren …“). Tracery liest Hersteller-Angaben aus der Datei, erstellt ein 3D-Vorschaubild und speichert das Teil dauerhaft mit Name, Kategorie und Hersteller in deiner Browser-Datenbank.",
+  "tipp": "Über die Kategorie-Knöpfe über dem Raster filterst du z. B. gezielt nach „Motoren“ oder „Lager & Wellen“ – ein Klick setzt das Teil in jedes Projekt ein."
+ },
+ "svgLogo": {
+  "tip": "SVG-Logo als erhabenen 3D-Körper, Schild oder Flächenprägung einsetzen",
+  "hilfe": "Lädt eigene Vektor-Logos (.svg) oder wählt ein eingebautes Symbol und baut daraus ein maßstabgetreues 3D-Objekt: als freistehenden erhabenen Körper, auf einer abgerundeten Platte (erhaben oder vertieft) oder über „Auf Fläche prägen …“ direkt auf eine gewählte Fläche eines Körpers.",
+  "tipp": "Wandle Schriften im Vektorprogramm vor dem Speichern in Pfade um und schalte bei Bedarf auf „Loch“, um das Logo in ein bestehendes Teil zu schneiden."
+ },
+ "ralColors": {
+  "tip": "Farbe aus der genormten RAL-Classic-Farbtafel wählen (z. B. RAL 3020 Verkehrsrot)",
+  "hilfe": "Öffnet die lokale RAL-Classic-Farbtabelle mit über 100 Standard-Farbtönen aus allen neun Farbgruppen (Gelb 1000 bis Weiß/Schwarz 9000). Du kannst nach RAL-Nummer oder Farbname suchen und die Farbe direkt auf Körper, Flächen oder Teilkörper anwenden.",
+  "tipp": "Tippe im Suchfeld einfach die vierstellige Nummer wie „3020“ oder „7016“ ein und drücke Enter, um den Farbton sofort zu übernehmen."
  }
 };
 

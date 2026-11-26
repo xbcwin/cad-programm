@@ -345,6 +345,24 @@ const Commands = (() => {
     add('explode-steps', 'Explosion in Schritten', 'explode', 'explosion schritte stufenweise baugruppe wegen linien anleitung', () => Views.openExplodeSteps(), { group: 'Ansicht' });
     add('explode-video', 'Explosions-Video speichern', 'play', 'explosion video film webm baugruppe animation', () => Views.explodeVideoDialog(), { group: 'Ansicht' });
     add('verbund-alle', 'Alles zu einem Körper verbinden (Verbund)', 'group', 'verbund verbinden alles zusammen zusammenfügen ein körper vereinigen gruppieren alle', () => Actions.groupAll(), { group: 'Bearbeiten' });
+    add('ral-colors', 'RAL-Farbtafel öffnen (Farbe wählen)', 'palette', 'ral farbe farbtafel verkehrsrot 3020 anthrazit 7016 lack pulverbeschichtung bi-25', () => {
+      const selIds = App.sel.length ? App.sel.slice() : [];
+      if (!selIds.length) { UI.toast(T('ral.selectBodyFirst'), { icon: 'info' }); return; }
+      const first = Model.find(App.doc, selIds[0]);
+      RalColors.openDialog({
+        currentColor: first && first.item ? first.item.color : null,
+        currentRal: first && first.item ? first.item.ral : null,
+        onPick: (entry) => App.change('Farbe geändert', (doc) => {
+          for (const id of selIds) {
+            const f = Model.find(doc, id);
+            if (!f || !f.item) continue;
+            f.item.color = entry.hex;
+            f.item.colorSet = true;
+            f.item.ral = entry.code;
+          }
+        }),
+      });
+    }, { group: 'Bearbeiten' });
     add('variants', 'Varianten vergleichen', 'list', 'variante varianten vergleichen maße sätze schritte unterdrücken', () => Variants.compareDialog(), { group: 'Projekt' });
     add('variants-table', 'Varianten-Tabelle öffnen (CSV)', 'grid', 'variante varianten tabelle kalkulation excel csv import export werkstoff maße', () => Variants.tableDialog(), { group: 'Projekt' });
     add('explain', 'Erklär diesen Schritt', 'help', 'erklär erklären was ist das schritt warum', () => Explain.dialog(), { group: 'Projekt' });
@@ -534,6 +552,7 @@ const Commands = (() => {
     add('save-template', 'Als Vorlage speichern', 'save', 'vorlage speichern eigene vorlage template', () => Start.saveAsTemplate(), { group: 'Projekt' });
     add('save-userlib', 'Teil in meine Bibliothek speichern', 'save', 'bibliothek meine teile speichern bauteil wiederverwenden', () => UserLib.saveDialog(), { group: 'Bauteile', needSel: true });
     add('my-parts', 'Meine Teile (eigene Bibliothek)', 'parts', 'meine teile bibliothek eigene bauteile', () => Panels.toggleFlyout('parts', $('#t-parts')), { group: 'Bauteile' });
+    add('import-step-userlib', 'STEP-Teil in Bibliothek einsortieren', 'folder', 'step katalog hersteller bibliothek einsortieren import meine teile bi-29', () => UserLib.pickStepFile(), { group: 'Bauteile' });
     add('iso286-table', 'Toleranz-Tabelle ISO 286 (Passungen H7, g6 …)', 'ruler', 'toleranz toleranzen passung passungen iso 286 h7 g6 grundtoleranz it7 abmass abmasse bi-26', () => Iso286.openDialog(), { group: 'Bauteile', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
     add('open', 'Projekt öffnen', 'folder', 'laden datei öffnen', () => Start.openFile(), { group: 'Projekt' });
     add('loft', 'Übergang (Loft) aus gewählten Skizzenkörpern', 'loft', 'loft übergang profile nase verbinden spitze', () => Actions.loft(), { group: 'Bearbeiten', needSel: true });

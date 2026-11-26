@@ -501,6 +501,7 @@ const Panels = (() => {
   function closeFlyout(restore = false) {
     if (!flyout) return;
     const prev = flyout.btn;
+    if (flyout.onCleanup) { try { flyout.onCleanup(); } catch (_) {} }
     flyout.el.remove();
     prev && prev.setAttribute('aria-expanded', 'false');
     if (flyout.onKey) document.removeEventListener('keydown', flyout.onKey, true);
@@ -510,12 +511,16 @@ const Panels = (() => {
       try { prev.focus({ preventScroll: true }); } catch (_) { prev.focus(); }
     }
   }
-  function flyOutside(e) { if (e.target && e.target.closest && e.target.closest('#btn-whatis, #whatis-pop')) return; if (flyout && !flyout.el.contains(e.target) && !(flyout.btn && flyout.btn.contains(e.target))) closeFlyout(); }
+  function flyOutside(e) {
+    if (e.target && e.target.closest && e.target.closest('#btn-whatis, #whatis-pop, .modal-back:has(#userlib-step-dialog, #userlib-edit-dialog, #userlib-save-dialog)')) return;
+    if (flyout && !flyout.el.contains(e.target) && !(flyout.btn && flyout.btn.contains(e.target))) closeFlyout();
+  }
   function toggleFlyout(kind, btn) {
     if (flyout && flyout.kind === kind) { closeFlyout(); return; }
     closeFlyout();
     const flyTitle = kind === 'bodies' ? T('tool.fly.bodiesTitle') : kind === 'drone' ? T('tool.drone') : T('tool.fly.partsTitle');
     const el = h('div', { class: 'flyout', role: 'dialog', 'aria-label': flyTitle, tabindex: '-1' });
+    let flyCleanup = null;
     if (kind === 'bodies') {
       el.append(h('h3', null, T('tool.fly.bodiesTitle')));
       const tiles = h('div', { class: 'tiles' });
@@ -601,6 +606,9 @@ const Panels = (() => {
       const bcBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-barcode', 'data-help': 'barcode', 'data-tip': T('tool.fly.barcodeTip') });
       bcBtn.innerHTML = icon('barcode') + esc(T('tool.fly.barcode'));
       bcBtn.onclick = () => { Actions.addPart(LIBMAP.barcode, libDefaults(LIBMAP.barcode)); closeFlyout(); };
+      const svgBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-svg-logo', 'data-help': 'svgLogo', 'data-tip': T('tool.fly.svgLogoTip') });
+      svgBtn.innerHTML = icon('svgLogo') + esc(T('tool.fly.svgLogo'));
+      svgBtn.onclick = () => { Actions.addPart(LIBMAP.svgLogo, libDefaults(LIBMAP.svgLogo)); closeFlyout(); };
       const spBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-std-pipe', 'data-help': 'stdPipe', 'data-tip': T('tool.fly.stdPipeTip') });
       spBtn.innerHTML = icon('stdPipe') + esc(T('tool.fly.stdPipe'));
       spBtn.onclick = () => { Actions.addPart(LIBMAP.stdPipe, libDefaults(LIBMAP.stdPipe)); closeFlyout(); };
@@ -619,7 +627,7 @@ const Panels = (() => {
       const scBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-std-chain', 'data-help': 'stdChain', 'data-tip': T('tool.fly.stdChainTip') });
       scBtn.innerHTML = icon('stdChain') + esc(T('tool.fly.stdChain'));
       scBtn.onclick = () => { Actions.addPart(LIBMAP.stdChain, libDefaults(LIBMAP.stdChain)); closeFlyout(); };
-      stepRow.append(mpBtn, pcBtn, mpkBtn, bhBtn, phBtn, rkBtn, tsBtn, dfBtn, encBtn, npBtn, qrBtn, bcBtn, spBtn, peBtn, ptBtn, pfBtn, sbBtn, scBtn);
+      stepRow.append(mpBtn, pcBtn, mpkBtn, bhBtn, phBtn, rkBtn, tsBtn, dfBtn, encBtn, npBtn, qrBtn, bcBtn, svgBtn, spBtn, peBtn, ptBtn, pfBtn, sbBtn, scBtn);
       el.append(stepRow);
       if (stds.length) {
         el.append(h('h3', { class: 'pro' }, T('fly.stdParts')));
@@ -633,20 +641,88 @@ const Panels = (() => {
         isoBtn.onclick = () => { closeFlyout(); Iso286.openDialog(); };
         el.append(h('div', { class: 'btn-row pro', style: { marginTop: '6px' } }, isoBtn));
       }
-      el.append(h('h3', { id: 'my-parts-head', 'data-help': 'userLibrary' }, T('fly.myParts')));
+      const mySec = h('div', { class: 'ul-section', id: 'my-parts-section' });
+      let activeCat = '';
+      const myHeadRow = h('div', { class: 'ul-head-row', id: 'my-parts-head-row' });
+      myHeadRow.append(h('h3', { id: 'my-parts-head', 'data-help': 'userLibrary' }, T('fly.myParts')));
+      const stepBtn = h('button', { type: 'button', class: 'btn small ghost', id: 'my-parts-step-btn', 'data-help': 'stepCatalog', 'data-tip': T('fly.myPartsStepBtnTip') });
+      stepBtn.innerHTML = icon('folder') + esc(T('fly.myPartsStepBtn'));
+      stepBtn.onclick = () => UserLib.pickStepFile({ category: activeCat || '' });
+      myHeadRow.append(stepBtn);
+      mySec.append(myHeadRow);
+
+      const dropZone = h('div', { class: 'ul-dropzone', id: 'my-parts-dropzone', role: 'button', tabindex: '0', 'data-help': 'stepCatalog', 'aria-label': T('fly.myPartsStepDrop') },
+        h('span', { class: 'ul-dz-ico', html: icon('folder') }),
+        h('span', { class: 'ul-dz-txt' }, T('fly.myPartsStepDrop')));
+      dropZone.onclick = () => UserLib.pickStepFile({ category: activeCat || '' });
+      dropZone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); UserLib.pickStepFile({ category: activeCat || '' }); }
+      });
+      mySec.append(dropZone);
+
+      const catBar = h('div', { class: 'ul-cats', id: 'my-parts-cats', hidden: true });
+      mySec.append(catBar);
+
       const myGrid = h('div', { class: 'tiles user-tiles', id: 'my-parts-grid' });
       const renderMyParts = () => {
+        const allList = UserLib.list();
+        const cats = UserLib.categories ? UserLib.categories() : [];
+        if (activeCat && !cats.includes(activeCat)) activeCat = '';
+        catBar.innerHTML = '';
+        if (cats.length) {
+          catBar.hidden = false;
+          const mkCat = (catVal, label) => {
+            const b = h('button', { type: 'button', class: 'ul-cat' + (activeCat === catVal ? ' active' : ''), dataset: { cat: catVal } }, label);
+            b.onclick = () => { activeCat = catVal; renderMyParts(); };
+            return b;
+          };
+          catBar.append(mkCat('', T('fly.myPartsAllCats')));
+          for (const c of cats) catBar.append(mkCat(c, c));
+        } else {
+          catBar.hidden = true;
+        }
+
         myGrid.innerHTML = '';
-        const list = UserLib.list();
-        if (!list.length) {
+        if (!allList.length) {
           myGrid.append(h('div', { class: 'hint-box', style: { gridColumn: '1 / -1' } }, T('fly.myPartsEmpty')));
+          return;
+        }
+        const list = activeCat ? allList.filter((x) => String(x.category || '').trim() === activeCat) : allList;
+        if (!list.length) {
+          myGrid.append(h('div', { class: 'hint-box', style: { gridColumn: '1 / -1' } }, T('fly.myPartsEmptyCat', { cat: activeCat })));
           return;
         }
         for (const entry of list) {
           const pCount = Array.isArray(entry.params) ? entry.params.length : 0;
-          const tipTxt = entry.desc || (pCount ? (pCount === 1 ? T('fly.myPartsTipDimsOne') : T('fly.myPartsTipDimsMany', { n: pCount })) : T('fly.myPartsTip'));
-          const tile = h('div', { class: 'tile user-tile' + (entry.role === 'hole' ? ' hole-part' : ''), role: 'button', tabindex: '0', 'aria-label': entry.name, dataset: { userLibId: entry.id }, 'data-tip': tipTxt, 'data-help': 'userLibrary' });
-          tile.append(h('div', { class: 'ul-thumb-wrap', html: UserLib.thumbHTML(entry) }), h('span', { class: 'lbl' }, entry.name), h('span', { class: 'role' }, pCount ? (pCount === 1 ? T('fly.myPartsOneDim') : T('fly.myPartsManyDims', { n: pCount })) : (entry.role === 'hole' ? T('common.hole') : T('common.body'))));
+          const tipParts = [entry.name];
+          if (entry.category) tipParts.push(entry.category);
+          if (entry.manufacturer) tipParts.push(entry.manufacturer);
+          if (entry.desc) tipParts.push(entry.desc);
+          else if (pCount) tipParts.push(pCount === 1 ? T('fly.myPartsTipDimsOne') : T('fly.myPartsTipDimsMany', { n: pCount }));
+          else tipParts.push(T('fly.myPartsTip'));
+          const tipTxt = tipParts.join(' · ');
+
+          const subTxt = entry.manufacturer
+            ? entry.manufacturer
+            : entry.category
+              ? entry.category
+              : entry.source === 'step'
+                ? 'STEP'
+                : (pCount ? (pCount === 1 ? T('fly.myPartsOneDim') : T('fly.myPartsManyDims', { n: pCount })) : (entry.role === 'hole' ? T('common.hole') : T('common.body')));
+
+          const tile = h('div', {
+            class: 'tile user-tile' + (entry.role === 'hole' ? ' hole-part' : ''),
+            role: 'button',
+            tabindex: '0',
+            'aria-label': entry.name,
+            dataset: { userLibId: entry.id, category: entry.category || '', manufacturer: entry.manufacturer || '', source: entry.source || 'part' },
+            'data-tip': tipTxt,
+            'data-help': entry.source === 'step' ? 'stepCatalog' : 'userLibrary',
+          });
+          tile.append(h('div', { class: 'ul-thumb-wrap', html: UserLib.thumbHTML(entry) }));
+          if (entry.category) tile.append(h('span', { class: 'ul-cat-tag' }, entry.category));
+          tile.append(h('span', { class: 'lbl' }, entry.name), h('span', { class: 'role' }, subTxt));
+
           const delBtn = h('button', { type: 'button', class: 'ul-del', 'aria-label': T('fly.myPartsRemove'), 'data-tip': T('fly.myPartsRemove') });
           delBtn.innerHTML = icon('trash');
           delBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -663,6 +739,7 @@ const Panels = (() => {
             e.preventDefault(); e.stopPropagation();
             UI.menu(tile, [
               { icon: 'plus', label: T('fly.myPartsInsert'), run: () => { UserLib.insert(entry); closeFlyout(); } },
+              { icon: 'sliders', label: T('fly.myPartsEdit'), run: () => { UserLib.editDialog(entry.id); } },
               { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('fly.myPartsRenameTitle'), T('common.name'), entry.name, T('common.rename')); if (n && n.trim()) { UserLib.rename(entry.id, n.trim()); renderMyParts(); } } },
               '-',
               { icon: 'trash', label: T('common.remove'), run: () => { UserLib.remove(entry.id); renderMyParts(); } },
@@ -671,8 +748,55 @@ const Panels = (() => {
           myGrid.append(tile);
         }
       };
+
+      const hasFiles = (e) => {
+        const dt = e && e.dataTransfer;
+        if (!dt) return false;
+        if (dt.types && [...dt.types].includes('Files')) return true;
+        if (dt.items && [...dt.items].some((it) => it.kind === 'file')) return true;
+        if (dt.files && dt.files.length) return true;
+        return false;
+      };
+      let dzDepth = 0;
+      const onDragEnter = (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault(); e.stopPropagation();
+        dzDepth++;
+        dropZone.classList.add('dragover');
+      };
+      const onDragOver = (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault(); e.stopPropagation();
+        try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
+        dropZone.classList.add('dragover');
+      };
+      const onDragLeave = (e) => {
+        if (!hasFiles(e)) return;
+        e.stopPropagation();
+        dzDepth = Math.max(0, dzDepth - 1);
+        if (dzDepth === 0 || !el.contains(e.relatedTarget)) {
+          dzDepth = 0;
+          dropZone.classList.remove('dragover');
+        }
+      };
+      const onDrop = (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault(); e.stopPropagation();
+        dzDepth = 0;
+        dropZone.classList.remove('dragover');
+        const files = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
+        if (files.length) UserLib.importStepDialog(files, { category: activeCat || '' });
+      };
+      el.addEventListener('dragenter', onDragEnter);
+      el.addEventListener('dragover', onDragOver);
+      el.addEventListener('dragleave', onDragLeave);
+      el.addEventListener('drop', onDrop);
+
+      const offUl = UserLib.on('change', () => renderMyParts());
+      flyCleanup = () => offUl();
       renderMyParts();
-      el.append(myGrid);
+      mySec.append(myGrid);
+      el.append(mySec);
       el.append(h('div', { class: 'foot' }, T('tool.fly.partsFoot')));
     }
     $('#center').append(el);
@@ -684,7 +808,7 @@ const Panels = (() => {
       if (!flyout || flyout.el !== el) return;
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFlyout(true); }
     };
-    flyout = { el, btn, kind, onKey };
+    flyout = { el, btn, kind, onKey, onCleanup: flyCleanup };
     el.focus({ preventScroll: true });
     document.addEventListener('keydown', onKey, true);
     setTimeout(() => document.addEventListener('pointerdown', flyOutside, true), 0);
@@ -780,6 +904,18 @@ const Panels = (() => {
     free.addEventListener('change', () => { UI.closePop(); Actions.setBody(itemId, bodyIdx, { color: free.value.toLowerCase() }); });
     row.append(h('label', { class: 'color-free', 'data-tip': T('panel.color.anyTip') }, free));
     box.append(row);
+    if (typeof RalColors !== 'undefined') {
+      const ralBtn = h('button', { type: 'button', class: 'btn small body-ral-btn', 'data-help': 'ralColors' });
+      ralBtn.innerHTML = icon('palette') + esc(T('ral.openBtn'));
+      ralBtn.onclick = () => {
+        UI.closePop();
+        RalColors.openDialog({
+          currentColor: curColor,
+          onPick: (entry) => Actions.setBody(itemId, bodyIdx, { color: entry.hex }),
+        });
+      };
+      box.append(ralBtn);
+    }
     if (hasOwnColor) {
       const rst = h('button', { type: 'button', class: 'btn ghost small body-color-reset' });
       rst.innerHTML = icon('undo') + esc(T('left.tree.bodyColorOwn'));
@@ -2045,7 +2181,7 @@ const Panels = (() => {
       const b = h('button', { type: 'button', class: 'btn small' }, l); b.onclick = () => Actions.align(null, m); ar.append(b);
     }
     al.append(ar); w.append(al);
-    w.append(colorSection((c) => App.change('Farbe geändert', (doc) => { for (const f of found) { const tgt = Model.find(doc, f.item.id).item; if (c) { tgt.color = c; tgt.colorSet = true; } else delete tgt.colorSet; } }), found[0].item.color, found.some((f) => f.item.colorSet)));
+    w.append(colorSection((c, ralEntry) => App.change('Farbe geändert', (doc) => { for (const f of found) { const tgt = Model.find(doc, f.item.id).item; if (c) { tgt.color = c; tgt.colorSet = true; const r = ralEntry || (typeof RalColors !== 'undefined' ? RalColors.byHex(c) : null); if (r) tgt.ral = r.code; else delete tgt.ral; } else { delete tgt.colorSet; delete tgt.ral; } } }), found[0].item.color, found.some((f) => f.item.colorSet)));
     body.append(w);
   }
   // Formschritt mit Modus: eigener Körper oder mit einem früheren Körper verrechnen (nur Teile ganz oben im Verlauf)
@@ -2078,14 +2214,35 @@ const Panels = (() => {
   function colorSection(onPick, cur, set, it) {
     const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('panel.color.title')));
     const row = h('div', { class: 'colors' });
-    for (const c of COLORS) { const b = h('button', { type: 'button', 'aria-label': c.n, 'data-tip': c.n, 'aria-pressed': c.c === cur ? 'true' : 'false', style: { background: c.c } }); b.onclick = () => onPick(c.c); row.append(b); }
+    for (const c of COLORS) { const b = h('button', { type: 'button', 'aria-label': c.n, 'data-tip': c.n, 'aria-pressed': c.c === cur ? 'true' : 'false', style: { background: c.c } }); b.onclick = () => onPick(c.c, null); row.append(b); }
     const free = h('input', { type: 'color', id: 'item-color', value: /^#[0-9a-f]{6}$/i.test(cur || '') ? cur : '#2f9e91', 'aria-label': T('panel.color.own'), 'data-tip': T('panel.color.own') });
-    free.addEventListener('change', () => onPick(free.value.toLowerCase()));
+    free.addEventListener('change', () => onPick(free.value.toLowerCase(), null));
     row.append(h('label', { class: 'color-free', 'data-tip': T('panel.color.anyTip') }, free));
     sec.append(row);
+    if (typeof RalColors !== 'undefined') {
+      const curHex = typeof cur === 'string' ? cur.trim().toLowerCase() : '';
+      let ralHit = it && it.ral ? RalColors.byCode(it.ral) : null;
+      if (ralHit && curHex && ralHit.hex !== curHex) ralHit = null;
+      if (!ralHit && curHex && set !== false) ralHit = RalColors.byHex(curHex);
+      const ralRow = h('div', { class: 'ral-row' });
+      const ralBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-ral-picker', 'data-help': 'ralColors' });
+      ralBtn.innerHTML = icon('palette') + esc(T('ral.openBtn'));
+      ralBtn.onclick = () => RalColors.openDialog({
+        currentColor: cur,
+        currentRal: ralHit ? ralHit.code : null,
+        onPick: (entry) => { onPick(entry.hex, entry); renderRight(); },
+      });
+      ralRow.append(ralBtn);
+      if (ralHit) {
+        ralRow.append(h('span', { id: 'item-ral-badge', class: 'ral-active-badge' },
+          h('i', { style: { background: ralHit.hex } }),
+          h('span', null, `${ralHit.ral} · ${RalColors.labelOf(ralHit)}`)));
+      }
+      sec.append(ralRow);
+    }
     const L = it ? Viewer.lookOf(it.mat || (App.doc.settings && App.doc.settings.material)) : null;
     if (L && L.nat) {
-      if (set) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'item-color-mat' }); b.innerHTML = icon('undo') + esc(T('panel.color.fromMat')); b.onclick = () => onPick(null); sec.append(h('div', { class: 'btn-row' }, b)); }
+      if (set) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'item-color-mat' }); b.innerHTML = icon('undo') + esc(T('panel.color.fromMat')); b.onclick = () => onPick(null, null); sec.append(h('div', { class: 'btn-row' }, b)); }
       else sec.append(h('div', { class: 'hint-box' }, T('panel.color.matHint', { mat: it.mat || App.doc.settings.material })));
     }
     return sec;
@@ -2710,6 +2867,33 @@ const Panels = (() => {
             bars: m.barCount, mods: m.totalModules,
             w: Units.fmtLenU(m.outerW, 1), h: Units.fmtLenU(m.outerH, 1), totalH: Units.fmtLenU(m.totalH, 2),
           }) }));
+        } else if (def.lib === 'svgLogo' && typeof svgLogoMetrics === 'function') {
+          const rp = { ...Model.resolveP(it.p, V), svg: it.p.svg, fileName: it.p.fileName };
+          const m = svgLogoMetrics(rp);
+          sec.append(h('div', { id: 'p-svglogo-hint', class: 'hint-box', html: T('panel.item.svgLogoHint', {
+            src: esc(m.sourceLabel),
+            lw: Units.fmtLenU(m.logoW, 1), lh: Units.fmtLenU(m.logoH, 1),
+            ow: Units.fmtLenU(m.outerW, 1), oh: Units.fmtLenU(m.outerH, 1), totalH: Units.fmtLenU(m.totalH, 2),
+            cnt: m.regionsCount,
+          }) }));
+          const fileInp = h('input', { type: 'file', id: 'lp-svglogo-file', accept: '.svg,image/svg+xml', style: { display: 'none' } });
+          fileInp.onchange = () => {
+            const f = fileInp.files && fileInp.files[0];
+            if (f && typeof SvgLogo !== 'undefined') SvgLogo.loadFileIntoItem(it.id, f);
+            fileInp.value = '';
+          };
+          const row = h('div', { class: 'btn-row' });
+          const loadBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-svglogo-load', 'data-help': 'svgLogo' });
+          loadBtn.innerHTML = icon('folder') + esc(T('svgLogo.loadBtn'));
+          loadBtn.onclick = () => fileInp.click();
+          const pasteBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-svglogo-paste', 'data-help': 'svgLogo' });
+          pasteBtn.innerHTML = icon('svgLogo') + esc(T('svgLogo.pasteBtn'));
+          pasteBtn.onclick = () => SvgLogo.openPasteDialog(it.id);
+          const embBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-svglogo-emboss', 'data-help': 'svgLogo' });
+          embBtn.innerHTML = icon('emboss') + esc(T('svgLogo.embossBtn'));
+          embBtn.onclick = () => SvgLogo.startEmbossFromItem(it.id);
+          row.append(loadBtn, pasteBtn, embBtn);
+          sec.append(fileInp, row);
         } else if (def.lib === 'timingPulley' && typeof timingPulleyMetrics === 'function') {
           const rp = Model.resolveP(it.p, V);
           const m = timingPulleyMetrics(rp);
@@ -3564,7 +3748,7 @@ const Panels = (() => {
       w.append(ks);
     }
     if (!isMoveOnly) {
-      w.append(colorSection((c) => App.change(c ? 'Farbe geändert' : 'Farbe vom Werkstoff', (doc) => { const tgt = Model.find(doc, it.id).item; if (c) { tgt.color = c; tgt.colorSet = true; } else delete tgt.colorSet; }), it.color, !!it.colorSet, it));
+      w.append(colorSection((c, ralEntry) => App.change(c ? 'Farbe geändert' : 'Farbe vom Werkstoff', (doc) => { const tgt = Model.find(doc, it.id).item; if (c) { tgt.color = c; tgt.colorSet = true; const r = ralEntry || (typeof RalColors !== 'undefined' ? RalColors.byHex(c) : null); if (r) tgt.ral = r.code; else delete tgt.ral; } else { delete tgt.colorSet; delete tgt.ral; } }), it.color, !!it.colorSet, it));
       // Farbe der gewählten Fläche(n)
       const sfs = !isRef ? (App.faces || []).filter((x) => x.id === it.id).map((x) => {
         const r = App.results.get(x.id);
@@ -3588,6 +3772,23 @@ const Panels = (() => {
         free.addEventListener('change', () => setFace(free.value.toLowerCase()));
         row.append(h('label', { class: 'color-free', 'data-tip': T('panel.color.anyTip') }, free));
         fsec.append(row);
+        if (typeof RalColors !== 'undefined') {
+          const fRalHit = cur ? RalColors.byHex(cur.col) : null;
+          const fRalRow = h('div', { class: 'ral-row' });
+          const fRalBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-face-ral-picker', 'data-help': 'ralColors' });
+          fRalBtn.innerHTML = icon('palette') + esc(T('ral.openBtn'));
+          fRalBtn.onclick = () => RalColors.openDialog({
+            currentColor: cur ? cur.col : null,
+            onPick: (entry) => { setFace(entry.hex); renderRight(); },
+          });
+          fRalRow.append(fRalBtn);
+          if (fRalHit) {
+            fRalRow.append(h('span', { id: 'face-ral-badge', class: 'ral-active-badge' },
+              h('i', { style: { background: fRalHit.hex } }),
+              h('span', null, `${fRalHit.ral} · ${RalColors.labelOf(fRalHit)}`)));
+          }
+          fsec.append(fRalRow);
+        }
         if (cur) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'face-color-off' }); b.innerHTML = icon('undo') + esc(T('panel.faceCol.remove')); b.onclick = () => setFace(null); fsec.append(h('div', { class: 'btn-row' }, b)); }
         w.append(fsec);
       }

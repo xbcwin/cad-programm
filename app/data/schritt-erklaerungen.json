@@ -529,5 +529,10 @@
     "was": "Bearbeitet eine gewählte Fläche eines Körpers direkt: verschiebt sie entlang einer Richtung, dreht (neigt) sie um eine Achse oder versetzt sie nach innen bzw. außen.",
     "wozu": "Passt Abmessungen, Schrägen, Wandstärken oder Lochdurchmesser schnell an – auch an importierten STEP-, IGES- oder BREP-Teilen ohne Skizzenverlauf.",
     "achtung": "Wenn eine Fläche zu weit nach innen verschoben oder versetzt wird, sodass sie durch die Gegenseite bricht oder ein Radius kleiner als null wird, schlägt der Schritt fehl."
+  },
+  "svgLogo": {
+    "was": "Erzeugt aus einer SVG-Vektorgrafik (Datei, Quelltext oder Symbol) ein 3D-Logo – als freistehenden erhabenen Körper, auf einer abgerundeten Platte oder als Prägung auf einer Körperfläche.",
+    "wozu": "Bringt Firmenlogos, Embleme, Schriftzüge oder eigene Grafiken sauber und maßhaltig auf Gehäuse, Schilder und Bauteile.",
+    "achtung": "Schriften müssen in der SVG-Datei vorher in Pfade umgewandelt sein; offene Linien ohne geschlossene Kontur ergeben keinen Körper."
   }
 }

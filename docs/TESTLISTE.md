@@ -3039,6 +3039,19 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Gebogene Fläche versetzen & Hilfen**: Zylindermantel (Ø 20 mm) wächst beim Versetzen um `+3 mm` auf Ø 26 mm; `HELP.directFace` vollständig (`t_direkt_flaeche`).
 - [ ] **Von Hand**: Im Browser ein beliebiges STEP-Teil importieren, eine Fläche direkt mit dem Pfeil ziehen und anschließend eine Nachbarfläche um eine gewählte Kante neigen.
 
+## Bibliothek: STEP-Teile aus Hersteller-Katalogen einsortieren (Auto [A-197], BI-29)
+- [x] Drop-Zone (`#my-parts-dropzone`) und Knopf (`#my-parts-step-btn`) in „Bauteile → Meine Teile“ in Einfach und Profi sichtbar; einfache Bauteil-Kachelzahl bleibt `5` (Klicktest `[A-197]`)
+- [x] STEP-Datei per Drag-and-Drop einsortieren erkennt Hersteller aus dem STEP-Kopf (`FILE_NAME`), rendert ein 3D-Vorschaubild (`Viewer.renderMeshThumb`) und speichert mit Name, Kategorie „Motoren“ und Hersteller (Klicktest `[A-197]`)
+- [x] Kategorie-Filter „Motoren“ zeigt das STEP-Teil mit Vorschau, Hersteller-Untertitel und setzt es mit voller 3D-Geometrie sowie `props.supplier` ins Projekt ein (Klicktest `[A-197]`)
+- [x] Persistenz in IndexedDB (`tracery-db` mit `Store.gcBlobs()`-Schutz) über Neuladen ohne `localStorage`-Spiegel, Metadaten-Dialog (`editDialog`), Befehlssuche, Hilfetext (`stepCatalog`) und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-197]`)
+- [ ] **Von Hand**: Im Browser eine reale Hersteller-STEP-Datei (z. B. von GrabCAD, McMaster-Carr oder StepperOnline) auf „Meine Teile“ ziehen, einsortieren und nach Kategorie filtern.
+
+## Bibliothek: Logo aus SVG und RAL-Farben (Auto [A-194], BI-24, BI-25)
+- [x] SVG-Logo (`svgLogo`, `SvgLogo`): Standard-Symbol und kleine `.svg`-Datei mit Loch bauen in Einfach und Profi als erhabener Körper (`relief`), auf abgerundeter Platte (`emboss` / `deboss`) und als Prägung auf einer Körperfläche ohne Geometriefehler (Klicktest `[A-194]`)
+- [x] RAL-Farbtafel (`RalColors`): Suche nach `3020` / `Verkehrsrot` im Dialog `#ral-picker-dlg` setzt Körperfarbe `#bb1e10` (`it.ral = '3020'`) samt `#item-ral-badge`, Flächenfarbe und Rückgängig/Wiederherstellen (Klicktest `[A-194]`)
+- [x] Befehlssuche (`svgLogo`, `ral-colors`), Speichern/Laden, Hilfetexte (`HELP.svgLogo`, `HELP.ralColors`), Erklärungen und DE/EN-Texte geprüft (Klicktest `[A-194]`)
+- [ ] **Von Hand**: Im Browser ein eigenes Vereins- oder Firmen-Logo als `.svg` laden, einmal auf einer Platte vertieft und einmal als Prägung auf einen Quader setzen sowie im 3D-Bild mit RAL 3020 Verkehrsrot und RAL 7016 Anthrazitgrau einfärben.
+
 ## Fehler melden
 
 ```
