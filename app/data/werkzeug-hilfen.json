@@ -2178,5 +2178,10 @@
     "tip": "Einlinigen Text mit wählbarer Breite und Tiefe in eine ebene Fläche gravieren",
     "hilfe": "Fräst die offene Einlinien-Gravurschrift („Einlinig (Gravur)“) mit eigener Linienbreite, Frästiefe, Schrifthöhe, Versatz und Drehung sauber als Vertiefung in die gewählte ebene Körperfläche ein – wie mit einem Stichel auf der CNC-Fräse.",
     "tipp": "Für feine Beschriftungen auf 3D-Druckteilen oder Frontplatten wähle etwa 0,4 mm Breite und 0,5 mm Tiefe; über „Gravur bearbeiten“ passt du Text und Maße jederzeit wieder an."
+  },
+  "deleteFace": {
+    "tip": "Fläche (z. B. Loch, Rundung oder Fase) löschen und Lücke durch Verlängern der Nachbarflächen schließen (Profi)",
+    "hilfe": "Entfernt eine oder mehrere gewählte Flächen direkt aus einem Körper (auch an importierten STEP-/BREP-Teilen) und heilt die Lücke, indem Nachbarflächen verlängert oder Innenkonturen geschlossen werden. So verschwinden Bohrungen, Sacklöcher, Zapfen, Rundungen oder Fasen mit einem Klick als unterdrückbarer Schritt im Verlauf.",
+    "tipp": "Halte Umschalt beim Klicken, um mehrere Flächen (z. B. alle vier Rundungen einer Kante) auf einmal zu wählen, oder füge rechts im Eigenschaften-Panel weitere Flächen hinzu."
   }
 }

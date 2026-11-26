@@ -5399,5 +5399,16 @@
   "engrave.undoAdd": "Text graviert",
   "engrave.undoEdit": "Gravur geändert",
   "engrave.toastAdded": "Gravur angelegt ({width} mm breit, {depth} mm tief).",
-  "engrave.toastUpdated": "Gravur aktualisiert."
+  "engrave.toastUpdated": "Gravur aktualisiert.",
+  "kind.deleteFace": "Fläche löschen",
+  "ctx.deleteFaces": "Flächen löschen",
+  "ctx.deleteFaceTip": "Gewählte Fläche löschen und die Lücke durch Verlängern der Nachbarflächen schließen (Profi)",
+  "ctx.deleteFaceStepLabel": "Fläche löschen",
+  "dlg.tb.deleteFaceTip": "Gewählte Fläche (z. B. Loch oder Rundung) löschen und die Lücke heilen",
+  "panel.deleteFace.facesTitle": "Gelöschte Flächen",
+  "panel.deleteFace.addFace": "Weitere Fläche löschen",
+  "panel.deleteFace.pickFace": "Fläche neu wählen",
+  "panel.deleteFace.removeFace": "Fläche aus diesem Schritt entfernen",
+  "panel.deleteFace.hint": "Entfernt die gewählten Flächen (z. B. Bohrung, Tasche, Rundung oder Fase) und schließt die Lücke durch Verlängern der Nachbarflächen – rückgängig machbar und unterdrückbar.",
+  "toast.deleteFaceAdded": "Fläche gelöscht und Lücke geschlossen. Rechts kannst du weitere Flächen hinzufügen."
 }

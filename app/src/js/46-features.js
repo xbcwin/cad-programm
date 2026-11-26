@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -2114,7 +2114,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -3982,6 +3982,196 @@ const Features = (() => {
     }
     sec.append(row);
     sec.append(h('div', { class: 'hint-box', html: T('panel.dome.hint') }));
+  }
+  // ---------- Fläche löschen und Lücke heilen (DB-03) ----------
+  function deleteFaceSig(face) {
+    if (!face || !face.id) return null;
+    const fidx = face.idx != null ? face.idx : face.faceIdx;
+    const info = face.info || (fidx != null ? App.results.get(face.id)?.data?.faces?.[fidx] : null);
+    if (!info || !Array.isArray(info.c)) return null;
+    const sig = faceSigOf({ info });
+    if (!sig) return null;
+    if (info.tid) sig.tid = info.tid;
+    return sig;
+  }
+  function sameDeleteFaceSig(a, b) {
+    if (!a || !b) return false;
+    if (a.tid && b.tid && a.tid === b.tid && (!Array.isArray(a.c) || !Array.isArray(b.c) || Math.hypot(a.c[0] - b.c[0], a.c[1] - b.c[1], a.c[2] - b.c[2]) < 1e-2)) return true;
+    return Array.isArray(a.c) && Array.isArray(b.c) && Math.hypot(a.c[0] - b.c[0], a.c[1] - b.c[1], a.c[2] - b.c[2]) < 1e-3 && (a.t || '') === (b.t || '');
+  }
+  function faceTypeLabelDE(t) {
+    return ({ PLANE: 'Ebene Fläche', CYLINDRE: 'Zylinderfläche', CONE: 'Kegelfläche', SPHERE: 'Kugelfläche', TORUS: 'Torusfläche (Rundung)', BSPLINE: 'Freiformfläche', EXTRUSION: 'Gekrümmte Fläche', REVOLUTION: 'Drehfläche' })[t] || 'Fläche';
+  }
+  function deleteFace(facesOrFace = null, opts = {}) {
+    if (App.ctx) { UI.toast('Fläche löschen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    let list;
+    if (Array.isArray(facesOrFace)) list = facesOrFace;
+    else if (facesOrFace) list = [facesOrFace];
+    else if (App.faces && App.faces.length) list = App.faces;
+    else {
+      const sf = Actions.selectedFace();
+      list = sf ? [sf] : [];
+    }
+    const entries = [];
+    let tgt = null;
+    for (const f of list) {
+      const t = f && f.id ? resolveTopTarget(f.id) : null;
+      const sig = deleteFaceSig(f);
+      if (!t || t.role === 'hole' || !sig) continue;
+      if (!tgt) tgt = t;
+      else if (tgt.id !== t.id) {
+        UI.toast('Wähle bitte nur Flächen eines einzelnen Körpers.', { icon: 'info' });
+        return null;
+      }
+      if (!entries.some((e) => sameDeleteFaceSig(e, sig))) entries.push(sig);
+    }
+    if (!tgt || !entries.length) {
+      startDeleteFace(opts);
+      return null;
+    }
+    let step;
+    App.change('Fläche löschen angelegt', (doc) => {
+      step = Model.newItem('deleteFace', { target: tgt.id, faces: entries }, { name: opts.name || T('kind.deleteFace'), color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('toast.deleteFaceAdded'), { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startDeleteFace(opts = {}) {
+    if (App.ctx) { UI.toast('Fläche löschen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für „Fläche löschen“ braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    if (App.faces && App.faces.length) {
+      const ok = deleteFace(App.faces, opts);
+      if (ok) return true;
+    }
+    const f = Actions.selectedFace();
+    if (f) { deleteFace(f, opts); return true; }
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (tgt && tgt.role !== 'hole' && fi && Array.isArray(fi.c)) {
+          stopPick();
+          deleteFace({ id: hit.id, idx: hit.faceIdx, info: fi }, opts);
+          return;
+        }
+      }
+      UI.toast('Bitte klick auf eine Fläche eines Körpers (z. B. Loch oder Rundung).', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      Viewer.highlightFace('hover', hit && hit.faceIdx >= 0 ? hit.id : null, hit && hit.faceIdx >= 0 ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Fläche löschen:</b> Klick auf eine Fläche (z. B. Bohrung oder Rundung), um sie zu entfernen und die Lücke zu schließen. <b>Esc</b> bricht ab.');
+    return true;
+  }
+  function pickDeleteFace(stepId, mode = 'replace') {
+    stopPick();
+    const fStep = Model.find(App.doc, stepId);
+    if (!fStep || fStep.item.kind !== 'deleteFace') return false;
+    const curTarget = fStep.item.p && fStep.item.p.target;
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        const sig = tgt && tgt.role !== 'hole' && fi ? deleteFaceSig({ id: hit.id, idx: hit.faceIdx, info: fi }) : null;
+        if (sig) {
+          if (mode === 'add' && curTarget && tgt.id !== curTarget) {
+            UI.toast('Bitte wähle eine Fläche desselben Körpers.', { icon: 'info' });
+            return;
+          }
+          stopPick();
+          App.change(mode === 'add' ? 'Fläche zu „Fläche löschen“ hinzugefügt' : 'Fläche für „Fläche löschen“ neu gewählt', (doc) => {
+            const fn = Model.find(doc, stepId); if (!fn) return false;
+            fn.item.p = fn.item.p || {};
+            if (mode === 'add') {
+              const arr = Array.isArray(fn.item.p.faces) ? fn.item.p.faces.slice() : [];
+              if (!arr.some((x) => sameDeleteFaceSig(x, sig))) arr.push(sig);
+              fn.item.p.faces = arr;
+            } else {
+              fn.item.p.target = tgt.id;
+              fn.item.p.faces = [sig];
+            }
+          });
+          UI.toast(mode === 'add' ? 'Fläche hinzugefügt.' : 'Fläche aktualisiert.', { icon: 'check' });
+          return;
+        }
+      }
+      UI.toast('Bitte klick auf eine Fläche des Körpers.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      Viewer.highlightFace('hover', hit && hit.faceIdx >= 0 ? hit.id : null, hit && hit.faceIdx >= 0 ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(mode === 'add' ? '<b>Weitere Fläche löschen:</b> Klick auf eine weitere Fläche desselben Körpers. <b>Esc</b> bricht ab.' : '<b>Fläche neu wählen:</b> Klick auf die gewünschte Fläche. <b>Esc</b> bricht ab.');
+    return true;
+  }
+  function removeDeleteFaceEntry(stepId, idx) {
+    const fn = Model.find(App.doc, stepId);
+    const arr = fn && fn.item && fn.item.p && Array.isArray(fn.item.p.faces) ? fn.item.p.faces : null;
+    if (!arr || arr.length <= 1 || idx < 0 || idx >= arr.length) return false;
+    App.change('Fläche aus „Fläche löschen“ entfernt', (doc) => {
+      const f2 = Model.find(doc, stepId);
+      if (!f2 || !f2.item.p || !Array.isArray(f2.item.p.faces) || f2.item.p.faces.length <= 1) return false;
+      f2.item.p.faces.splice(idx, 1);
+    });
+    return true;
+  }
+  function renderDeleteFace(it, sec, setP) {
+    const p = it.p || {};
+    const list = Array.isArray(p.faces) ? p.faces : [];
+    const box = h('div', { id: 'df-faces-list', style: { display: 'grid', gap: '4px', marginBottom: '8px' } });
+    if (list.length) {
+      box.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('panel.deleteFace.facesTitle')), h('b', { class: 'mono' }, String(list.length))));
+      list.forEach((fc, idx) => {
+        const lbl = `${idx + 1}. ${faceTypeLabelDE(fc && fc.t)}`;
+        const row = h('div', { class: 'mini-row', id: 'df-face-' + idx });
+        row.append(h('span', { class: 'grow' }, lbl));
+        if (list.length > 1) {
+          const rm = h('button', { type: 'button', class: 'btn ghost small', id: 'df-rm-' + idx, 'aria-label': T('panel.deleteFace.removeFace'), 'data-tip': T('panel.deleteFace.removeFace') });
+          rm.innerHTML = icon('trash');
+          rm.onclick = () => removeDeleteFaceEntry(it.id, idx);
+          row.append(rm);
+        }
+        box.append(row);
+      });
+    }
+    sec.append(box);
+    const row = h('div', { class: 'btn-row' });
+    const ab = h('button', { type: 'button', class: 'btn small primary', id: 'df-add' }); ab.innerHTML = icon('plus') + esc(T('panel.deleteFace.addFace'));
+    ab.onclick = () => pickDeleteFace(it.id, 'add');
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'df-pick' }); pb.innerHTML = icon('cursor') + esc(T('panel.deleteFace.pickFace'));
+    pb.onclick = () => pickDeleteFace(it.id, 'replace');
+    row.append(ab, pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'df-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: T('panel.deleteFace.hint') }));
   }
   // ---------- Schritt spiegeln (KP-14) ----------
   function canMirrorStep(it, parent) {
@@ -7697,5 +7887,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, portCutout, startPortCutout, pickPortCutoutFace, renderPortCutout, magnetPocket, startMagnetPocket, pickMagnetPocketFace, renderMagnetPocket, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, directFace, startDirectFace, pickDirectFace, pickDirectFaceRotAxis, directFaceFrame, renderDirectFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut, startEngrave, engrave, updateEngrave, stopEngrave, get engraving() { return !!engraveState; } };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, portCutout, startPortCutout, pickPortCutoutFace, renderPortCutout, magnetPocket, startMagnetPocket, pickMagnetPocketFace, renderMagnetPocket, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, deleteFace, startDeleteFace, pickDeleteFace, removeDeleteFaceEntry, renderDeleteFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, directFace, startDirectFace, pickDirectFace, pickDirectFaceRotAxis, directFaceFrame, renderDirectFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut, startEngrave, engrave, updateEngrave, stopEngrave, get engraving() { return !!engraveState; } };
 })();

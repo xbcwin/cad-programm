@@ -44,6 +44,7 @@ const KINDS = {
   emboss: { get label() { return T('kind.emboss'); }, params: [] },
   splitFace: { get label() { return T('kind.splitFace'); }, params: [] },
   dome: { get label() { return T('kind.dome'); }, params: [] },
+  deleteFace: { get label() { return T('kind.deleteFace'); }, params: [] },
   mirrorStep: { get label() { return T('kind.mirrorStep'); }, params: [] },
   deleteBody: { get label() { return T('kind.deleteBody'); }, params: [] },
   boss: { get label() { return T('kind.boss'); }, params: [] },
@@ -579,6 +580,7 @@ const Model = (() => {
       if (it.kind === 'emboss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'prägt auf' });
       if (it.kind === 'splitFace' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'teilt Fläche von' });
       if (it.kind === 'dome' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Kuppel auf' });
+      if (it.kind === 'deleteFace' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'löscht Fläche an' });
       if (it.kind === 'boss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Schraubdom auf' });
       if (it.kind === 'undercut' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Freistich an' });
       if (it.kind === 'circlipGroove' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Einstich an' });
@@ -828,6 +830,10 @@ const Model = (() => {
       else if (it.kind === 'emboss') o.p = embossParams(it, ownV);
       else if (it.kind === 'splitFace') o.p = splitFaceParams(it, ownV);
       else if (it.kind === 'dome') o.p = domeParams(it, ownV);
+      else if (it.kind === 'deleteFace') {
+        const p = it.p || {};
+        o.p = { target: p.target || null, faces: Array.isArray(p.faces) ? p.faces.filter((fc) => fc && Array.isArray(fc.c)) : [] };
+      }
       else if (it.kind === 'sketch3d') o.p = { sketch3d: sketch3dResolve(it.p && it.p.sketch3d, ownV) };
       else if (it.kind === 'import') {
         o.p = { fmt: it.p.fmt, scale: num(it.p.scale, ownV, 1) };
@@ -3010,6 +3016,10 @@ const Model = (() => {
       case 'emboss': return `${f(p.height ?? 1)}${u} · ${(it.p && it.p.mode) === 'deboss' ? 'vertieft' : 'erhaben'}`;
       case 'splitFace': return p.side === 'both' ? 'beide Seiten' : p.side === 'back' ? 'Rückseite' : 'Vorderseite';
       case 'dome': return `${it.p && it.p.flip ? '−' : '+'}${f(p.height ?? 5)}${u}${it.p && it.p.shape === 'spherical' ? ' · Kugelkappe' : ''}`;
+      case 'deleteFace': {
+        const n = Array.isArray(it.p && it.p.faces) ? it.p.faces.length : 0;
+        return n === 1 ? '1 Fläche' : n > 1 ? `${n} Flächen` : 'keine Fläche';
+      }
       case 'boss': {
         const ribs = Math.max(0, Math.min(6, Math.round(p.ribs ?? 4)));
         return `Ø ${f(p.outerD ?? 8)}/${f(p.holeD ?? 3)}${u} · H ${f(p.height ?? 10)}${u}${ribs > 0 ? ` · ${ribs} Rippen` : ''}`;
@@ -3547,7 +3557,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'directFace' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'fillPattern' || s.item.kind === 'mountPattern' || s.item.kind === 'portCutout' || s.item.kind === 'magnetPocket' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || s.item.kind === 'knurl' || s.item.kind === 'gripPattern' || s.item.kind === 'stackHole' || s.item.kind === 'asmCut' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'directFace' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'fillPattern' || s.item.kind === 'mountPattern' || s.item.kind === 'portCutout' || s.item.kind === 'magnetPocket' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteFace' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || s.item.kind === 'knurl' || s.item.kind === 'gripPattern' || s.item.kind === 'stackHole' || s.item.kind === 'asmCut' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {

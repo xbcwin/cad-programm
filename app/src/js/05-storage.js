@@ -933,7 +933,7 @@ const Store = (() => {
     'box', 'cylinder', 'tube', 'sphere', 'hemisphere', 'cone', 'pyramid', 'torus', 'prism', 'wedge',
     'extrude', 'revolve', 'loft', 'sweep', 'helix', 'import', 'group', 'part',
     'transform', 'scale', 'deform', 'thicken', 'rib', 'vent', 'fins', 'fillPattern', 'mountPattern', 'portCutout', 'magnetPocket', 'web', 'wrap',
-    'emboss', 'splitFace', 'dome', 'mirrorStep', 'deleteBody', 'boss', 'lipGroove',
+    'emboss', 'splitFace', 'dome', 'deleteFace', 'mirrorStep', 'deleteBody', 'boss', 'lipGroove',
     'undercut', 'circlipGroove', 'keyway', 'splineProfile', 'knurl', 'gripPattern', 'sketch3d', 'ref',
     'stackHole', 'asmCut',
   ]);

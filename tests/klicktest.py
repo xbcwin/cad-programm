@@ -41435,6 +41435,261 @@ def t_a194_svg_logo_ral_farben(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a199_flaeche_loeschen_heilen(p):
+    # 1. Quader 20×20×20 mit Durchgangsbohrung Ø 8 (op: 'cut'): Einfach vs. Profi, Bohrungsfläche löschen -> 8000 mm³
+    p.empty()
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(200)
+    p.ev("""App.change('Quader mit Bohrung', (doc) => {
+      const box = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' });
+      const cyl = Model.newItem('cylinder', { d: 8, h: 30 }, { name: 'Bohrung', t: { x: 0, y: 0, z: -5, rx: 0, ry: 0, rz: 0 } });
+      cyl.op = { type: 'cut', target: box.id };
+      doc.items.push(box, cyl);
+    })""")
+    warte_rechnen(p, 45)
+    p.ev("""(() => {
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const ci = r.data.faces.findIndex(f => f.t === 'CYLINDRE');
+      App.select([box.id], { face: { id: box.id, faceIdx: ci } });
+    })()"""); p.wait(250)
+    simple_ctx_vis = p.ev("return !!document.querySelector('#ctx-delete-face')?.offsetParent")
+    simple_cmd = p.ev("return Commands.search('fläche löschen').some(c => c.id === 'delete-face')")
+
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(300)
+    pro_ctx_vis = p.ev("return !!document.querySelector('#ctx-delete-face')?.offsetParent")
+    pro_cmd = p.ev("return Commands.search('fläche löschen').some(c => c.id === 'delete-face')")
+
+    before_hole = p.ev("""return (async () => {
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const ms = await Mass.measure();
+      return {
+        faces: r.data.faces.length,
+        cyls: r.data.faces.filter(f => f.t === 'CYLINDRE').length,
+        vol: ms?.parts?.[0]?.volume || 0,
+      };
+    })()""")
+    p.pg.locator('#ctx-delete-face').click()
+    warte_rechnen(p, 45)
+    after_hole = p.ev("""return (async () => {
+      const box = App.doc.items[0];
+      const step = App.doc.items.find(x => x.kind === 'deleteFace');
+      const r = App.results.get(box.id);
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      const exp = step ? Explain.local(step.id) : null;
+      return {
+        errs: App.errors.length,
+        merged: step ? App.mergedInto(step.id) === box.id : false,
+        faces: r.data.faces.length,
+        planes: r.data.faces.filter(f => f.t === 'PLANE').length,
+        cyls: r.data.faces.filter(f => f.t === 'CYLINDRE').length,
+        vol: ms?.parts?.[0]?.volume || 0,
+        gcIssues: gc.issues.length,
+        listCount: document.querySelectorAll('#df-faces-list [id^="df-face-"]').length,
+        hasExplain: !!(exp && exp.lines && exp.lines.some(l => l.t && l.t.includes('Löscht'))),
+      };
+    })()""")
+    ok1 = bool(
+        not simple_ctx_vis and not simple_cmd
+        and pro_ctx_vis and pro_cmd
+        and before_hole['faces'] == 7 and before_hole['cyls'] == 1 and abs(before_hole['vol'] - (8000.0 - math.pi * 16.0 * 20.0)) < 1.0
+        and after_hole['errs'] == 0 and after_hole['merged']
+        and after_hole['faces'] == 6 and after_hole['planes'] == 6 and after_hole['cyls'] == 0
+        and abs(after_hole['vol'] - 8000.0) < 0.5 and after_hole['gcIssues'] == 0
+        and after_hole['listCount'] == 1 and after_hole['hasExplain']
+    )
+
+    # 2. Quader mit Top-Level-Loch (role: 'hole') -> Bohrungsfläche löschen -> voller Quader 8000 mm³
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("""App.change('Quader mit Top-Level-Loch', (doc) => {
+      const box = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' });
+      const cyl = Model.newItem('cylinder', { d: 8, h: 30 }, { name: 'Loch', role: 'hole', t: { x: 0, y: 0, z: -5, rx: 0, ry: 0, rz: 0 } });
+      doc.items.push(box, cyl);
+    })""")
+    warte_rechnen(p, 45)
+    p.ev("""(() => {
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const ci = r.data.faces.findIndex(f => f.t === 'CYLINDRE');
+      App.select([box.id], { face: { id: box.id, faceIdx: ci } });
+    })()"""); p.wait(250)
+    p.pg.locator('#ctx-delete-face').click()
+    warte_rechnen(p, 45)
+    top_hole_st = p.ev("""return (async () => {
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      const pBox = ms?.parts?.find(pt => pt.id === box.id);
+      return {
+        errs: App.errors.length,
+        faces: r.data.faces.length,
+        cyls: r.data.faces.filter(f => f.t === 'CYLINDRE').length,
+        vol: pBox ? pBox.volume : 0,
+        gcIssues: gc.issues.length,
+      };
+    })()""")
+    ok2 = bool(
+        top_hole_st['errs'] == 0 and top_hole_st['faces'] == 6 and top_hole_st['cyls'] == 0
+        and abs(top_hole_st['vol'] - 8000.0) < 0.5 and top_hole_st['gcIssues'] == 0
+    )
+
+    # 3. Kantenrundung R=3 und 4 obere Rundungen gemeinsam löschen -> Verlängern der Nachbarflächen schließt Lücke
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("""App.change('Quader mit Rundung', (doc) => {
+      const box = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' });
+      box.finishes = [{ id: 'f_r1', type: 'fillet', r: 3, edges: [{ a: [-10, -10, 20], b: [10, -10, 20], m: [0, -10, 20], l: 20 }] }];
+      doc.items.push(box);
+    })""")
+    warte_rechnen(p, 45)
+    p.ev("""(() => {
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE');
+      App.select([box.id], { face: { id: box.id, faceIdx: fi } });
+    })()"""); p.wait(250)
+    p.pg.locator('#ctx-delete-face').click()
+    warte_rechnen(p, 45)
+    fillet1_st = p.ev("""return (async () => {
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        faces: r.data.faces.length,
+        planes: r.data.faces.filter(f => f.t === 'PLANE').length,
+        vol: ms?.parts?.[0]?.volume || 0,
+        gcIssues: gc.issues.length,
+      };
+    })()""")
+
+    # 4 obere Kantenrundungen auf einmal wählen und löschen
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("""App.change('Quader 4 Rundungen', (doc) => {
+      const box = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' });
+      box.finishes = [{
+        id: 'f_r4', type: 'fillet', r: 2.5,
+        edges: [
+          { a: [-10, -10, 20], b: [10, -10, 20], m: [0, -10, 20], l: 20 },
+          { a: [-10, 10, 20], b: [10, 10, 20], m: [0, 10, 20], l: 20 },
+          { a: [-10, -10, 20], b: [-10, 10, 20], m: [-10, 0, 20], l: 20 },
+          { a: [10, -10, 20], b: [10, 10, 20], m: [10, 0, 20], l: 20 },
+        ],
+      }];
+      doc.items.push(box);
+    })""")
+    warte_rechnen(p, 45)
+    p.ev("""(() => {
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const fs = r.data.faces.map((f, idx) => f.t !== 'PLANE' ? { id: box.id, faceIdx: idx } : null).filter(Boolean);
+      App.select([box.id], { faces: fs });
+    })()"""); p.wait(250)
+    p.pg.locator('#ctx-delete-face').click()
+    warte_rechnen(p, 45)
+    fillet4_st = p.ev("""return (async () => {
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const ms = await Mass.measure();
+      return {
+        errs: App.errors.length,
+        faces: r.data.faces.length,
+        vol: ms?.parts?.[0]?.volume || 0,
+        listCount: document.querySelectorAll('#df-faces-list [id^="df-face-"]').length,
+      };
+    })()""")
+    ok3 = bool(
+        fillet1_st['errs'] == 0 and fillet1_st['faces'] == 6 and fillet1_st['planes'] == 6
+        and abs(fillet1_st['vol'] - 8000.0) < 0.5 and fillet1_st['gcIssues'] == 0
+        and fillet4_st['errs'] == 0 and fillet4_st['faces'] == 6
+        and abs(fillet4_st['vol'] - 8000.0) < 0.5 and fillet4_st['listCount'] == 4
+    )
+
+    # 4. Sackloch Ø 8 × 10 mm: nur Zylindermantel löschen -> Boden automatisch mit entfernt + Unterdrücken/Undo/Redo
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("""App.change('Quader mit Sackloch', (doc) => {
+      const box = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' });
+      const cyl = Model.newItem('cylinder', { d: 8, h: 15 }, { name: 'Sackloch', t: { x: 0, y: 0, z: 10, rx: 0, ry: 0, rz: 0 } });
+      cyl.op = { type: 'cut', target: box.id };
+      doc.items.push(box, cyl);
+    })""")
+    warte_rechnen(p, 45)
+    p.ev("""(() => {
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const ci = r.data.faces.findIndex(f => f.t === 'CYLINDRE');
+      Features.deleteFace({ id: box.id, idx: ci, info: r.data.faces[ci] });
+    })()""")
+    warte_rechnen(p, 45)
+    blind_st = p.ev("""return (async () => {
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const ms = await Mass.measure();
+      return { errs: App.errors.length, faces: r.data.faces.length, vol: ms?.parts?.[0]?.volume || 0 };
+    })()""")
+    p.ev("Timeline.toggleSuppress(App.doc.items.find(x => x.kind === 'deleteFace').id)")
+    warte_rechnen(p, 45)
+    sup_vol = p.ev("return (async () => (await Mass.measure())?.parts?.[0]?.volume || 0)()")
+    p.ev("App.undo()"); warte_rechnen(p, 45)
+    undo_vol = p.ev("return (async () => (await Mass.measure())?.parts?.[0]?.volume || 0)()")
+    p.ev("App.undo()"); warte_rechnen(p, 45)
+    undo2_cnt = p.ev("return App.doc.items.filter(x => x.kind === 'deleteFace').length")
+    p.ev("App.redo()"); warte_rechnen(p, 45)
+    redo_vol = p.ev("return (async () => (await Mass.measure())?.parts?.[0]?.volume || 0)()")
+    ok4 = bool(
+        blind_st['errs'] == 0 and blind_st['faces'] == 6 and abs(blind_st['vol'] - 8000.0) < 0.5
+        and sup_vol < 7600.0 and abs(undo_vol - 8000.0) < 0.5
+        and undo2_cnt == 0 and abs(redo_vol - 8000.0) < 0.5
+    )
+
+    # 5. Fehlerfall (einzelne Quader-Seitenwand ohne Lücke schließbar), Validierung, Hilfetexte, Erklärungen & DE/EN
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("""App.change('Quader', (doc) => {
+      doc.items.push(Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' }));
+    })""")
+    warte_rechnen(p, 45)
+    p.ev("""(() => {
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      Features.deleteFace({ id: box.id, idx: fi, info: r.data.faces[fi] });
+    })()""")
+    warte_rechnen(p, 45)
+    err_st = p.ev("return App.errors.filter(e => e.itemId === App.doc.items.find(x => x.kind === 'deleteFace')?.id).length")
+    p.ev("App.undo()"); warte_rechnen(p, 45)
+    # Validierung auf gültigem Projekt mit deleteFace prüfen
+    p.ev("""App.change('Quader mit Rundung', (doc) => {
+      doc.items[0].finishes = [{ id: 'f_v', type: 'fillet', r: 2, edges: [{ a: [-10, -10, 20], b: [10, -10, 20], m: [0, -10, 20], l: 20 }] }];
+    })""")
+    warte_rechnen(p, 45)
+    p.ev("""(() => {
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE');
+      Features.deleteFace({ id: box.id, idx: fi, info: r.data.faces[fi] });
+    })()""")
+    warte_rechnen(p, 45)
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const val = Store.validateProject(JSON.parse(await Start.projectPayload()));
+      const hOk = !!(wh.deleteFace && wh.deleteFace.tip && wh.deleteFace.hilfe && wh.deleteFace.tipp);
+      const sOk = !!(se.deleteFace && se.deleteFace.was && se.deleteFace.wozu && se.deleteFace.achtung);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { valOk: val.ok, valErrs: val.errors.length, hOk, sOk, i18nOk };
+    })()""")
+    ok5 = bool(err_st >= 1 and meta['valOk'] and meta['valErrs'] == 0 and meta['hOk'] and meta['sOk'] and meta['i18nOk'])
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a202_einlinien_schrift(p):
     """[A-202] Einlinien-Schrift „Einlinig (Gravur)“ im Text-Werkzeug (SK-49)."""
     try:
@@ -41995,6 +42250,7 @@ TESTS = [
     ('[A-198] Direkt bearbeiten: Fläche verschieben, drehen, versetzen (inkl. STEP)', t_direkt_flaeche),
     ('[A-197] STEP-Teile aus Hersteller-Katalogen einsortieren (BI-29)', t_a197_step_katalog_bibliothek),
     ('[A-194] Bibliothek: Logo aus SVG und RAL-Farben (BI-24, BI-25)', t_a194_svg_logo_ral_farben),
+    ('[A-199] Direkt bearbeiten: Fläche löschen und Lücke heilen (DB-03)', t_a199_flaeche_loeschen_heilen),
     ('[A-202] Einlinien-Schrift: „AB“ mit Einlinig (Gravur) nur offene Kurven / keine geschlossenen Umrisse / Rückgängig', t_a202_einlinien_schrift),
     ('[A-203] Einlinien-Schrift gravieren: „AB“ 0,5 mm tief, 0,4 mm breit auf Quader / Einfach & Profi / Bearbeiten / Rückgängig', t_a203_gravieren),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
