@@ -731,7 +731,7 @@ const Kernel = (() => {
       if (ti != null) union(idx, ti);
     };
 
-    const TARGET_KINDS = new Set(['transform', 'scale', 'deform', 'thicken', 'directFace', 'rib', 'vent', 'fins', 'fillPattern', 'mountPattern', 'portCutout', 'magnetPocket', 'web', 'wrap', 'emboss', 'splitFace', 'dome', 'deleteFace', 'replaceFace', 'moveEdge', 'editHole', 'editFillet', 'deleteBody', 'boss', 'lipGroove', 'undercut', 'circlipGroove', 'keyway', 'splineProfile', 'knurl', 'gripPattern', 'stackHole', 'asmCut']);
+    const TARGET_KINDS = new Set(['transform', 'scale', 'deform', 'thicken', 'directFace', 'rib', 'vent', 'fins', 'fillPattern', 'mountPattern', 'portCutout', 'magnetPocket', 'web', 'wrap', 'emboss', 'splitFace', 'dome', 'deleteFace', 'replaceFace', 'moveEdge', 'editHole', 'editFillet', 'simplify', 'deleteBody', 'boss', 'lipGroove', 'undercut', 'circlipGroove', 'keyway', 'splineProfile', 'knurl', 'gripPattern', 'stackHole', 'asmCut']);
     const walkDeps = (x, topIdx, isTop) => {
       if (!x || x.hidden) return;
       const p = x.p || {};

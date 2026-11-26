@@ -3085,6 +3085,20 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Sackloch Ø 6 × 10 mm → Ø 8 × 10 mm am STEP-Teil, 4-Kanten-Rundungskette R 2 → R 3,5 mm, Torus-Rundung am Zylinder R 2 → R 3 mm, Modus ohne Verlauf (`noHistory`), `Store.validateProject()`, `Explain.local()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-200]`)
 - [ ] **Von Hand**: Im Browser im Profi-Modus ein eigenes STEP-Teil mit Bohrungen und verrundeten Kanten importieren, direkt im 3D-Bild ein Loch im Durchmesser und eine Rundung im Radius ändern und per Messen kontrollieren.
 
+## Direkt bearbeiten: Vereinfachen und Körper an Körper ausrichten (Auto [A-206], DB-09, DB-10)
+- [x] Profi-Sichtbarkeit (`simplify`, `align-faces` nur im Profi-Modus), `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-206]`)
+- [x] Quader 20×20×10 mit Rundung R1 und Durchgangsloch Ø2: `Features.simplify` bis 3 mm entfernt beide Details, Flächenzahl sinkt von 8 auf 6 ebene Flächen (`4000,0 mm³`, `GeomCheck` = 0 Fehler), Eigenschaften-Panel `#simp-max`/`#simp-fillets`/`#simp-chamfers`/`#simp-holes` sichtbar (Klicktest `[A-206]`)
+- [x] Teil mit Rundung R1, Fase 1 mm, Loch Ø2 und Loch Ø6: Vereinfachen bis 3 mm entfernt R1, Fase 1 mm und Ø2, behält aber Ø6 (Flächenzahl sinkt von 10 auf 7); Unterdrücken und Rückgängig stellen den Ursprung her (Klicktest `[A-206]`)
+- [x] Ausrichten über Flächen: Würfel B (verschoben und gedreht) legt sich über `Place.alignFaces` bündig an Würfel A (Abstand `0 mm`, Mitten deckend, Gegennormale), Abstand `5 mm`, Bündig-Modus (`flush`), interaktive Leiste `#align-faces-bar`, Rückgängig und Sperrschutz bei festgesetztem Körper geprüft (Klicktest `[A-206]`)
+- [ ] **Von Hand**: Im Browser im Profi-Modus an einem importierten oder gerundeten Teil mit kleinen Fasen/Bohrungen „Vereinfachen“ testen sowie zwei verschobene Körper über „Ausrichten über Flächen“ per Zwei-Flächen-Klick bündig aneinander setzen.
+
+## Profile, Schritt 1: Profil-Sammlung (Auto [A-207], PR-01)
+- [x] Neue Bibliotheks-Gruppe „Profile“ im Bauteile-Flyout in **Einfach** und **Profi** sichtbar, alle 7 Profile (Vierkantrohr, Rundrohr, L-Profil, U-Profil, T-Profil, I-Träger, Flachstahl) über Klick und Befehlssuche einfügbar (Klicktest `[A-207]`)
+- [x] Vierkantrohr 30×30×2, Länge 500 mm einfügen ergibt geschlossenen B-Rep-Körper mit exaktem Volumen (`112000 mm³`, Abweichung < 1 %) und Hüllmaßen `30 × 30 × 500 mm` (Klicktest `[A-207]`)
+- [x] Wechsel der Profilart auf U-Profil (`UPE 80`) und Normgröße (`U40x20`) ändert Querschnitt, Hüllmaße und Volumen exakt (Klicktest `[A-207]`)
+- [x] Alle 7 Profilarten bauen mit `GeomCheck` = 0 Fehlern und korrektem Volumen; Rückgängig/Wiederherstellen, Projekt-Validierung, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-207]`)
+- [ ] **Von Hand**: Im Browser im Einfach- und Profi-Modus über „Bauteile → Profile“ ein I-Träger- und ein Rundrohr-Profil auf eine Körperfläche ziehen und verschiedene Normgrößen durchschalten.
+
 ## Fehler melden
 
 ```

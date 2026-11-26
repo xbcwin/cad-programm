@@ -563,7 +563,7 @@ const Panels = (() => {
         t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); Actions.addPart(d, libDefaults(d)); closeFlyout(); } });
         return t;
       };
-      const base = LIB.filter((x) => !x.buy && !x.drone && !x.std);
+      const base = LIB.filter((x) => !x.buy && !x.drone && !x.std && !x.profile);
       const stds = LIB.filter((x) => !x.buy && !x.drone && x.std);
       el.append(h('h3', null, T('tool.fly.partsTitle')));
       const tiles = h('div', { class: 'tiles' });
@@ -629,6 +629,36 @@ const Panels = (() => {
       scBtn.onclick = () => { Actions.addPart(LIBMAP.stdChain, libDefaults(LIBMAP.stdChain)); closeFlyout(); };
       stepRow.append(mpBtn, pcBtn, mpkBtn, bhBtn, phBtn, rkBtn, tsBtn, dfBtn, encBtn, npBtn, qrBtn, bcBtn, svgBtn, spBtn, peBtn, ptBtn, pfBtn, sbBtn, scBtn);
       el.append(stepRow);
+      if (typeof PROFILE_SHAPES !== 'undefined' && LIBMAP.profile) {
+        const profSec = h('div', { class: 'profile-section', id: 'fly-profiles-section' });
+        profSec.append(h('h3', { id: 'fly-profiles-head', 'data-help': 'profile' }, T('fly.profiles')));
+        const profTiles = h('div', { class: 'tiles pro', id: 'fly-profiles-tiles' });
+        const profSimple = h('div', { class: 'btn-row simple-only', id: 'fly-profiles-simple' });
+        for (const sh of PROFILE_SHAPES) {
+          const defP = { shape: sh.id, size: sh.defSize, length: sh.defLength };
+          const t = h('div', {
+            class: 'tile pro', role: 'button', tabindex: '0',
+            'data-lib': 'profile', 'data-profile': sh.id,
+            'aria-label': sh.label, 'data-tip': sh.desc, 'data-help': 'profile',
+          });
+          t.innerHTML = partSVG({ role: 'solid', icon: sh.icon });
+          t.append(h('span', { class: 'lbl' }, hyph(sh.label)), h('span', { class: 'role' }, sh.norm));
+          Place.bindTile(t, { part: LIBMAP.profile, params: defP, name: sh.label });
+          t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); Actions.addPart(LIBMAP.profile, defP, { name: sh.label }); closeFlyout(); } });
+          profTiles.append(t);
+
+          const b = h('button', {
+            type: 'button', class: 'btn small simple-only', id: 'add-profile-' + sh.id,
+            'data-lib': 'profile', 'data-profile': sh.id,
+            'data-help': 'profile', 'data-tip': sh.desc,
+          });
+          b.innerHTML = icon(sh.icon) + esc(sh.label);
+          b.onclick = () => { Actions.addPart(LIBMAP.profile, defP, { name: sh.label }); closeFlyout(); };
+          profSimple.append(b);
+        }
+        profSec.append(profTiles, profSimple);
+        el.append(profSec);
+      }
       if (stds.length) {
         el.append(h('h3', { class: 'pro' }, T('fly.stdParts')));
         const stdTiles = h('div', { class: 'tiles pro' });
@@ -1202,13 +1232,13 @@ const Panels = (() => {
           ...(it.kind !== 'ref' && UserLib.canSave(it) ? [{ icon: 'save', label: T('left.tree.toMyLib'), id: 'tm-userlib', help: 'userLibrary', run: () => UserLib.saveDialog(it.id) }] : []),
           ...(it.kind !== 'ref' && Features.canMirrorStep(it, (Model.find(App.doc, it.id) || {}).parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
           ...(it.kind === 'sketch3d' ? [{ icon: 'edit', label: T('sk3.editBtn'), id: 'tm-sk3-edit', run: () => Sketch.edit3d(it.id) }, { icon: 'sweep', label: T('ctx.alongPath'), id: 'tm-sk3-sweep', run: () => Features.sweepFromSketch3d(it.id) }] : []),
-          ...(it.kind !== 'ref' && it.kind !== 'deleteBody' && it.kind !== 'deleteFace' && it.kind !== 'replaceFace' && it.kind !== 'moveEdge' && it.kind !== 'sketch3d' && it.kind !== 'boss' && it.kind !== 'lipGroove' && it.kind !== 'undercut' && it.kind !== 'circlipGroove' && it.kind !== 'keyway' && it.kind !== 'splineProfile' && it.kind !== 'knurl' && it.kind !== 'gripPattern' && it.kind !== 'stackHole' && it.kind !== 'asmCut' && topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }, ...(!ViewPrefs.simple ? [{ icon: 'deform', label: T('common.deformStep'), id: 'tm-deform', help: 'deform', run: () => Features.deform([it.id]) }] : []), { icon: 'deleteBody', label: T('common.deleteBodyStep'), id: 'tm-deletebody', help: 'deleteBody', run: () => Features.deleteBody([it.id]) }] : []),
+          ...(it.kind !== 'ref' && it.kind !== 'deleteBody' && it.kind !== 'deleteFace' && it.kind !== 'replaceFace' && it.kind !== 'moveEdge' && it.kind !== 'editHole' && it.kind !== 'editFillet' && it.kind !== 'simplify' && it.kind !== 'sketch3d' && it.kind !== 'boss' && it.kind !== 'lipGroove' && it.kind !== 'undercut' && it.kind !== 'circlipGroove' && it.kind !== 'keyway' && it.kind !== 'splineProfile' && it.kind !== 'knurl' && it.kind !== 'gripPattern' && it.kind !== 'stackHole' && it.kind !== 'asmCut' && topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }, ...(!ViewPrefs.simple ? [{ icon: 'deform', label: T('common.deformStep'), id: 'tm-deform', help: 'deform', run: () => Features.deform([it.id]) }, ...(it.role !== 'hole' ? [{ icon: 'simplify', label: T('kind.simplify'), id: 'tm-simplify', help: 'simplify', run: () => Features.simplify(it.id) }] : [])] : []), { icon: 'deleteBody', label: T('common.deleteBodyStep'), id: 'tm-deletebody', help: 'deleteBody', run: () => Features.deleteBody([it.id]) }] : []),
           ...(Model.isAssembly(App.doc) && typeof Comp !== 'undefined' && Comp.canPatternPart && Comp.canPatternPart(it, App.doc) ? [
             { icon: 'patternRect', label: T('asm.patMenuRect'), id: 'tm-asm-pat-rect', help: 'asmPattern', run: () => Assembly.patternDialog('rect', [it.id]) },
             { icon: 'patternCirc', label: T('asm.patMenuCirc'), id: 'tm-asm-pat-circ', help: 'asmPattern', run: () => Assembly.patternDialog('circ', [it.id]) },
             { icon: 'mirror', label: T('asm.patMenuMirror'), id: 'tm-asm-mirror', help: 'asmMirror', run: () => Assembly.patternDialog('mirror', [it.id]) },
           ] : []),
-          ...(!Model.isAssembly(App.doc) && it.kind !== 'ref' && !((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'directFace' || it.kind === 'deleteBody' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }, { icon: 'point', label: T('ctx.patPoints'), id: 'tm-pat-points', help: 'patternPoints', run: () => Features.patternPoints([it.id]) }, { icon: 'list', label: T('ctx.patTable'), id: 'tm-pat-table', help: 'patternTable', run: () => Features.patternTable([it.id]) }] : []),
+          ...(!Model.isAssembly(App.doc) && it.kind !== 'ref' && !((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'directFace' || it.kind === 'deleteBody' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'editHole' || it.kind === 'editFillet' || it.kind === 'simplify' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }, { icon: 'point', label: T('ctx.patPoints'), id: 'tm-pat-points', help: 'patternPoints', run: () => Features.patternPoints([it.id]) }, { icon: 'list', label: T('ctx.patTable'), id: 'tm-pat-table', help: 'patternTable', run: () => Features.patternTable([it.id]) }] : []),
           ...(topSelNow.length >= 2 && !App.ctx ? [{ icon: 'folder', label: T('menu.tree.toFolder'), id: 'tm-folder', help: 'treeFolder', run: () => Actions.createFolder(topSelNow) }] : []),
           ...(inFld ? [{ icon: 'ungroup', label: T('menu.tree.fromFolder'), id: 'tm-unfolder', run: () => Actions.removeFromFolder([it.id]) }] : []),
           { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
@@ -1752,7 +1782,7 @@ const Panels = (() => {
       if (av && av.values) for (const k of Object.keys(av.values)) av.values[k] = fix(av.values[k]);
       if (av && av.itemParams) for (const ip of Object.values(av.itemParams)) if (ip && typeof ip === 'object') for (const k of Object.keys(ip)) ip[k] = fix(ip[k]);
     }
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'group' && (k === 'op' || k === 'pt' || k === 'plane' || k === 'keep' || k === 'axis' || k === 'scaleUnit' || k === 'distUnit' || k === 'mode' || k === 'sourceId' || k === 'csv' || k === 'align')) || (it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deform' && (k === 'target' || k === 'mode' || k === 'axis' || k === 'bendAxis' || k === 'anchor' || k === 'flip')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'deleteFace' && (k === 'target' || k === 'faces')) || (it.kind === 'replaceFace' && (k === 'target' || k === 'face' || k === 'replace' || k === 'flip')) || (it.kind === 'moveEdge' && (k === 'target' || k === 'edge' || k === 'axis')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'directFace' && (k === 'target' || k === 'face' || k === 'mode' || k === 'axis' || k === 'rotAxis' || k === 'rotDir' || k === 'pivot' || k === 'rotOrigin' || k === 'handleHint')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'vent' && (k === 'target' || k === 'face' || k === 'roundEnds')) || (it.kind === 'fins' && (k === 'target' || k === 'face')) || (it.kind === 'fillPattern' && (k === 'target' || k === 'face' || k === 'kind')) || (it.kind === 'mountPattern' && (k === 'target' || k === 'face' || k === 'preset' || k === 'includeCenter' || k === 'printFit')) || (it.kind === 'portCutout' && (k === 'target' || k === 'face' || k === 'preset' || k === 'includeHoles' || k === 'printFit')) || (it.kind === 'magnetPocket' && (k === 'target' || k === 'face' || k === 'preset' || k === 'printFit')) || (it.kind === 'web' && (k === 'target' || k === 'extend' || k === 'flip')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'splitFace' && (k === 'target' || k === 'face' || k === 'side')) || (it.kind === 'dome' && (k === 'target' || k === 'face' || k === 'shape' || k === 'flip')) || ((it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern') && (k === 'target' || k === 'face' || k === 'form' || k === 'norm' || k === 'end' || k === 'from' || k === 'ends' || (it.kind === 'keyway' && k === 'size') || k === 'profile' || k === 'autoNorm' || k === 'style' || k === 'autoDepth' || k === 'kind' || k === 'mode' || k === 'dir' || k === 'layout' || k === 'shape')) || (it.kind === 'sweep' && (k === 'sketch3dId' || k === 'wrapId')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); for (const fw of f.faceWalls || []) fw.r = fix(fw.r); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); if (it.p && it.p.sketch3d) { for (const e of it.p.sketch3d.ents || []) for (const pk of ['a', 'm', 'b']) if (Array.isArray(e[pk])) for (let j = 0; j < 3; j++) e[pk][j] = fix(e[pk][j]); for (const d of it.p.sketch3d.dims || []) d.v = fix(d.v); } });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'group' && (k === 'op' || k === 'pt' || k === 'plane' || k === 'keep' || k === 'axis' || k === 'scaleUnit' || k === 'distUnit' || k === 'mode' || k === 'sourceId' || k === 'csv' || k === 'align')) || (it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deform' && (k === 'target' || k === 'mode' || k === 'axis' || k === 'bendAxis' || k === 'anchor' || k === 'flip')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'deleteFace' && (k === 'target' || k === 'faces')) || (it.kind === 'replaceFace' && (k === 'target' || k === 'face' || k === 'replace' || k === 'flip')) || (it.kind === 'moveEdge' && (k === 'target' || k === 'edge' || k === 'axis')) || (it.kind === 'simplify' && (k === 'target' || k === 'fillets' || k === 'chamfers' || k === 'holes')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'directFace' && (k === 'target' || k === 'face' || k === 'mode' || k === 'axis' || k === 'rotAxis' || k === 'rotDir' || k === 'pivot' || k === 'rotOrigin' || k === 'handleHint')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'vent' && (k === 'target' || k === 'face' || k === 'roundEnds')) || (it.kind === 'fins' && (k === 'target' || k === 'face')) || (it.kind === 'fillPattern' && (k === 'target' || k === 'face' || k === 'kind')) || (it.kind === 'mountPattern' && (k === 'target' || k === 'face' || k === 'preset' || k === 'includeCenter' || k === 'printFit')) || (it.kind === 'portCutout' && (k === 'target' || k === 'face' || k === 'preset' || k === 'includeHoles' || k === 'printFit')) || (it.kind === 'magnetPocket' && (k === 'target' || k === 'face' || k === 'preset' || k === 'printFit')) || (it.kind === 'web' && (k === 'target' || k === 'extend' || k === 'flip')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'splitFace' && (k === 'target' || k === 'face' || k === 'side')) || (it.kind === 'dome' && (k === 'target' || k === 'face' || k === 'shape' || k === 'flip')) || ((it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern') && (k === 'target' || k === 'face' || k === 'form' || k === 'norm' || k === 'end' || k === 'from' || k === 'ends' || (it.kind === 'keyway' && k === 'size') || k === 'profile' || k === 'autoNorm' || k === 'style' || k === 'autoDepth' || k === 'kind' || k === 'mode' || k === 'dir' || k === 'layout' || k === 'shape')) || (it.kind === 'sweep' && (k === 'sketch3dId' || k === 'wrapId')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); for (const fw of f.faceWalls || []) fw.r = fix(fw.r); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); if (it.p && it.p.sketch3d) { for (const e of it.p.sketch3d.ents || []) for (const pk of ['a', 'm', 'b']) if (Array.isArray(e[pk])) for (let j = 0; j < 3; j++) e[pk][j] = fix(e[pk][j]); for (const d of it.p.sketch3d.dims || []) d.v = fix(d.v); } });
     for (const j of doc.joints || []) if (j.kind === 'distance' && j.dist != null) j.dist = fix(j.dist);
     for (const sk of doc.skeletons || []) for (const d of sk.dims || []) if (d && typeof d.v === 'string') d.v = fix(d.v);
     return hit;
@@ -2188,8 +2218,8 @@ const Panels = (() => {
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
     const isPatOp = Features.isOp(it) && it.p.op === 'pattern' && !(it.children || []).some((c) => c.kind === 'rib');
-    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'directFace' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut') return null;
-    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'vent' && x.kind !== 'fins' && x.kind !== 'fillPattern' && x.kind !== 'mountPattern' && x.kind !== 'portCutout' && x.kind !== 'magnetPocket' && x.kind !== 'web' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'splitFace' && x.kind !== 'dome' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d' && x.kind !== 'boss' && x.kind !== 'lipGroove' && x.kind !== 'undercut' && x.kind !== 'circlipGroove' && x.kind !== 'keyway' && x.kind !== 'splineProfile' && x.kind !== 'knurl' && x.kind !== 'gripPattern' && x.kind !== 'stackHole' && x.kind !== 'asmCut' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && x.kind !== 'deform' && x.kind !== 'directFace' && x.kind !== 'deleteFace' && x.kind !== 'replaceFace' && x.kind !== 'moveEdge' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
+    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'directFace' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'simplify' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut') return null;
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'vent' && x.kind !== 'fins' && x.kind !== 'fillPattern' && x.kind !== 'mountPattern' && x.kind !== 'portCutout' && x.kind !== 'magnetPocket' && x.kind !== 'web' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'splitFace' && x.kind !== 'dome' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d' && x.kind !== 'boss' && x.kind !== 'lipGroove' && x.kind !== 'undercut' && x.kind !== 'circlipGroove' && x.kind !== 'keyway' && x.kind !== 'splineProfile' && x.kind !== 'knurl' && x.kind !== 'gripPattern' && x.kind !== 'stackHole' && x.kind !== 'asmCut' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && x.kind !== 'deform' && x.kind !== 'directFace' && x.kind !== 'deleteFace' && x.kind !== 'replaceFace' && x.kind !== 'moveEdge' && x.kind !== 'simplify' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, T('panel.op.title')));
     const type = it.op ? it.op.type : 'new';
@@ -2369,7 +2399,7 @@ const Panels = (() => {
     const copies = []; Model.walk(App.doc.items, (x) => { if (x.link === it.id) copies.push(x); });
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, copies.length === 1 ? T('panel.item.linkedCountOne') : T('panel.item.linkedCountMany', { n: copies.length })));
     const isRef = it.kind === 'ref';
-    const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'directFace' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'mirrorStep';
+    const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'directFace' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'simplify' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'mirrorStep';
     const isMergedStep = isMoveOnly || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut';
     if (!isMergedStep && !isRef) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     if (!isRef) { const opSec = opSection(it); if (opSec) w.append(opSec); }
@@ -2489,12 +2519,37 @@ const Panels = (() => {
       if (def) {
         const fl = h('div', { class: 'fields' });
         for (const q of def.params) {
+          if (q.show && !q.show(it.p)) continue;
+          const qLabel = typeof q.label === 'function' ? q.label(it.p) : q.label;
           let fld;
-          if (q.type === 'select') fld = UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? q.def ?? '', options: q.options, onChange: (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v) });
-          else if (q.type === 'text') {
-            fld = UI.textField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? q.def ?? '', placeholder: q.placeholder || '', onCommit: (v) => setP(q.k, v) });
+          if (q.type === 'select') {
+            const opts = typeof q.options === 'function' ? () => q.options(it) : q.options;
+            let selVal = it.p[q.k] ?? q.def ?? '';
+            if (def.lib === 'profile' && q.k === 'size' && it.p.size !== 'custom' && typeof profileMetrics === 'function') {
+              selVal = profileMetrics(Model.resolveP(it.p, V)).size;
+            }
+            const onSel = def.lib === 'profile' && q.k === 'shape'
+              ? (v) => App.change(T('undo.profileShape'), (doc) => {
+                const item = Model.find(doc, it.id).item;
+                const prevSh = profileShapeInfo(item.p.shape);
+                const nextSh = profileShapeInfo(v);
+                item.p.shape = nextSh.id;
+                item.p.size = nextSh.defSize;
+                item.p.w = null; item.p.h = null; item.p.t = null; item.p.tf = null;
+                if (!item.name || item.name === prevSh.label || item.name === 'Profil') item.name = nextSh.label;
+              })
+              : def.lib === 'profile' && q.k === 'size'
+                ? (v) => App.change('Maß geändert', (doc) => {
+                  const item = Model.find(doc, it.id).item;
+                  item.p.size = v;
+                  if (v !== 'custom') { item.p.w = null; item.p.h = null; item.p.t = null; item.p.tf = null; }
+                })
+                : (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v);
+            fld = UI.selectField({ id: 'lp-' + q.k, label: qLabel, value: selVal, options: opts, onChange: onSel });
+          } else if (q.type === 'text') {
+            fld = UI.textField({ id: 'lp-' + q.k, label: qLabel, value: it.p[q.k] ?? q.def ?? '', placeholder: q.placeholder || '', onCommit: (v) => setP(q.k, v) });
             if (q.wide) fld.style.gridColumn = '1 / -1';
-          } else fld = UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, vars: V, placeholder: q.auto ? T('panel.item.autoFitPh') : '', onCommit: (v) => setP(q.k, v) });
+          } else fld = UI.numField({ id: 'lp-' + q.k, label: qLabel, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, vars: V, placeholder: q.auto ? T('panel.item.autoFitPh') : '', onCommit: (v) => setP(q.k, v) });
           if (q.k === 'printFit') fld.setAttribute('data-help', 'printFit');
           fl.append(fld);
         }
@@ -3035,6 +3090,19 @@ const Panels = (() => {
             chain: esc(m.chainLabelShort), shape: m.shape === 'loop' ? 'geschlossen' : 'gerade',
             links: m.links, p: Units.fmtLenU(m.pitch, 3), L: Units.fmtLenU(m.actualLength, 1), w: Units.fmtLenU(m.totalW, 1),
           }) }));
+        } else if (def.lib === 'profile' && typeof profileMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = profileMetrics(rp);
+          let dimsTxt = '';
+          if (m.shape === 'roundTube') dimsTxt = `Ø ${Units.fmtLenU(m.w, 1)} × ${Units.fmtLenU(m.t, 2)}`;
+          else if (m.shape === 'flat') dimsTxt = `${Units.fmtLenU(m.w, 1)} × ${Units.fmtLenU(m.t, 2)}`;
+          else if (m.shape === 'channel' || m.shape === 'tee' || m.shape === 'ibeam') dimsTxt = `${Units.fmtLenU(m.h, 1)} × ${Units.fmtLenU(m.w, 1)} × ${Units.fmtLenU(m.t, 2)} / ${Units.fmtLenU(m.tf, 2)}`;
+          else dimsTxt = `${Units.fmtLenU(m.w, 1)} × ${Units.fmtLenU(m.h, 1)} × ${Units.fmtLenU(m.t, 2)}`;
+          sec.append(h('div', { id: 'p-profile-hint', class: 'hint-box', html: T('panel.item.profileHint', {
+            shape: esc(m.shapeLabel), norm: esc(m.norm),
+            dims: esc(dimsTxt), area: fmt(m.area, 1),
+            L: Units.fmtLenU(m.length, 1), kgm: fmt(m.steelKgPerM, 2),
+          }) }));
         }
         w.append(sec);
       }
@@ -3423,6 +3491,10 @@ const Panels = (() => {
       sec.firstChild.textContent = T('kind.editFillet');
       sec.setAttribute('data-help', 'editFillet');
       Features.renderEditFillet(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'simplify') {
+      sec.firstChild.textContent = T('kind.simplify');
+      sec.setAttribute('data-help', 'simplify');
+      Features.renderSimplify(it, sec, setP); w.append(sec);
     } else if (it.kind === 'boss') {
       sec.firstChild.textContent = T('kind.boss');
       Features.renderBoss(it, sec, setP); w.append(sec);
@@ -4035,7 +4107,7 @@ const Panels = (() => {
     if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) { Features.syncPatternMarkers(); return; }
     const items = App.selectedItems(); if (!items.length) { Features.syncPatternMarkers(); return; }
     const bar = h('div', { class: 'ctxbar', role: 'toolbar', 'aria-label': T('ctx.toolbarAria') });
-    const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers', 'moveStep', 'scaleBody', 'deform', 'deleteBody', 'deleteFace', 'replaceFace', 'moveEdge', 'editHole', 'editFillet', 'thicken', 'directFace', 'wrap', 'vent', 'fins', 'patternFill', 'web'];
+    const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers', 'moveStep', 'scaleBody', 'deform', 'deleteBody', 'deleteFace', 'replaceFace', 'moveEdge', 'editHole', 'editFillet', 'simplify', 'alignFaces', 'thicken', 'directFace', 'wrap', 'vent', 'fins', 'patternFill', 'web'];
     const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls + (PRO.includes(ic) ? ' pro' : ''), 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
     const sep = () => bar.append(h('span', { class: 'vsep' }));
     // Schritt hinter dem Marker oder unterdrückt: nichts zum Bearbeiten, nur zurückholen
@@ -4115,6 +4187,17 @@ const Panels = (() => {
       bar.append(h('span', { class: 'lbl' }, T('ctx.editFilletStepLabel')));
       b('plus', T('panel.editFillet.addFace'), () => Features.pickEditFilletFace(it.id, 'add'), 'accent', T('ctx.editFilletTip')).dataset.help = 'editFillet';
       if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
+      b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
+      b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      Features.syncPatternMarkers();
+      return;
+    }
+    if (items.length === 1 && items[0].item.kind === 'simplify') {
+      const it = items[0].item;
+      bar.append(h('span', { class: 'lbl' }, T('ctx.simplifyStepLabel')));
+      if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), 'accent', T('ctx.targetBodyTip'));
       b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
       b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
       $('#overlay').append(bar); ctx = bar;
@@ -4362,6 +4445,13 @@ const Panels = (() => {
         const dfb = b('deleteFace', T('ctx.deleteFaces'), () => Features.deleteFace(App.faces), 'pro', T('ctx.deleteFaceTip'));
         dfb.id = 'ctx-delete-face'; dfb.dataset.help = 'deleteFace';
       }
+      if (App.faces.length === 2) {
+        const t0 = Model.topOf(App.doc, App.faces[0].id), t1 = Model.topOf(App.doc, App.faces[1].id);
+        if (t0 && t1 && t0.id !== t1.id) {
+          const afb = b('alignFaces', T('ctx.alignFaces'), () => Place.alignFaces(App.faces[0], App.faces[1]), 'pro', T('ctx.alignFacesTip'));
+          afb.id = 'ctx-align-faces'; afb.dataset.help = 'alignFaces';
+        }
+      }
       sep();
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
       bar.append(h('span', { class: 'lbl' }, T('ctx.face')));
@@ -4433,6 +4523,8 @@ const Panels = (() => {
       const pf = b('point', T('ctx.pointFaceCenter'), () => Datums.addPointFaceCenter(face), 'pro', T('ctx.pointFaceCenterTip'));
       pf.dataset.help = 'datumPoint';
       if (items[0].item.role !== 'hole' && App.doc.items.filter((x) => !x.hidden && x.role !== 'hole').length >= 2) {
+        const af = b('alignFaces', T('ctx.alignFaces'), () => Place.startAlignFaces(face), 'pro', T('ctx.alignFacesTip'), true);
+        af.id = 'ctx-align-faces'; af.dataset.help = 'alignFaces';
         const fj = b('lock', T('ctx.fixedJoint'), () => Joints.startFixed(face), '', T('ctx.fixedJointTip'), true);
         fj.id = 'ctx-face-fixed-joint'; fj.dataset.help = 'fixedJoint';
       }
@@ -4505,6 +4597,10 @@ const Panels = (() => {
       const pf = b('point', T('ctx.pointFaceCenter'), () => Datums.addPointFaceCenter(face), 'pro', T('ctx.pointFaceCenterTip'));
       pf.dataset.help = 'datumPoint';
       if (items[0].item.role !== 'hole' && App.doc.items.filter((x) => !x.hidden && x.role !== 'hole').length >= 2) {
+        if (face.info.t === 'CYLINDRE') {
+          const af = b('alignFaces', T('ctx.alignFaces'), () => Place.startAlignFaces(face), 'pro', T('ctx.alignFacesTip'), true);
+          af.id = 'ctx-align-faces'; af.dataset.help = 'alignFaces';
+        }
         const fj = b('lock', T('ctx.fixedJoint'), () => Joints.startFixed(face), '', T('ctx.fixedJointTip'), true);
         fj.id = 'ctx-face-fixed-joint'; fj.dataset.help = 'fixedJoint';
       }
@@ -4548,6 +4644,7 @@ const Panels = (() => {
       if (App.doc.items.includes(it)) b('scaleBody', T('ctx.scale'), () => Features.scale(), '', T('ctx.scaleTip'), true).dataset.help = 'scaleBody';
       if (App.doc.items.includes(it)) { const dfb = b('deform', T('ctx.deform'), () => Features.deform(), '', T('ctx.deformTip'), true); dfb.id = 'ctx-deform'; dfb.dataset.help = 'deform'; }
       if (App.doc.items.includes(it)) b('deleteBody', T('ctx.deleteBody'), () => Features.deleteBody([it.id]), '', T('ctx.deleteBodyTip'), true).dataset.help = 'deleteBody';
+      if (!hole && App.doc.items.includes(it)) { const sb = b('simplify', T('kind.simplify'), () => Features.simplify(it.id), 'pro', T('ctx.simplifyTip'), true); sb.id = 'ctx-simplify'; sb.dataset.help = 'simplify'; }
       if (Features.canMirrorStep(it, items[0].parent)) b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep([it.id]), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
       if (Model.isAssembly(App.doc) && typeof Comp !== 'undefined' && Comp.canPatternPart && Comp.canPatternPart(it, App.doc)) {
         const apb = b('patternRect', T('asm.patToolBtn'), (e) => Assembly.patternMenu(e.currentTarget, [it.id]), '', T('asm.patToolTip'), true);
@@ -4626,7 +4723,10 @@ const Panels = (() => {
         lcut.id = 'ctx-loft-cut'; lcut.dataset.help = 'loftCut';
       }
       if (!hasRef) b('boolSubtract', T('ctx.boolean'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.boolUnion'), icon: 'boolUnion', run: () => Features.boolean('union') }, { label: T('ctx.boolSub'), icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: T('ctx.boolInt'), icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', T('ctx.booleanTip'), true);
-      b('layers', T('ctx.align'), (e) => UI.menu(e.currentTarget, [['left', T('ctx.alignLeft')], ['cx', T('ctx.alignCx')], ['right', T('ctx.alignRight')], ['front', T('ctx.alignFront')], ['cy', T('ctx.alignCy')], ['back', T('ctx.alignBack')], ['bottom', T('ctx.alignBottom')]].map(([m, l]) => ({ label: l, run: () => Actions.align(null, m) }))), '', T('ctx.alignTip'));
+      b('layers', T('ctx.align'), (e) => UI.menu(e.currentTarget, [
+        ...[['left', T('ctx.alignLeft')], ['cx', T('ctx.alignCx')], ['right', T('ctx.alignRight')], ['front', T('ctx.alignFront')], ['cy', T('ctx.alignCy')], ['back', T('ctx.alignBack')], ['bottom', T('ctx.alignBottom')]].map(([m, l]) => ({ label: l, run: () => Actions.align(null, m) })),
+        ...(!ViewPrefs.simple ? ['-', { icon: 'alignFaces', label: T('ctx.alignFaces'), help: 'alignFaces', run: () => Place.startAlignFaces() }] : []),
+      ]), '', T('ctx.alignTip'));
       b('copy', T('common.duplicate'), () => Actions.duplicate(), '', T('ctx.dupTip'), true);
     }
     b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);

@@ -50,6 +50,8 @@ const Toolbar = (() => {
       { id: 'moveEdge', group: T('dlg.tb.grpEdit'), domId: 't-moveEdge', icon: 'moveEdge', label: T('kind.moveEdge'), tip: T('dlg.tb.moveEdgeTip'), cls: 'minor pro', help: 'moveEdge', run: () => Features.startMoveEdge() },
       { id: 'editHole', group: T('dlg.tb.grpEdit'), domId: 't-editHole', icon: 'editHole', label: T('kind.editHole'), tip: T('dlg.tb.editHoleTip'), cls: 'minor pro', help: 'editHole', run: () => Features.startEditHole() },
       { id: 'editFillet', group: T('dlg.tb.grpEdit'), domId: 't-editFillet', icon: 'editFillet', label: T('kind.editFillet'), tip: T('dlg.tb.editFilletTip'), cls: 'minor pro', help: 'editFillet', run: () => Features.startEditFillet() },
+      { id: 'simplify', group: T('dlg.tb.grpEdit'), domId: 't-simplify', icon: 'simplify', label: T('kind.simplify'), tip: T('dlg.tb.simplifyTip'), cls: 'minor pro', help: 'simplify', run: () => Features.startSimplify() },
+      { id: 'alignFaces', group: T('dlg.tb.grpEdit'), domId: 't-alignFaces', icon: 'alignFaces', label: T('ctx.alignFaces'), tip: T('dlg.tb.alignFacesTip'), cls: 'minor pro', help: 'alignFaces', run: () => Place.startAlignFaces() },
       { id: 'route3d', group: T('dlg.tb.grpEdit'), domId: 't-route3d', icon: 'sweep', label: T('tool.fly.route3d'), tip: T('dlg.tb.route3dTip'), cls: 'minor', help: 'route3d', run: () => Features.route3d() },
       { id: 'helix', group: T('dlg.tb.grpEdit'), domId: 't-helix', icon: 'helix', label: T('kind.helix'), tip: T('dlg.tb.helixTip'), cls: 'minor', help: 'helix', run: () => Features.helix() },
       { id: 'deform', group: T('dlg.tb.grpEdit'), domId: 't-deform', icon: 'deform', label: T('kind.deform'), tip: T('dlg.tb.deformTip'), cls: 'minor pro', help: 'deform', run: () => Features.deform() },

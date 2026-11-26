@@ -22,7 +22,7 @@ const Place = (() => {
     if (d.lib === 'blindHole') { const r = (Number(p.d) || 5) / 2, tip = blindTipHeight(Number(p.d) || 5, p.tipAngle ?? 118); return [-r, -r, -((Number(p.depth) || 10) + tip), r, r, 0.2]; }
     if (d.lib === 'fitHole') { const r = (Number(p.d) || 6) / 2; return [-r, -r, -(Number(p.depth) || 10), r, r, 0.2]; }
     if (d.lib === 'centerHole') { const m = centerHoleMetrics(p.size), r = m.d2 / 2; return [-r, -r, -m.totalDepth, r, r, 0.2]; }
-    if (d.lib === 'stdScrew' || d.lib === 'stdNut' || d.lib === 'stdWasher' || d.lib === 'stdPin' || d.lib === 'stdKey' || d.lib === 'stdKeyway' || d.lib === 'splineShaft' || d.lib === 'stdBearing' || d.lib === 'stdSleeve' || d.lib === 'stdORing' || d.lib === 'stdORingGroove' || d.lib === 'stdShaftSeal' || d.lib === 'stdCompSpring' || d.lib === 'stdExtSpring' || d.lib === 'helicalGear' || d.lib === 'bevelGear' || d.lib === 'steppedShaft' || d.lib === 'shaftCollar' || d.lib === 'shaftCoupling' || d.lib === 'timingPulley' || d.lib === 'sprocket' || d.lib === 'stdPipe' || d.lib === 'pipeElbow' || d.lib === 'pipeTee' || d.lib === 'pipeFlange' || d.lib === 'stdBelt' || d.lib === 'stdChain' || d.lib === 'batteryHolder' || d.lib === 'pullHandle' || d.lib === 'rotaryKnob' || d.lib === 'thumbScrew' || d.lib === 'deviceFoot' || d.lib === 'nameplate' || d.lib === 'qrCode' || d.lib === 'barcode') {
+    if (d.lib === 'stdScrew' || d.lib === 'stdNut' || d.lib === 'stdWasher' || d.lib === 'stdPin' || d.lib === 'stdKey' || d.lib === 'stdKeyway' || d.lib === 'splineShaft' || d.lib === 'stdBearing' || d.lib === 'stdSleeve' || d.lib === 'stdORing' || d.lib === 'stdORingGroove' || d.lib === 'stdShaftSeal' || d.lib === 'stdCompSpring' || d.lib === 'stdExtSpring' || d.lib === 'helicalGear' || d.lib === 'bevelGear' || d.lib === 'steppedShaft' || d.lib === 'shaftCollar' || d.lib === 'shaftCoupling' || d.lib === 'timingPulley' || d.lib === 'sprocket' || d.lib === 'stdPipe' || d.lib === 'pipeElbow' || d.lib === 'pipeTee' || d.lib === 'pipeFlange' || d.lib === 'stdBelt' || d.lib === 'stdChain' || d.lib === 'profile' || d.lib === 'batteryHolder' || d.lib === 'pullHandle' || d.lib === 'rotaryKnob' || d.lib === 'thumbScrew' || d.lib === 'deviceFoot' || d.lib === 'nameplate' || d.lib === 'qrCode' || d.lib === 'barcode') {
       return Model.primitiveBox('part', { lib: d.lib, ...p }) || [-10, -10, 0, 10, 10, 10];
     }
     if (d.lib === 'threadHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
@@ -136,7 +136,7 @@ const Place = (() => {
     else Actions.addPart(s.spec.part, s.spec.params || libDefaults(s.spec.part), { ...(s.onFace ? { onFace: s.onFace } : { pos: s.pos }), name: s.spec.name });
     if (s.onFace) UI.toast('Abgelegt – es ist jetzt Teil des Körpers darunter.', { icon: 'check' });
   }
-  function cancel() { cleanup(); stopHoles(); }
+  function cancel() { cleanup(); stopHoles(); stopAlignFaces(true); }
   function cleanup() {
     if (!st) return;
     if (st.offRes) st.offRes();
@@ -501,6 +501,241 @@ const Place = (() => {
   }
   // Bohrungen an Punkten einer Skizze auf einer Körperfläche (Punkte in Weltlage, n = Flächennormale nach außen)
   function holesAtPoints(id, pts, n) { holeHere(null, $('#t-parts'), { id, pts, normal: n }); }
-  return { bindTile, holeHere, holesAtPoints, holeWizard: (anchor) => holeHere(Actions.selectedFace(), anchor), stopHoles, cancel, get active() { return !!st || !!hw; }, get holes() { return !!hw; } };
+
+  // ---------- Körper an Körper über Flächen ausrichten (DB-10) ----------
+  let alignSt = null;
+  function minimalQuat(from, to) {
+    const a = from.clone().normalize(), b = to.clone().normalize();
+    const d = a.dot(b);
+    if (d > 1 - 1e-9) return new THREE.Quaternion();
+    if (d < -1 + 1e-9) {
+      const candidates = [new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0)];
+      let bestAx = null, bestSq = 0;
+      for (const c of candidates) {
+        const ax = c.clone().addScaledVector(a, -c.dot(a));
+        const sq = ax.lengthSq();
+        if (sq > bestSq + 1e-6) { bestSq = sq; bestAx = ax; if (sq > 0.99) break; }
+      }
+      return new THREE.Quaternion().setFromAxisAngle(bestAx.normalize(), Math.PI);
+    }
+    return new THREE.Quaternion().setFromUnitVectors(a, b);
+  }
+  function alignFaceInfo(face) {
+    if (!face || !face.id) return null;
+    const fidx = face.idx != null ? face.idx : face.faceIdx;
+    const info = face.info || (fidx != null ? App.results.get(face.id)?.data?.faces?.[fidx] : null);
+    return info ? { id: face.id, idx: fidx, info } : null;
+  }
+  function alignFaces(faceA, faceB, opts = {}) {
+    const fA = alignFaceInfo(faceA), fB = alignFaceInfo(faceB);
+    if (!fA || !fB) { UI.toast(T('toast.alignFacesNeedPlane'), { icon: 'info' }); return { ok: false, msg: T('toast.alignFacesNeedPlane') }; }
+    const topA = Model.topOf(App.doc, fA.id), topB = Model.topOf(App.doc, fB.id);
+    if (!topA || !topB) return { ok: false };
+    if (topA.id === topB.id) { UI.toast(T('toast.alignFacesSameBody'), { icon: 'info' }); return { ok: false, msg: T('toast.alignFacesSameBody') }; }
+    if (topB.locked || (typeof Joints !== 'undefined' && Joints.isFixedPart && Joints.isFixedPart(topB.id))) {
+      const msg = T('toast.alignFacesLocked', { name: Model.label(topB) });
+      UI.toast(msg, { icon: 'info' });
+      return { ok: false, msg };
+    }
+    const tA = fA.info.t, tB = fB.info.t;
+    const Wa = Model.worldMatrix(App.doc, fA.id), Wb = Model.worldMatrix(App.doc, fB.id), WtopB = Model.worldMatrix(App.doc, topB.id);
+    const off = Number(opts.offset) || 0;
+    const center = opts.center !== false;
+    let Delta = null;
+    if (tA === 'PLANE' && tB === 'PLANE' && Array.isArray(fA.info.c) && Array.isArray(fA.info.n) && Array.isArray(fB.info.c) && Array.isArray(fB.info.n)) {
+      const cA = new THREE.Vector3(...fA.info.c).applyMatrix4(Wa);
+      const nA = new THREE.Vector3(...fA.info.n).transformDirection(Wa).normalize();
+      const cB = new THREE.Vector3(...fB.info.c).applyMatrix4(Wb);
+      const nB = new THREE.Vector3(...fB.info.n).transformDirection(Wb).normalize();
+      const flush = opts.mode === 'flush' || (opts.mode == null && !!opts.flip);
+      const nTarget = flush ? nA.clone() : nA.clone().negate();
+      const qRot = minimalQuat(nB, nTarget);
+      const R = new THREE.Matrix4().makeRotationFromQuaternion(qRot);
+      const targetPt = cA.clone().addScaledVector(nA, off);
+      const shift = center ? targetPt.clone().sub(cB) : nA.clone().multiplyScalar(targetPt.clone().sub(cB).dot(nA));
+      Delta = new THREE.Matrix4().makeTranslation(shift.x, shift.y, shift.z)
+        .multiply(new THREE.Matrix4().makeTranslation(cB.x, cB.y, cB.z))
+        .multiply(R)
+        .multiply(new THREE.Matrix4().makeTranslation(-cB.x, -cB.y, -cB.z));
+    } else if (tA === 'CYLINDRE' && tB === 'CYLINDRE' && Array.isArray(fA.info.axis) && Array.isArray(fB.info.axis)) {
+      const oA = new THREE.Vector3(...fA.info.axis.slice(0, 3)).applyMatrix4(Wa);
+      const dA = new THREE.Vector3(...fA.info.axis.slice(3, 6)).transformDirection(Wa).normalize();
+      const cA = Array.isArray(fA.info.c) ? new THREE.Vector3(...fA.info.c).applyMatrix4(Wa) : oA.clone();
+      const cB = Array.isArray(fB.info.c) ? new THREE.Vector3(...fB.info.c).applyMatrix4(Wb) : new THREE.Vector3(...fB.info.axis.slice(0, 3)).applyMatrix4(Wb);
+      const dB = new THREE.Vector3(...fB.info.axis.slice(3, 6)).transformDirection(Wb).normalize();
+      const flipDir = opts.mode === 'flush' || !!opts.flip;
+      let dTarget = dA.dot(dB) >= 0 ? dA.clone() : dA.clone().negate();
+      if (flipDir) dTarget.negate();
+      const qRot = minimalQuat(dB, dTarget);
+      const R = new THREE.Matrix4().makeRotationFromQuaternion(qRot);
+      let shift;
+      if (center) {
+        const targetPt = cA.clone().addScaledVector(dA, off);
+        shift = targetPt.sub(cB);
+      } else {
+        const rel = cB.clone().sub(oA);
+        const proj = oA.clone().addScaledVector(dA, rel.dot(dA));
+        shift = proj.sub(cB);
+      }
+      Delta = new THREE.Matrix4().makeTranslation(shift.x, shift.y, shift.z)
+        .multiply(new THREE.Matrix4().makeTranslation(cB.x, cB.y, cB.z))
+        .multiply(R)
+        .multiply(new THREE.Matrix4().makeTranslation(-cB.x, -cB.y, -cB.z));
+    } else {
+      UI.toast(T('toast.alignFacesNeedPlane'), { icon: 'info' });
+      return { ok: false, msg: T('toast.alignFacesNeedPlane') };
+    }
+    const WtopB_new = Delta.clone().multiply(WtopB);
+    const invP = Model.parentWorld(App.doc, topB.id).invert();
+    const LtopB_new = invP.multiply(WtopB_new);
+    let moved = false;
+    App.change(T('undo.alignFaces'), (doc) => {
+      const fItem = Model.find(doc, topB.id);
+      if (!fItem || fItem.item.locked) return false;
+      Model.setFromMatrix(fItem.item, LtopB_new);
+      moved = true;
+    });
+    if (!moved) return { ok: false };
+    App.select([topB.id]);
+    UI.toast(T('toast.alignFacesDone', { b: Model.label(topB), a: Model.label(topA) }), { icon: 'check' });
+    return { ok: true, idA: topA.id, idB: topB.id };
+  }
+  function updateAlignBar() {
+    if (!alignSt || !alignSt.bar) return;
+    const stepEl = alignSt.bar.querySelector('#af-step');
+    if (stepEl) stepEl.textContent = alignSt.faceA ? T('place.align.step2') : T('place.align.step1');
+    UI.hint(alignSt.faceA ? T('hint.alignFaces2') : T('hint.alignFaces1'));
+  }
+  function stopAlignFaces(silent) {
+    if (!alignSt) return;
+    const cv = Viewer.canvas;
+    cv.removeEventListener('pointerdown', alignSt.onDown, true);
+    cv.removeEventListener('pointermove', alignSt.onMove);
+    window.removeEventListener('pointerup', alignSt.onUp);
+    window.removeEventListener('keydown', alignSt.onKey, true);
+    if (alignSt.bar) alignSt.bar.remove();
+    Viewer.highlightFace('hover', null, null);
+    Viewer.highlightFace('sel', null, null);
+    cv.style.cursor = '';
+    UI.hint(null);
+    alignSt = null;
+    Viewer.requestRender();
+    if (!silent) Panels.renderCtx();
+  }
+  function startAlignFaces(firstFace = null, opts = {}) {
+    if (!firstFace && App.faces && App.faces.length === 2) {
+      const top0 = Model.topOf(App.doc, App.faces[0].id);
+      const top1 = Model.topOf(App.doc, App.faces[1].id);
+      if (top0 && top1 && top0.id !== top1.id) {
+        alignFaces(App.faces[0], App.faces[1], opts);
+        return true;
+      }
+    }
+    const solidsCount = App.doc.items.filter((x) => !x.hidden && !x.suppressed && x.role !== 'hole' && !x.op).length;
+    if (solidsCount < 2) {
+      UI.toast('Für „Ausrichten über Flächen“ braucht es mindestens zwei Körper.', { icon: 'info' });
+      return false;
+    }
+    let initFace = alignFaceInfo(firstFace);
+    if (!initFace) {
+      const sf = Actions.selectedFace();
+      const sfInfo = alignFaceInfo(sf);
+      if (sfInfo && (sfInfo.info.t === 'PLANE' || sfInfo.info.t === 'CYLINDRE')) initFace = sfInfo;
+    }
+    stopHoles(true);
+    stopAlignFaces(true);
+    Views.collapse();
+
+    const bar = h('div', { class: 'viewbar', id: 'align-faces-bar', role: 'toolbar', 'aria-label': T('ctx.alignFaces') });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, T('ctx.alignFaces')));
+    const closeBtn = h('button', { type: 'button', class: 'vb-x', id: 'af-close', 'aria-label': T('common.cancel'), 'data-tip': T('common.cancel') });
+    closeBtn.innerHTML = icon('close');
+    closeBtn.onclick = () => stopAlignFaces();
+    head.append(closeBtn);
+
+    const modeSel = h('select', { id: 'af-mode', class: 'vb-sel', 'aria-label': T('place.align.mode') },
+      h('option', { value: 'mate' }, T('place.align.modeMate')),
+      h('option', { value: 'flush' }, T('place.align.modeFlush')));
+    modeSel.value = opts.mode === 'flush' ? 'flush' : 'mate';
+    const offIn = h('input', { type: 'number', id: 'af-offset', class: 'vb-sel', value: String(Number(opts.offset) || 0), step: '1', style: { width: '64px' }, 'aria-label': T('place.align.offset') });
+    const ctrIn = h('input', { type: 'checkbox', id: 'af-center', checked: opts.center !== false });
+    const ctrLbl = h('label', { class: 'check', style: { margin: '0' } }, ctrIn, T('place.align.center'));
+
+    bar.append(
+      head,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'af-step' }, '')),
+      h('div', { class: 'vb-row' },
+        h('span', { class: 'vb-l' }, T('place.align.mode')), modeSel,
+        h('span', { class: 'vb-l' }, T('place.align.offset')), offIn, h('span', { class: 'vb-hint' }, 'mm'),
+        ctrLbl)
+    );
+    Views.bars().append(bar);
+
+    const cv = Viewer.canvas;
+    const isValidHit = (hit) => {
+      if (!hit || hit.faceIdx == null || hit.faceIdx < 0) return null;
+      const top = Model.topOf(App.doc, hit.id);
+      if (!top || top.role === 'hole') return null;
+      const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+      if (!fi || (fi.t !== 'PLANE' && fi.t !== 'CYLINDRE')) return null;
+      return { id: hit.id, idx: hit.faceIdx, info: fi, top };
+    };
+
+    const stObj = { faceA: initFace, bar, down: null, onDown: null, onUp: null, onMove: null, onKey: null };
+    stObj.onDown = (e) => { if (e.button === 0) stObj.down = { x: e.clientX, y: e.clientY }; };
+    stObj.onMove = (e) => {
+      const vh = isValidHit(Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true }));
+      Viewer.highlightFace('hover', vh ? vh.id : null, vh ? vh.idx : null);
+    };
+    stObj.onUp = (e) => {
+      if (!alignSt || e.button !== 0 || !alignSt.down) return;
+      const moved = Math.hypot(e.clientX - alignSt.down.x, e.clientY - alignSt.down.y) > 5;
+      alignSt.down = null;
+      if (moved) return;
+      const vh = isValidHit(Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true }));
+      if (!vh) { UI.toast(T('toast.alignFacesNeedPlane'), { icon: 'info' }); return; }
+      if (!alignSt.faceA) {
+        alignSt.faceA = { id: vh.id, idx: vh.idx, info: vh.info };
+        Viewer.highlightFace('sel', vh.id, vh.idx);
+        updateAlignBar();
+        return;
+      }
+      const topA = Model.topOf(App.doc, alignSt.faceA.id);
+      if (topA && vh.top.id === topA.id) {
+        UI.toast(T('toast.alignFacesSameBody'), { icon: 'info' });
+        return;
+      }
+      if (alignSt.faceA.info.t !== vh.info.t) {
+        UI.toast(T('toast.alignFacesNeedPlane'), { icon: 'info' });
+        return;
+      }
+      const res = alignFaces(alignSt.faceA, { id: vh.id, idx: vh.idx, info: vh.info }, {
+        mode: modeSel.value === 'flush' ? 'flush' : 'mate',
+        offset: parseFloat(String(offIn.value).replace(',', '.')) || 0,
+        center: !!ctrIn.checked,
+      });
+      if (res && res.ok) stopAlignFaces(true);
+    };
+    stObj.onKey = (e) => {
+      if (!alignSt) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopAlignFaces(); }
+    };
+
+    alignSt = stObj;
+    if (initFace) Viewer.highlightFace('sel', initFace.id, initFace.idx);
+    cv.style.cursor = 'crosshair';
+    cv.addEventListener('pointerdown', stObj.onDown, true);
+    cv.addEventListener('pointermove', stObj.onMove);
+    window.addEventListener('pointerup', stObj.onUp);
+    window.addEventListener('keydown', stObj.onKey, true);
+    updateAlignBar();
+    return true;
+  }
+  if (typeof App !== 'undefined' && App.on) {
+    App.on('docLoaded', () => stopAlignFaces(true));
+    App.on('mode', () => stopAlignFaces(true));
+  }
+
+  return { bindTile, holeHere, holesAtPoints, holeWizard: (anchor) => holeHere(Actions.selectedFace(), anchor), stopHoles, cancel, alignFaces, startAlignFaces, stopAlignFaces, get aligning() { return !!alignSt; }, get active() { return !!st || !!hw || !!alignSt; }, get holes() { return !!hw; } };
 })();
 

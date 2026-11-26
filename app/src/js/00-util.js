@@ -710,6 +710,8 @@ const IC = {
   moveEdge: '<path d="M4 17l5-10h11l-5 10z" fill="currentColor" opacity=".15"/><path d="M4 17l5-10h11M4 17h11l5-10" opacity=".5"/><path d="M9 7h11" stroke-width="2.2"/><path d="M12 4.5 9 7l3 2.5" />',
   editHole: '<circle cx="12" cy="12" r="4" stroke-dasharray="2.2 1.6" opacity=".55"/><circle cx="12" cy="12" r="7.5" fill="currentColor" opacity=".14"/><circle cx="12" cy="12" r="7.5"/><path d="M5.5 12h13M8 9.8 5.5 12 8 14.2M16 9.8 18.5 12 16 14.2" />',
   editFillet: '<path d="M5 19V9a6 6 0 0 1 6-6h8" stroke-dasharray="2.2 1.8" opacity=".45"/><path d="M5 19v-4a10 10 0 0 1 10-10h4"/><path d="M14.5 14.5 9 9M9 12.5V9h3.5" />',
+  simplify: '<rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="currentColor" opacity=".14"/><path d="M3.5 9.5a5 5 0 0 1 5-5H19a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z" opacity=".45" stroke-dasharray="2.2 1.6"/><path d="M3.5 4.5h17v15h-17z"/><circle cx="14.5" cy="12" r="2.6" stroke-dasharray="1.8 1.4" opacity=".6"/><path d="M12.7 10.2l3.6 3.6M16.3 10.2l-3.6 3.6" />',
+  alignFaces: '<rect x="3" y="5" width="7" height="14" rx="1.2" fill="currentColor" opacity=".18"/><rect x="3" y="5" width="7" height="14" rx="1.2"/><rect x="14" y="5" width="7" height="14" rx="1.2" fill="currentColor" opacity=".28"/><rect x="14" y="5" width="7" height="14" rx="1.2"/><path d="M10 5v14M14 5v14" stroke-width="2.1"/><path d="M13 12h-2.5M12 10.2 10.2 12l1.8 1.8" />',
   helix: '<path d="M6 6.5c0-1.9 2.7-3 6-3s6 1.1 6 3-2.7 3-6 3-6 1.1-6 3 2.7 3 6 3 6 1.1 6 3-2.7 3-6 3-6-1.1-6-3" /><path d="M6 6.5c0 1.4 1.6 2.3 4 2.8 M18 12.5c0 1.4-1.6 2.3-4 2.8" opacity=".45"/>',
   stretch: '<path d="M3 7h11v10H3z" opacity=".45"/><path d="M10 4h8v16h-8z" stroke-dasharray="2.5 2"/><path d="M14 12h7M18 9l3 3-3 3"/>',
   patternFill: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="16" r="1.4" fill="currentColor" stroke="none"/>',
@@ -766,6 +768,13 @@ const IC = {
   pipeFlange: '<circle cx="12" cy="12" r="9" fill="currentColor" opacity=".16"/><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6"/><circle cx="12" cy="5.8" r="1.1"/><circle cx="12" cy="18.2" r="1.1"/><circle cx="5.8" cy="12" r="1.1"/><circle cx="18.2" cy="12" r="1.1"/>',
   stdBelt: '<rect x="3" y="7" width="18" height="10" rx="5" fill="currentColor" opacity=".14"/><rect x="3" y="7" width="18" height="10" rx="5"/><rect x="6" y="9.6" width="12" height="4.8" rx="2.4" stroke-dasharray="2 1.4"/>',
   stdChain: '<rect x="3" y="9" width="7.5" height="6" rx="3" fill="currentColor" opacity=".18"/><rect x="3" y="9" width="7.5" height="6" rx="3"/><rect x="13.5" y="9" width="7.5" height="6" rx="3" fill="currentColor" opacity=".18"/><rect x="13.5" y="9" width="7.5" height="6" rx="3"/><path d="M8.5 12h7" stroke-width="2.2"/><circle cx="6.2" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="17.8" cy="12" r="1" fill="currentColor" stroke="none"/>',
+  profileSquare: '<path fill-rule="evenodd" d="M4 4h16v16H4zm4 4v8h8V8z" fill="currentColor" opacity=".18" stroke="none"/><rect x="4" y="4" width="16" height="16" rx="1"/><rect x="8" y="8" width="8" height="8" rx=".4"/>',
+  profileRound: '<path fill-rule="evenodd" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 4.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9z" fill="currentColor" opacity=".18" stroke="none"/><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/>',
+  profileL: '<path d="M5 4h5v11h10v5H5z" fill="currentColor" opacity=".18"/><path d="M5 4h5v11h10v5H5z"/>',
+  profileU: '<path d="M5 4h14v4.5H9.5v7H19V20H5z" fill="currentColor" opacity=".18"/><path d="M5 4h14v4.5H9.5v7H19V20H5z"/>',
+  profileT: '<path d="M4 4h16v4.5h-5.75V20h-4.5V8.5H4z" fill="currentColor" opacity=".18"/><path d="M4 4h16v4.5h-5.75V20h-4.5V8.5H4z"/>',
+  profileI: '<path d="M5 4h14v4h-5v8h5v4H5v-4h5V8H5z" fill="currentColor" opacity=".18"/><path d="M5 4h14v4h-5v8h5v4H5v-4h5V8H5z"/>',
+  profileFlat: '<rect x="3" y="9" width="18" height="6" rx=".8" fill="currentColor" opacity=".18"/><rect x="3" y="9" width="18" height="6" rx=".8"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2997,6 +3006,21 @@ const HELP = {
   "tip": "Rundungs-Radius direkt ändern – auch an importierten STEP-Teilen (Profi)",
   "hilfe": "Klick im Profi-Modus auf eine abgerundete Kantenfläche (auch an importierten STEP-/BREP-Teilen) und gib den neuen Radius ein. Tracery stellt die ursprüngliche scharfe Kante vorübergehend her und rundet sie mit dem neuen Radius neu ab.",
   "tipp": "Mit eingeschaltetem „Zusammenhängende Kanten einbeziehen“ ändern sich alle gleich großen, anschließenden Rundungen in einem Zug mit."
+ },
+ "simplify": {
+  "tip": "Kleine Rundungen, Fasen und Löcher bis zu einer Größe automatisch entfernen (Profi)",
+  "hilfe": "Erkennt im Profi-Modus kleine Rundungen, Fasen und Löcher unterhalb der gewählten Größe an einem Körper (auch an importierten STEP-/BREP-Teilen) und entfernt sie in einem einzigen Verlaufsschritt. Jede Detail-Art lässt sich rechts einzeln ein- oder ausschalten.",
+  "tipp": "Perfekt zum schnellen Aufräumen vor einer Prüfung oder für einen sauberen 3D-Druck ohne winzige Fasen; zum Zurückholen einfach den Schritt unterdrücken."
+ },
+ "alignFaces": {
+  "tip": "Zwei Flächen anklicken – der zweite Körper legt sich bündig an den ersten an (Profi)",
+  "hilfe": "Richtet im Profi-Modus einen Körper über zwei gewählte ebene oder zylindrische Flächen direkt am ersten Körper aus – ohne dauerhafte Gelenk-Verbindung. Wähle oben in der Leiste zwischen „Gegenüber (berührend)“ und „Bündig (gleiche Seite)“ sowie optional einen Abstand.",
+  "tipp": "Ideal zum schnellen Stapeln oder Bündigsetzen beim Modellieren; willst du, dass beide Körper später zusammenbleiben, nutze stattdessen eine feste Verbindung."
+ },
+ "profile": {
+  "tip": "Norm-Profil (Vierkantrohr, Rundrohr, L-, U-, T-, I-Profil oder Flachstahl) in wählbarer Länge",
+  "hilfe": "Erzeugt ein Konstruktionsprofil mit genormtem Querschnitt (Vierkantrohr, Rundrohr, L-Profil, U-Profil, T-Profil, I-Träger oder Flachstahl) und beliebiger Länge. Im Eigenschaften-Panel kannst du jederzeit zwischen allen Profilarten, den passenden Normgrößen oder eigenen Maßen wechseln.",
+  "tipp": "Wähle „Eigene Maße“ bei Normgröße (oder gib direkt Breite, Höhe oder Wandstärke ein), um Sonderprofile außerhalb der Standardtabelle zu erzeugen."
  }
 };
 

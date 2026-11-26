@@ -49,6 +49,7 @@ const KINDS = {
   moveEdge: { get label() { return T('kind.moveEdge'); }, params: [] },
   editHole: { get label() { return T('kind.editHole'); }, params: [] },
   editFillet: { get label() { return T('kind.editFillet'); }, params: [] },
+  simplify: { get label() { return T('kind.simplify'); }, params: [] },
   mirrorStep: { get label() { return T('kind.mirrorStep'); }, params: [] },
   deleteBody: { get label() { return T('kind.deleteBody'); }, params: [] },
   boss: { get label() { return T('kind.boss'); }, params: [] },
@@ -594,6 +595,7 @@ const Model = (() => {
       if (it.kind === 'moveEdge' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'verschiebt Kante an' });
       if (it.kind === 'editHole' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'ändert Loch an' });
       if (it.kind === 'editFillet' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'ändert Rundung an' });
+      if (it.kind === 'simplify' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'vereinfacht' });
       if (it.kind === 'boss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Schraubdom auf' });
       if (it.kind === 'undercut' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Freistich an' });
       if (it.kind === 'circlipGroove' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Einstich an' });
@@ -886,6 +888,15 @@ const Model = (() => {
           faces: Array.isArray(p.faces) ? p.faces.filter((fc) => fc && Array.isArray(fc.c)) : [],
           r: num(p.r, ownV, num(p.origR, ownV, 2)),
           chain: p.chain !== false,
+        };
+      } else if (it.kind === 'simplify') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          maxSize: Math.max(0.01, num(p.maxSize, ownV, 3)),
+          fillets: p.fillets !== false,
+          chamfers: p.chamfers !== false,
+          holes: p.holes !== false,
         };
       }
       else if (it.kind === 'sketch3d') o.p = { sketch3d: sketch3dResolve(it.p && it.p.sketch3d, ownV) };
@@ -1212,6 +1223,8 @@ const Model = (() => {
             o.p.spec = beltMetrics(o.p);
           } else if (o.p.lib === 'stdChain' && typeof chainMetrics === 'function') {
             o.p.spec = chainMetrics(o.p);
+          } else if (o.p.lib === 'profile' && typeof profileMetrics === 'function') {
+            o.p.spec = profileMetrics(o.p);
           }
         }
       }
@@ -2856,6 +2869,7 @@ const Model = (() => {
         if (L === 'pipeFlange') { const m = typeof pipeFlangeMetrics === 'function' ? pipeFlangeMetrics(p) : { flangeD: 115, totalH: 16 }; const r = m.flangeD / 2; return [-r, -r, 0, r, r, m.totalH]; }
         if (L === 'stdBelt') { const m = typeof beltMetrics === 'function' ? beltMetrics(p) : { shape: 'loop', outerX: 60, outerY: 28, outerZ: 6 }; return m.shape === 'open' ? [-m.outerX / 2, -m.toothH, 0, m.outerX / 2, m.backT, m.outerZ] : [-m.outerX / 2, -m.outerY / 2, 0, m.outerX / 2, m.outerY / 2, m.outerZ]; }
         if (L === 'stdChain') { const m = typeof chainMetrics === 'function' ? chainMetrics(p) : { outerX: 164.2, outerY: 11.8, totalW: 16.6 }; return [-m.outerX / 2, -m.outerY / 2, 0, m.outerX / 2, m.outerY / 2, m.totalW]; }
+        if (L === 'profile') { const m = typeof profileMetrics === 'function' ? profileMetrics(p) : { w: 30, h: 30, length: 500 }; return [-m.w / 2, -m.h / 2, 0, m.w / 2, m.h / 2, m.length]; }
         if (L === 'buyAntenna') { const r = Math.max(4, p.form === 'stab' ? n('d', 3) : n('kd', 14)) / 2; return [-r, -r, 0, r, r, n('L', 45)]; }
         if (L === 'buyStack') { const s = n('a', 30.5) + 5.5; return [-s / 2, -s / 2, 0, s / 2, s / 2, n('h', 12)]; }
         if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }
@@ -3097,6 +3111,14 @@ const Model = (() => {
       case 'editFillet': {
         const ep = it.p || {};
         return `R ${f(ep.r ?? ep.origR ?? 2)}${u}`;
+      }
+      case 'simplify': {
+        const sp = it.p || {};
+        const cats = [];
+        if (sp.fillets !== false) cats.push('R');
+        if (sp.chamfers !== false) cats.push('F');
+        if (sp.holes !== false) cats.push('L');
+        return `bis ${f(sp.maxSize ?? 3)}${u}${cats.length ? ' · ' + cats.join('/') : ''}`;
       }
       case 'boss': {
         const ribs = Math.max(0, Math.min(6, Math.round(p.ribs ?? 4)));
@@ -3635,7 +3657,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'directFace' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'fillPattern' || s.item.kind === 'mountPattern' || s.item.kind === 'portCutout' || s.item.kind === 'magnetPocket' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteFace' || s.item.kind === 'replaceFace' || s.item.kind === 'moveEdge' || s.item.kind === 'editHole' || s.item.kind === 'editFillet' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || s.item.kind === 'knurl' || s.item.kind === 'gripPattern' || s.item.kind === 'stackHole' || s.item.kind === 'asmCut' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'directFace' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'fillPattern' || s.item.kind === 'mountPattern' || s.item.kind === 'portCutout' || s.item.kind === 'magnetPocket' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteFace' || s.item.kind === 'replaceFace' || s.item.kind === 'moveEdge' || s.item.kind === 'editHole' || s.item.kind === 'editFillet' || s.item.kind === 'simplify' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || s.item.kind === 'knurl' || s.item.kind === 'gripPattern' || s.item.kind === 'stackHole' || s.item.kind === 'asmCut' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {
