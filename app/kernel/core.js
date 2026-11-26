@@ -10445,7 +10445,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'directFace' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'simplify' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'directFace' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'deleteFace' || it.kind === 'replaceFace' || it.kind === 'moveEdge' || it.kind === 'editHole' || it.kind === 'editFillet' || it.kind === 'simplify' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -11035,6 +11035,51 @@ export function createKernel(R, oc) {
   const QUALITY = { coarse: { f: 2.2, ang: 0.35 }, normal: { f: 1, ang: 0.2 }, fine: { f: 0.35, ang: 0.1 }, ultra: { f: 0.12, ang: 0.05 } };
   let Q = { level: 'normal', ...QUALITY.normal };
   function setQuality(level) { if (QUALITY[level] && level !== Q.level) Q = { level, ...QUALITY[level] }; }
+  function torusGeomFromFace(face) {
+    const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+    const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const crs3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const len3 = (a) => Math.hypot(a[0], a[1], a[2]);
+    const pt = (u, v) => { const p = face.pointOnSurface(u, v); return [p.x, p.y, p.z]; };
+    const nAt = (p) => { const v = face.normalAt(p); const l = Math.hypot(v.x, v.y, v.z) || 1; return [v.x / l, v.y / l, v.z / l]; };
+    const fitCirc = (A, B, C) => {
+      const a = sub3(B, A), b = sub3(C, A), n = crs3(a, b), n2 = dot3(n, n);
+      if (n2 < 1e-12) return null;
+      const a2 = dot3(a, a), b2 = dot3(b, b), bn = crs3(b, n), na = crs3(n, a);
+      const x = [0, 1, 2].map((k) => (a2 * bn[k] + b2 * na[k]) / (2 * n2));
+      const nl = Math.sqrt(n2);
+      return { c: add3(A, x), r: Math.hypot(x[0], x[1], x[2]), n: [n[0] / nl, n[1] / nl, n[2] / nl] };
+    };
+    let best = null;
+    for (const swap of [false, true]) {
+      const circles = [];
+      let score = 0, ok = true;
+      for (const t of [0.2, 0.5, 0.8]) {
+        try {
+          const A = swap ? pt(0.15, t) : pt(t, 0.15);
+          const B = swap ? pt(0.5, t) : pt(t, 0.5);
+          const C = swap ? pt(0.85, t) : pt(t, 0.85);
+          const fc = fitCirc(A, B, C);
+          if (!fc || !(fc.r > 1e-5)) { ok = false; break; }
+          const nB = nAt(B);
+          const rB = sub3(B, fc.c);
+          const rL = len3(rB) || 1;
+          const align = Math.abs(dot3(nB, [rB[0] / rL, rB[1] / rL, rB[2] / rL]));
+          const nA = nAt(A), rA = sub3(A, fc.c), rAL = len3(rA) || 1;
+          const alignA = Math.abs(dot3(nA, [rA[0] / rAL, rA[1] / rAL, rA[2] / rAL]));
+          score += align + alignA;
+          circles.push({ ...fc, concave: dot3(nB, rB) < 0 });
+        } catch (_) { ok = false; break; }
+      }
+      if (ok && circles.length === 3 && (!best || score > best.score)) best = { score, circles };
+    }
+    if (!best || best.score < 5.8) return null;
+    const minorR = (best.circles[0].r + best.circles[1].r + best.circles[2].r) / 3;
+    const maj = fitCirc(best.circles[0].c, best.circles[1].c, best.circles[2].c);
+    if (!maj) return null;
+    return { origin: maj.c, dir: maj.n, r: minorR, majorR: maj.r, concave: best.circles[1].concave };
+  }
   function meshTol(b) {
     const diag = Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
     return Math.min(0.2, Math.max(0.01, diag * 0.0006)) * Q.f;
@@ -11049,7 +11094,22 @@ export function createKernel(R, oc) {
       } else if (type === 'CYLINDRE') {
         const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
         const cy = ad.Cylinder(); const ax = cy.Axis(); const l = ax.Location(), d = ax.Direction();
-        info.axis = [l.X(), l.Y(), l.Z(), d.X(), d.Y(), d.Z()]; info.r = cy.Radius();
+        const o = [l.X(), l.Y(), l.Z()], dir = [d.X(), d.Y(), d.Z()];
+        info.axis = [...o, ...dir]; info.r = cy.Radius();
+        try {
+          const uv = oc.BRepTools.UVBounds(face.wrapped);
+          info.uSpan = Math.round(Math.abs(uv.UMax - uv.UMin) * 1e4) / 1e4;
+        } catch (_) {}
+        try {
+          const pt = face.pointOnSurface(0.5, 0.5), nv = face.normalAt();
+          const dx = pt.x - o[0], dy = pt.y - o[1], dz = pt.z - o[2];
+          const dl = Math.hypot(dir[0], dir[1], dir[2]) || 1;
+          const ux = dir[0] / dl, uy = dir[1] / dl, uz = dir[2] / dl;
+          const prj = dx * ux + dy * uy + dz * uz;
+          const rx = dx - prj * ux, ry = dy - prj * uy, rz = dz - prj * uz;
+          info.concave = (rx * nv.x + ry * nv.y + rz * nv.z) < 0;
+        } catch (_) {}
+        try { l.delete(); d.delete(); ax.delete(); cy.delete(); } catch (_) {}
         ad.delete();
       } else if (type === 'CONE') {
         const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -11090,12 +11150,22 @@ export function createKernel(R, oc) {
           }
         }
       } else if (type === 'TORUS') {
-        const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
-        const to = ad.Torus(); const ax = to.Axis(); const l = ax.Location(), d = ax.Direction();
-        info.axis = [l.X(), l.Y(), l.Z(), d.X(), d.Y(), d.Z()];
-        try { info.r = to.MinorRadius(); } catch (_) {}
-        try { info.majorR = to.MajorRadius(); } catch (_) {}
-        ad.delete();
+        try {
+          const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
+          const to = ad.Torus(); const ax = to.Axis(); const l = ax.Location(), d = ax.Direction();
+          info.axis = [l.X(), l.Y(), l.Z(), d.X(), d.Y(), d.Z()];
+          try { info.r = to.MinorRadius(); } catch (_) {}
+          try { info.majorR = to.MajorRadius(); } catch (_) {}
+          ad.delete();
+        } catch (_) {}
+        if (!(info.r > 0)) {
+          const tg = torusGeomFromFace(face);
+          if (tg) {
+            info.axis = [...tg.origin, ...tg.dir];
+            info.r = tg.r;
+            info.majorR = tg.majorR;
+          }
+        }
       } else if (type === 'SPHERE') {
         const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
         const sp = ad.Sphere(); const l = sp.Location();
@@ -15074,6 +15144,619 @@ export function createKernel(R, oc) {
     return comp;
   }
 
+  // ---------- Direkt bearbeiten: Loch-Durchmesser & Rundungs-Radius ändern (DB-05, DB-06) ----------
+  function cylFaceGeom(fObj) {
+    let ad = null, cy = null, ax = null, l = null, d = null;
+    try {
+      ad = new oc.BRepAdaptor_Surface(fObj.wrapped, false);
+      cy = ad.Cylinder();
+      ax = cy.Axis();
+      l = ax.Location();
+      d = ax.Direction();
+      const origin = [l.X(), l.Y(), l.Z()];
+      const dir = norm([d.X(), d.Y(), d.Z()]);
+      const r = cy.Radius();
+      let uSpan = Math.PI * 2, vMin = 0, vMax = 0;
+      try {
+        const uv = oc.BRepTools.UVBounds(fObj.wrapped);
+        uSpan = Math.abs(uv.UMax - uv.UMin);
+        vMin = uv.VMin; vMax = uv.VMax;
+      } catch (_) {}
+      let concave = false;
+      try {
+        const pt = fObj.pointOnSurface(0.5, 0.5), nv = fObj.normalAt();
+        const rel = sub([pt.x, pt.y, pt.z], origin);
+        const rad = sub(rel, mul(dir, dot(rel, dir)));
+        concave = dot(rad, [nv.x, nv.y, nv.z]) < 0;
+      } catch (_) {}
+      return { origin, dir, r, uSpan, vMin, vMax, concave };
+    } finally {
+      try { if (l && l.delete) l.delete(); } catch (_) {}
+      try { if (d && d.delete) d.delete(); } catch (_) {}
+      try { if (ax && ax.delete) ax.delete(); } catch (_) {}
+      try { if (cy && cy.delete) cy.delete(); } catch (_) {}
+      try { if (ad && ad.delete) ad.delete(); } catch (_) {}
+    }
+  }
+  function axisLineDist(o1, d1, o2) {
+    const diff = sub(o2, o1);
+    const perp = sub(diff, mul(d1, dot(diff, d1)));
+    return len(perp);
+  }
+  function buildSolidFaceAdjacency(fObjs) {
+    const allFaces = fObjs.map((f) => oc.TopoDS.Face(f.wrapped));
+    const nF = allFaces.length;
+    const edgesList = [];
+    const faceEdges = Array.from({ length: nF }, () => []);
+    for (let i = 0; i < nF; i++) {
+      for (const ew of collectEdges(allFaces[i])) {
+        if (oc.BRep_Tool.Degenerated(ew)) continue;
+        let ei = -1;
+        for (let k = 0; k < edgesList.length; k++) {
+          if (edgesList[k].e.IsSame(ew)) { ei = k; break; }
+        }
+        if (ei < 0) { ei = edgesList.length; edgesList.push({ e: ew, faces: new Set() }); }
+        edgesList[ei].faces.add(i);
+        faceEdges[i].push(ei);
+      }
+    }
+    return { allFaces, nF, edgesList, faceEdges };
+  }
+  function resolveCylFaceMatch(shape, spec, topo, tid) {
+    const { fArr, indices } = resolveDeleteFaceMatch(shape, [spec], topo, tid);
+    if (indices.size) return { fArr, idx: [...indices][0] };
+    if (spec && Array.isArray(spec.axis) && spec.axis.length >= 6 && spec.r > 0) {
+      const sO = spec.axis.slice(0, 3), sD = norm(spec.axis.slice(3, 6));
+      const b = bboxOf(shape);
+      const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+      let bestIdx = -1, bestScore = Infinity;
+      for (let i = 0; i < fArr.length; i++) {
+        const f = fArr[i];
+        if (f.geomType !== 'CYLINDRE') continue;
+        const g = cylFaceGeom(f);
+        if (Math.abs(dot(g.dir, sD)) < 0.995) continue;
+        if (axisLineDist(sO, sD, g.origin) > tol) continue;
+        if (Math.abs(g.r - spec.r) > Math.max(tol, spec.r * 0.35)) continue;
+        const dc = Array.isArray(spec.c) ? len(sub(vec(f.center), spec.c)) : 0;
+        if (dc < bestScore) { bestScore = dc; bestIdx = i; }
+      }
+      if (bestIdx >= 0) return { fArr, idx: bestIdx };
+    }
+    return { fArr, idx: -1 };
+  }
+  function collectCoaxialHoleFaces(fObjs, adj, seedIdx) {
+    const g0 = cylFaceGeom(fObjs[seedIdx]);
+    const set = new Set([seedIdx]);
+    const q = [seedIdx];
+    while (q.length) {
+      const u = q.pop();
+      for (const ei of adj.faceEdges[u]) {
+        for (const v of adj.edgesList[ei].faces) {
+          if (set.has(v) || fObjs[v].geomType !== 'CYLINDRE') continue;
+          const gv = cylFaceGeom(fObjs[v]);
+          if (!gv.concave) continue;
+          if (Math.abs(dot(g0.dir, gv.dir)) > 0.999 && axisLineDist(g0.origin, g0.dir, gv.origin) < 1e-3 && Math.abs(gv.r - g0.r) < 1e-3) {
+            set.add(v);
+            q.push(v);
+          }
+        }
+      }
+    }
+    return { set, geom: g0 };
+  }
+  function makeCylinderAlong(axO, axD, u0, u1, r) {
+    const h = u1 - u0;
+    if (!(h > 1e-4 && r > 1e-4)) throw new Error('Loch ändern: Ungültige Zylindermaße.');
+    const p0 = add(axO, mul(axD, u0));
+    let ax2 = null, mk = null;
+    try {
+      ax2 = new oc.gp_Ax2(R.asPnt(p0), R.asDir(axD));
+      mk = new oc.BRepPrimAPI_MakeCylinder(ax2, r, h);
+      return R.cast(mk.Shape());
+    } finally {
+      if (mk && mk.delete) try { mk.delete(); } catch (_) {}
+      if (ax2 && ax2.delete) try { ax2.delete(); } catch (_) {}
+    }
+  }
+  function edgeMidpoint(ew) {
+    let ad = null, gp = null;
+    try {
+      ad = new oc.BRepAdaptor_Curve(ew);
+      const t = (ad.FirstParameter() + ad.LastParameter()) * 0.5;
+      gp = ad.Value(t);
+      return [gp.X(), gp.Y(), gp.Z()];
+    } finally {
+      if (gp && gp.delete) try { gp.delete(); } catch (_) {}
+      if (ad && ad.delete) try { ad.delete(); } catch (_) {}
+    }
+  }
+  function faceNormalAtPoint(fObj, pt) {
+    try {
+      const v = pt ? fObj.normalAt(pt) : fObj.normalAt();
+      return norm([v.x, v.y, v.z]);
+    } catch (_) {
+      try {
+        const v = fObj.normalAt();
+        return norm([v.x, v.y, v.z]);
+      } catch (__) { return null; }
+    }
+  }
+  function editHoleOnSolid(solidShape, seedIdx, newD) {
+    if (!(newD >= 0.1 && isFinite(newD))) throw new Error('Loch ändern: Der Durchmesser muss mindestens 0,1 mm sein.');
+    const newR = newD * 0.5;
+    const fObjs = solidShape.faces;
+    if (seedIdx < 0 || seedIdx >= fObjs.length || fObjs[seedIdx].geomType !== 'CYLINDRE') {
+      throw new Error('Loch ändern: Wähle bitte die zylindrische Innenfläche eines Lochs.');
+    }
+    const g0 = cylFaceGeom(fObjs[seedIdx]);
+    if (!g0.concave) {
+      throw new Error('Loch ändern: Die gewählte Zylinderfläche zeigt nach außen. Nutze dafür „Fläche versetzen“.');
+    }
+    if (Math.abs(newR - g0.r) < 1e-5) return solidShape.clone();
+
+    const adj = buildSolidFaceAdjacency(fObjs);
+    const { set: holeSet } = collectCoaxialHoleFaces(fObjs, adj, seedIdx);
+
+    let totalU = 0;
+    for (const hi of holeSet) totalU += cylFaceGeom(fObjs[hi]).uSpan;
+    if (totalU < Math.PI * 1.05) {
+      let tanCount = 0;
+      for (const hi of holeSet) {
+        for (const ei of adj.faceEdges[hi]) {
+          for (const v of adj.edgesList[ei].faces) {
+            if (holeSet.has(v)) continue;
+            const mp = edgeMidpoint(adj.edgesList[ei].e);
+            const nH = faceNormalAtPoint(fObjs[hi], mp);
+            const nV = faceNormalAtPoint(fObjs[v], mp);
+            if (nH && nV && dot(nH, nV) > 0.85) tanCount++;
+          }
+        }
+      }
+      if (tanCount >= 2) {
+        throw new Error('Loch ändern: Diese Fläche ist eine Innenrundung – nutze dafür „Rundung ändern“.');
+      }
+    }
+
+    let uMin = Infinity, uMax = -Infinity;
+    for (const hi of holeSet) {
+      for (const pt of collectFaceVertices(adj.allFaces[hi])) {
+        const u = dot(sub(pt, g0.origin), g0.dir);
+        if (u < uMin) uMin = u;
+        if (u > uMax) uMax = u;
+      }
+    }
+    if (!isFinite(uMin) || !isFinite(uMax) || uMax - uMin < 1e-4) {
+      throw new Error('Loch ändern: Die Tiefe des Lochs konnte nicht bestimmt werden.');
+    }
+
+    // Prüfen, ob Durchgangs- oder Sackloch über Zusammenhang der Restflächen
+    const kept = [];
+    for (let i = 0; i < adj.nF; i++) if (!holeSet.has(i)) kept.push(i);
+    const visited = new Set(), comps = [];
+    for (const start of kept) {
+      if (visited.has(start)) continue;
+      const comp = [], q = [start];
+      visited.add(start);
+      let area = 0;
+      while (q.length) {
+        const u = q.pop();
+        comp.push(u);
+        area += deleteFaceArea(adj.allFaces[u]);
+        for (const ei of adj.faceEdges[u]) {
+          for (const v of adj.edgesList[ei].faces) {
+            if (!holeSet.has(v) && !visited.has(v)) { visited.add(v); q.push(v); }
+          }
+        }
+      }
+      comps.push({ comp, area });
+    }
+    comps.sort((a, b) => b.area - a.area);
+
+    const eps = Math.min(0.5, Math.max(0.15, (uMax - uMin) * 0.05));
+    let uStart = uMin - eps, uEnd = uMax + eps;
+    if (comps.length > 1) {
+      const botFaces = [];
+      for (let ci = 1; ci < comps.length; ci++) botFaces.push(...comps[ci].comp);
+      let uBotSum = 0;
+      for (const bi of botFaces) uBotSum += dot(sub(vec(fObjs[bi].center), g0.origin), g0.dir);
+      const uBot = uBotSum / Math.max(1, botFaces.length);
+      if (Math.abs(uBot - uMin) <= Math.abs(uBot - uMax)) uStart = uMin;
+      else uEnd = uMax;
+    }
+
+    const validateOut = (shape) => {
+      if (!shape || !R.isShape3D(shape)) return false;
+      const vol = R.measureVolume(shape);
+      if (!(vol > 1e-6)) return false;
+      const chk = new oc.BRepCheck_Analyzer(shape.wrapped);
+      const ok = chk.IsValid();
+      chk.delete();
+      return ok;
+    };
+
+    const unifyOut = (shape) => {
+      let usd = null, uRes = null;
+      try {
+        const vol0 = R.measureVolume(shape);
+        usd = new oc.ShapeUpgrade_UnifySameDomain(shape.wrapped, true, true, false);
+        usd.Build();
+        uRes = R.cast(usd.Shape());
+        if (uRes && R.isShape3D(uRes) && Math.abs(R.measureVolume(uRes) - vol0) < Math.max(1e-2, vol0 * 1e-4) && validateOut(uRes)) {
+          const out = uRes; uRes = null;
+          return out;
+        }
+      } catch (_) {} finally {
+        safeDelete(uRes);
+        if (usd) try { usd.delete(); } catch (_) {}
+      }
+      return null;
+    };
+
+    // Primärweg: Loch heilen und mit neuem Durchmesser schneiden
+    let healed = null, tool = null, cutRes = null;
+    try {
+      healed = deleteFacesHealSolid(solidShape, [...holeSet]);
+      tool = makeCylinderAlong(g0.origin, g0.dir, uStart, uEnd, newR);
+      cutRes = healed.cut(tool);
+      if (validateOut(cutRes)) {
+        const uni = unifyOut(cutRes);
+        if (uni) { safeDelete(cutRes); cutRes = null; return uni; }
+        const out = cutRes; cutRes = null;
+        return out;
+      }
+    } catch (_) {
+    } finally {
+      safeDelete(healed); safeDelete(tool); safeDelete(cutRes);
+    }
+
+    // Fallback: direkt aufbohren oder Hülse anfügen
+    let fbTool = null, fbRes = null, sOut = null, sIn = null;
+    try {
+      if (newR > g0.r) {
+        fbTool = makeCylinderAlong(g0.origin, g0.dir, uStart, uEnd, newR);
+        fbRes = solidShape.cut(fbTool);
+      } else {
+        const rOut = g0.r + Math.min(0.05, Math.max(0.01, (g0.r - newR) * 0.1));
+        sOut = makeCylinderAlong(g0.origin, g0.dir, uMin, uMax, rOut);
+        sIn = makeCylinderAlong(g0.origin, g0.dir, uMin - 0.1, uMax + 0.1, newR);
+        fbTool = sOut.cut(sIn);
+        fbRes = solidShape.fuse(fbTool);
+      }
+      if (validateOut(fbRes)) {
+        const uni = unifyOut(fbRes);
+        if (uni) { safeDelete(fbRes); fbRes = null; return uni; }
+        const out = fbRes; fbRes = null;
+        return out;
+      }
+    } catch (_) {
+    } finally {
+      safeDelete(sOut); safeDelete(sIn); safeDelete(fbTool); safeDelete(fbRes);
+    }
+    throw new Error('Loch ändern: Der neue Durchmesser passt an dieser Stelle nicht (Wand zu dünn oder Durchdringung).');
+  }
+  function buildEditHoleOn(baseShape, p, topo = null, tid = null) {
+    if (!p || !p.face || !Array.isArray(p.face.c)) throw new Error('Loch ändern: Es ist kein Loch gewählt.');
+    const newD = num(p.d, 0);
+    const solids = baseShape.solids;
+    if (solids.length <= 1) {
+      const { fArr, idx } = resolveCylFaceMatch(baseShape, p.face, topo, tid);
+      try {
+        if (idx < 0) {
+          const err = new Error('Loch ändern: Die gewählte Bohrung gibt es nicht mehr.');
+          err.code = 'edges';
+          throw err;
+        }
+        return editHoleOnSolid(baseShape, idx, newD);
+      } finally {
+        for (const fx of fArr) safeDelete(fx);
+      }
+    }
+    const outSolids = [];
+    let anyEdited = false;
+    for (const sol of solids) {
+      const { fArr, idx } = resolveCylFaceMatch(sol, p.face, topo, tid);
+      try {
+        if (idx >= 0 && !anyEdited) {
+          anyEdited = true;
+          outSolids.push(editHoleOnSolid(sol, idx, newD));
+        } else {
+          outSolids.push(sol.clone());
+        }
+      } finally {
+        for (const fx of fArr) safeDelete(fx);
+      }
+    }
+    if (!anyEdited) {
+      for (const s of outSolids) safeDelete(s);
+      const err = new Error('Loch ändern: Die gewählte Bohrung gibt es nicht mehr.');
+      err.code = 'edges';
+      throw err;
+    }
+    if (outSolids.length === 1) return outSolids[0];
+    const comp = R.makeCompound(outSolids);
+    for (const s of outSolids) safeDelete(s);
+    return comp;
+  }
+
+  function faceFilletInfo(fObj) {
+    const t = fObj.geomType;
+    if (t === 'CYLINDRE') {
+      const g = cylFaceGeom(fObj);
+      return { ok: g.uSpan < 1.85 * Math.PI, t, r: g.r, concave: g.concave, uSpan: g.uSpan, origin: g.origin, dir: g.dir };
+    }
+    if (t === 'TORUS') {
+      let ad = null, to = null, ax = null, l = null, d = null;
+      try {
+        ad = new oc.BRepAdaptor_Surface(fObj.wrapped, false);
+        to = ad.Torus();
+        ax = to.Axis();
+        l = ax.Location();
+        d = ax.Direction();
+        const origin = [l.X(), l.Y(), l.Z()];
+        const dir = norm([d.X(), d.Y(), d.Z()]);
+        const r = to.MinorRadius();
+        const majorR = to.MajorRadius();
+        let concave = null;
+        try {
+          const pt = fObj.pointOnSurface(0.5, 0.5), nv = fObj.normalAt();
+          const rel = sub([pt.x, pt.y, pt.z], origin);
+          const rad = sub(rel, mul(dir, dot(rel, dir)));
+          if (len(rad) > 1e-6) {
+            const spine = add(origin, mul(norm(rad), majorR));
+            concave = dot(sub([pt.x, pt.y, pt.z], spine), [nv.x, nv.y, nv.z]) < 0;
+          }
+        } catch (_) {}
+        if (r > 1e-5) return { ok: true, t, r, majorR, concave, origin, dir };
+      } catch (_) {
+      } finally {
+        try { if (l && l.delete) l.delete(); } catch (_) {}
+        try { if (d && d.delete) d.delete(); } catch (_) {}
+        try { if (ax && ax.delete) ax.delete(); } catch (_) {}
+        try { if (to && to.delete) to.delete(); } catch (_) {}
+        try { if (ad && ad.delete) ad.delete(); } catch (_) {}
+      }
+      const tg = torusGeomFromFace(fObj);
+      return tg ? { ok: tg.r > 1e-5, t, r: tg.r, majorR: tg.majorR, concave: tg.concave, origin: tg.origin, dir: tg.dir } : { ok: false, t };
+    }
+    if (t === 'SPHERE') {
+      let ad = null, sp = null, l = null;
+      try {
+        ad = new oc.BRepAdaptor_Surface(fObj.wrapped, false);
+        sp = ad.Sphere();
+        l = sp.Location();
+        const sc = [l.X(), l.Y(), l.Z()];
+        const r = sp.Radius();
+        let ok = r > 1e-5;
+        try {
+          const uv = oc.BRepTools.UVBounds(fObj.wrapped);
+          ok = ok && (Math.abs(uv.UMax - uv.UMin) < 1.85 * Math.PI || Math.abs(uv.VMax - uv.VMin) < 0.9 * Math.PI);
+        } catch (_) {}
+        return { ok, t, r, sc };
+      } catch (_) {
+        return { ok: false, t };
+      } finally {
+        try { if (l && l.delete) l.delete(); } catch (_) {}
+        try { if (sp && sp.delete) sp.delete(); } catch (_) {}
+        try { if (ad && ad.delete) ad.delete(); } catch (_) {}
+      }
+    }
+    return { ok: false, t };
+  }
+  function surfaceDescriptor(fObj, fw) {
+    const t = fObj.geomType;
+    if (t === 'PLANE') {
+      return { t, o: vec(fObj.center), n: norm(vec(fObj.normalAt())) };
+    }
+    if (t === 'CYLINDRE') {
+      const g = cylFaceGeom(fObj);
+      return { t, o: g.origin, dir: g.dir, r: g.r, concave: g.concave };
+    }
+    if (t === 'CONE') {
+      const info = faceInfo(fObj);
+      if (Array.isArray(info.axis)) {
+        return { t, o: info.axis.slice(0, 3), dir: norm(info.axis.slice(3, 6)), semiAngle: info.semiAngle || 0 };
+      }
+    }
+    if (t === 'SPHERE') {
+      const fi = faceFilletInfo(fObj);
+      if (fi.sc) return { t, sc: fi.sc, r: fi.r };
+    }
+    if (t === 'TORUS') {
+      const fi = faceFilletInfo(fObj);
+      if (fi.origin) return { t, o: fi.origin, dir: fi.dir, r: fi.r, majorR: fi.majorR };
+    }
+    const pt = sampleFaceInterior(fObj, fw) || vec(fObj.center);
+    return { t, pt, n: faceNormalAtPoint(fObj, pt) };
+  }
+  function matchesSurfaceDesc(hDesc, desc) {
+    if (!hDesc || !desc || hDesc.t !== desc.t) return false;
+    if (desc.t === 'PLANE') {
+      return dot(hDesc.n, desc.n) > 0.995 && Math.abs(dot(sub(hDesc.o, desc.o), desc.n)) < 0.05;
+    }
+    if (desc.t === 'CYLINDRE') {
+      return Math.abs(dot(hDesc.dir, desc.dir)) > 0.995 && axisLineDist(desc.o, desc.dir, hDesc.o) < 0.05 && Math.abs(hDesc.r - desc.r) < 0.05 && hDesc.concave === desc.concave;
+    }
+    if (desc.t === 'CONE') {
+      return hDesc.o && desc.o && Math.abs(dot(hDesc.dir, desc.dir)) > 0.995 && axisLineDist(desc.o, desc.dir, hDesc.o) < 0.1 && Math.abs((hDesc.semiAngle || 0) - (desc.semiAngle || 0)) < 0.015;
+    }
+    if (desc.t === 'SPHERE') {
+      return hDesc.sc && desc.sc && len(sub(hDesc.sc, desc.sc)) < 0.05 && Math.abs(hDesc.r - desc.r) < 0.05;
+    }
+    if (desc.t === 'TORUS') {
+      return hDesc.o && desc.o && Math.abs(dot(hDesc.dir, desc.dir)) > 0.995 && len(sub(hDesc.o, desc.o)) < 0.05 && Math.abs(hDesc.r - desc.r) < 0.05 && Math.abs(hDesc.majorR - desc.majorR) < 0.05;
+    }
+    if (desc.pt && hDesc.n && desc.n) {
+      return dot(hDesc.n, desc.n) > 0.9 && len(sub(hDesc.pt || [0, 0, 0], desc.pt)) < 5;
+    }
+    return false;
+  }
+  function editFilletOnSolid(solidShape, seedIndices, newR, chain) {
+    if (!(newR >= 0.05 && isFinite(newR))) throw new Error('Rundung ändern: Der Radius muss mindestens 0,05 mm sein.');
+    const fObjs = solidShape.faces;
+    const fInfos = fObjs.map((f) => faceFilletInfo(f));
+    const validSeeds = seedIndices.filter((i) => i >= 0 && i < fObjs.length && fInfos[i].ok);
+    if (!validSeeds.length) {
+      const hasFullCyl = seedIndices.some((i) => i >= 0 && i < fObjs.length && fObjs[i].geomType === 'CYLINDRE' && !fInfos[i].ok);
+      if (hasFullCyl) throw new Error('Rundung ändern: Das ist ein vollständiger Zylinder bzw. ein Loch – nutze dafür „Loch ändern“.');
+      throw new Error('Rundung ändern: Wähle eine gerundete Fläche (z. B. eine Kantenrundung).');
+    }
+    const seedInfo = fInfos[validSeeds[0]];
+    const r0 = seedInfo.r;
+    if (seedIndices.length === 1 && Math.abs(newR - r0) < 1e-5 && !chain) return solidShape.clone();
+
+    const adj = buildSolidFaceAdjacency(fObjs);
+    const faceBBoxes = fObjs.map((f) => bboxOf(f));
+
+    // Zusammengehörige Rundungsflächen einsammeln (bei chain=true gesamte Kette, sonst zumindest geteilte Hälften derselben Rundung)
+    const delSet = new Set(validSeeds);
+    const q = [...validSeeds];
+    while (q.length) {
+      const u = q.pop();
+      const fu = fInfos[u];
+      for (const ei of adj.faceEdges[u]) {
+        const mp = edgeMidpoint(adj.edgesList[ei].e);
+        const nU = faceNormalAtPoint(fObjs[u], mp);
+        for (const v of adj.edgesList[ei].faces) {
+          if (delSet.has(v)) continue;
+          const fv = fInfos[v];
+          if (!fv.ok || Math.abs(fv.r - r0) > Math.max(0.05, r0 * 0.03)) continue;
+          if (fu.concave != null && fv.concave != null && fu.concave !== fv.concave) continue;
+          if (chain) {
+            delSet.add(v);
+            q.push(v);
+          } else if (fv.t === fu.t && Math.abs(fv.r - fu.r) < 1e-3) {
+            const nV = faceNormalAtPoint(fObjs[v], mp);
+            if (nU && nV && dot(nU, nV) > 0.995) {
+              delSet.add(v);
+              q.push(v);
+            }
+          }
+        }
+      }
+    }
+
+    if (Math.abs(newR - r0) < 1e-5) return solidShape.clone();
+
+    // Tangentiale Stützflächenpaare je Rundungsfläche vor dem Heilen sichern
+    const targetPairs = [];
+    for (const fi of delSet) {
+      const tangSet = new Set();
+      const nearSet = new Set();
+      for (const ei of adj.faceEdges[fi]) {
+        const mp = edgeMidpoint(adj.edgesList[ei].e);
+        const nF = faceNormalAtPoint(fObjs[fi], mp);
+        for (const sj of adj.edgesList[ei].faces) {
+          if (delSet.has(sj)) continue;
+          nearSet.add(sj);
+          const nS = faceNormalAtPoint(fObjs[sj], mp);
+          if (nF && nS && dot(nF, nS) > 0.85) tangSet.add(sj);
+        }
+      }
+      const tangArr = tangSet.size >= 2 ? [...tangSet] : [...nearSet];
+      const descs = tangArr.map((sj) => surfaceDescriptor(fObjs[sj], adj.allFaces[sj]));
+      for (let a = 0; a < descs.length; a++) {
+        for (let b = a + 1; b < descs.length; b++) {
+          targetPairs.push({ descA: descs[a], descB: descs[b], bb: faceBBoxes[fi], r0 });
+        }
+      }
+    }
+    if (!targetPairs.length) {
+      throw new Error('Rundung ändern: Die angrenzenden Flächen dieser Rundung konnten nicht bestimmt werden.');
+    }
+
+    let healed = null, bld = null, res = null;
+    const hFObjs = [];
+    try {
+      healed = deleteFacesHealSolid(solidShape, [...delSet]);
+      for (const fx of healed.faces) hFObjs.push(fx);
+      const hAdj = buildSolidFaceAdjacency(hFObjs);
+      const hDescs = hFObjs.map((f, idx) => surfaceDescriptor(f, hAdj.allFaces[idx]));
+      const recoveredEdges = [];
+      for (const he of hAdj.edgesList) {
+        if (he.faces.size !== 2) continue;
+        const [ha, hb] = [...he.faces];
+        const emp = edgeMidpoint(he.e);
+        const matched = targetPairs.some((tp) => {
+          const pad = Math.max(tp.r0 * 3.0, 2.5);
+          if (emp[0] < tp.bb[0] - pad || emp[0] > tp.bb[3] + pad ||
+              emp[1] < tp.bb[1] - pad || emp[1] > tp.bb[4] + pad ||
+              emp[2] < tp.bb[2] - pad || emp[2] > tp.bb[5] + pad) return false;
+          return (matchesSurfaceDesc(hDescs[ha], tp.descA) && matchesSurfaceDesc(hDescs[hb], tp.descB)) ||
+                 (matchesSurfaceDesc(hDescs[ha], tp.descB) && matchesSurfaceDesc(hDescs[hb], tp.descA));
+        });
+        if (matched) recoveredEdges.push(he.e);
+      }
+      if (!recoveredEdges.length) {
+        throw new Error('Rundung ändern: Die ursprüngliche Kante konnte nach dem Entfernen der alten Rundung nicht wiedergefunden werden.');
+      }
+
+      bld = new oc.BRepFilletAPI_MakeFillet(healed.wrapped, oc.ChFi3d_FilletShape.ChFi3d_Rational);
+      for (const ew of recoveredEdges) bld.Add(newR, ew);
+      bld.Build();
+      res = R.cast(bld.Shape());
+      if (!res || !R.isShape3D(res) || !(R.measureVolume(res) > 1e-6)) {
+        throw new Error('Rundung ändern: Der neue Radius ist für diese Geometrie zu groß – wähle einen kleineren Radius.');
+      }
+      const chk = new oc.BRepCheck_Analyzer(res.wrapped);
+      const valid = chk.IsValid();
+      chk.delete();
+      if (!valid) {
+        throw new Error('Rundung ändern: Der neue Radius erzeugt eine ungültige Form – wähle einen kleineren Radius.');
+      }
+      const out = res; res = null;
+      return out;
+    } finally {
+      safeDelete(res);
+      if (bld && bld.delete) try { bld.delete(); } catch (_) {}
+      for (const fx of hFObjs) safeDelete(fx);
+      safeDelete(healed);
+    }
+  }
+  function buildEditFilletOn(baseShape, p, topo = null, tid = null) {
+    const specs = Array.isArray(p.faces) ? p.faces.filter((fc) => fc && Array.isArray(fc.c)) : [];
+    if (!specs.length) throw new Error('Rundung ändern: Es ist keine Rundungsfläche gewählt.');
+    const newR = num(p.r, 0);
+    const chain = p.chain !== false;
+    const solids = baseShape.solids;
+    if (solids.length <= 1) {
+      const { fArr, indices } = resolveDeleteFaceMatch(baseShape, specs, topo, tid);
+      try {
+        if (!indices.size) {
+          const err = new Error('Rundung ändern: Die gewählte Rundung gibt es nicht mehr.');
+          err.code = 'edges';
+          throw err;
+        }
+        return editFilletOnSolid(baseShape, [...indices], newR, chain);
+      } finally {
+        for (const fx of fArr) safeDelete(fx);
+      }
+    }
+    const outSolids = [];
+    let anyEdited = false;
+    for (const sol of solids) {
+      const { fArr, indices } = resolveDeleteFaceMatch(sol, specs, topo, tid);
+      try {
+        if (indices.size) {
+          anyEdited = true;
+          outSolids.push(editFilletOnSolid(sol, [...indices], newR, chain));
+        } else {
+          outSolids.push(sol.clone());
+        }
+      } finally {
+        for (const fx of fArr) safeDelete(fx);
+      }
+    }
+    if (!anyEdited) {
+      for (const s of outSolids) safeDelete(s);
+      const err = new Error('Rundung ändern: Die gewählte Rundung gibt es nicht mehr.');
+      err.code = 'edges';
+      throw err;
+    }
+    if (outSolids.length === 1) return outSolids[0];
+    const comp = R.makeCompound(outSolids);
+    for (const s of outSolids) safeDelete(s);
+    return comp;
+  }
 
   function basisFromNormal(fn) {
     const n = norm(fn);
@@ -17832,6 +18515,146 @@ export function createKernel(R, oc) {
           if (track) track.rebuilt.add(it.id);
           try {
             next = buildMoveEdgeOn(src.shape, { edge: p.edge, axis, dist, dx, dy, dz }, src.topo, src.it.id);
+            nextTopo = ensureTopoComplete(next, createTopoMap(), tid);
+            cachePut(k, next, null, null, null, nextTopo);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: (err && err.code === 'edges') ? 'edges' : 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'editHole') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Loch ändern: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        if (!p.face || !Array.isArray(p.face.c)) {
+          errors.push({ itemId: it.id, code: 'edges', message: 'Loch ändern: Es ist kein Loch gewählt.' });
+          continue;
+        }
+        const d = num(p.d, 0);
+        let bakedSet = bakedHoles.get(tid);
+        const priorHoles = [];
+        for (let hi = 0; hi < i; hi++) {
+          const he = evald[hi];
+          if (!he || he.it.role !== 'hole' || !he.shape || consumed.has(he.it.id)) continue;
+          if (bakedSet && bakedSet.has(he.it.id)) continue;
+          if (src.wb && he.wb && bboxHit(he.wb, src.wb)) priorHoles.push(he);
+        }
+        if (priorHoles.length) {
+          const inv = matInvRigid(src.m);
+          const rels = priorHoles.map((h) => matMul(inv, h.it.m));
+          const kHole = keyOf([src.key, 'bakeHoles', priorHoles.map((h, idx) => [h.key, rels[idx].map(r6)])]);
+          const ceH = cacheEntry(kHole);
+          let hShape = ceH ? ceH.shape : null, hTopo = ceH ? ceH.topo : null;
+          if (!hShape) {
+            try {
+              const moved = priorHoles.map((h, idx) => {
+                const tr = applyMatrixWithTopo(h.shape, rels[idx], h.topo || null, h.it.id);
+                return { shape: tr.shape, topo: tr.topo, selfId: h.it.id };
+              });
+              const tool = fuseAllWithTopo(moved, true, 'BH');
+              const br = boolWithTopo('cut', src.shape, src.topo || null, src.it.id, tool.shape, tool.topo, null, 'BHCut');
+              safeDelete(tool.shape); freeTopoMap(tool.topo);
+              hShape = br.shape; hTopo = br.topo;
+              cachePut(kHole, hShape, null, null, null, hTopo);
+            } catch (_) { hShape = null; }
+          }
+          if (hShape) {
+            if (!bakedSet) { bakedSet = new Set(); bakedHoles.set(tid, bakedSet); }
+            for (const h of priorHoles) bakedSet.add(h.it.id);
+            src.shape = hShape; src.topo = hTopo; src.key = kHole; src.wb = bboxTransform(bboxCached(kHole, hShape), src.m);
+            bodies.set(tid, src);
+          }
+        }
+        const k = keyOf([src.key, 'editHole', p.face, r6(d)]);
+        const ceEH = cacheEntry(k);
+        let next = ceEH ? ceEH.shape : null, nextTopo = ceEH ? ceEH.topo : null;
+        if (!next) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            next = buildEditHoleOn(src.shape, { face: p.face, d }, src.topo, src.it.id);
+            nextTopo = ensureTopoComplete(next, createTopoMap(), tid);
+            cachePut(k, next, null, null, null, nextTopo);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: (err && err.code === 'edges') ? 'edges' : 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'editFillet') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Rundung ändern: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const faces = Array.isArray(p.faces) ? p.faces.filter((fc) => fc && Array.isArray(fc.c)) : [];
+        if (!faces.length) {
+          errors.push({ itemId: it.id, code: 'edges', message: 'Rundung ändern: Es ist keine Rundungsfläche gewählt.' });
+          continue;
+        }
+        const r = num(p.r, 0);
+        const chain = p.chain !== false;
+        let bakedSet = bakedHoles.get(tid);
+        const priorHoles = [];
+        for (let hi = 0; hi < i; hi++) {
+          const he = evald[hi];
+          if (!he || he.it.role !== 'hole' || !he.shape || consumed.has(he.it.id)) continue;
+          if (bakedSet && bakedSet.has(he.it.id)) continue;
+          if (src.wb && he.wb && bboxHit(he.wb, src.wb)) priorHoles.push(he);
+        }
+        if (priorHoles.length) {
+          const inv = matInvRigid(src.m);
+          const rels = priorHoles.map((h) => matMul(inv, h.it.m));
+          const kHole = keyOf([src.key, 'bakeHoles', priorHoles.map((h, idx) => [h.key, rels[idx].map(r6)])]);
+          const ceH = cacheEntry(kHole);
+          let hShape = ceH ? ceH.shape : null, hTopo = ceH ? ceH.topo : null;
+          if (!hShape) {
+            try {
+              const moved = priorHoles.map((h, idx) => {
+                const tr = applyMatrixWithTopo(h.shape, rels[idx], h.topo || null, h.it.id);
+                return { shape: tr.shape, topo: tr.topo, selfId: h.it.id };
+              });
+              const tool = fuseAllWithTopo(moved, true, 'BH');
+              const br = boolWithTopo('cut', src.shape, src.topo || null, src.it.id, tool.shape, tool.topo, null, 'BHCut');
+              safeDelete(tool.shape); freeTopoMap(tool.topo);
+              hShape = br.shape; hTopo = br.topo;
+              cachePut(kHole, hShape, null, null, null, hTopo);
+            } catch (_) { hShape = null; }
+          }
+          if (hShape) {
+            if (!bakedSet) { bakedSet = new Set(); bakedHoles.set(tid, bakedSet); }
+            for (const h of priorHoles) bakedSet.add(h.it.id);
+            src.shape = hShape; src.topo = hTopo; src.key = kHole; src.wb = bboxTransform(bboxCached(kHole, hShape), src.m);
+            bodies.set(tid, src);
+          }
+        }
+        const k = keyOf([src.key, 'editFillet', faces, r6(r), chain]);
+        const ceEF = cacheEntry(k);
+        let next = ceEF ? ceEF.shape : null, nextTopo = ceEF ? ceEF.topo : null;
+        if (!next) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            next = buildEditFilletOn(src.shape, { faces, r, chain }, src.topo, src.it.id);
             nextTopo = ensureTopoComplete(next, createTopoMap(), tid);
             cachePut(k, next, null, null, null, nextTopo);
           } catch (err) {

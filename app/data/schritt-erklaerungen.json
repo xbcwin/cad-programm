@@ -550,6 +550,16 @@
     "wozu": "Ändert Fasenwinkel, schräge Kanten oder Grundformen schnell direkt am fertigen Körper – auch bei importierten Teilen ohne Skizze.",
     "achtung": "Der Versatz muss kleiner bleiben als die Breite der Nachbarflächen, sonst würden diese zu null schrumpfen."
   },
+  "editHole": {
+    "was": "Ändert den Durchmesser einer vorhandenen zylindrischen Bohrung (Durchgangs- oder Sackloch) direkt am Körper – auch ohne Skizze.",
+    "wozu": "Passt Löcher an importierten STEP-, IGES- oder BREP-Teilen sowie an fertigen Körpern schnell auf andere Schrauben- oder Passmaße an.",
+    "achtung": "Wird das Loch zu groß für die umgebende Wandstärke oder schneidet es den Körper auseinander, meldet der Kern einen Fehler."
+  },
+  "editFillet": {
+    "was": "Ändert den Radius einer bestehenden Kantenrundung direkt am fertigen Körper (wahlweise inklusive anschließender gleicher Rundungen).",
+    "wozu": "Vergrößert oder verkleinert Rundungen an importierten STEP-, IGES- oder BREP-Teilen ohne Skizzen- oder Verlaufs-Historie.",
+    "achtung": "Ist der neue Radius größer als die angrenzenden Flächen erlauben, wähle einen etwas kleineren Radius."
+  },
   "simplify": {
     "was": "Entfernt an einem Körper automatisch kleine Rundungen, Fasen und Löcher bis zu einer wählbaren Maximalgröße in einem einzigen Schritt.",
     "wozu": "Bereinigt fertige oder importierte Teile für schnelle Simulationen, 3D-Druck, Baugruppen oder als Vorbereitung für weitere Änderungen.",

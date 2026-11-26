@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'replaceFace' || x.kind === 'moveEdge' || x.kind === 'simplify' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'replaceFace' || x.kind === 'moveEdge' || x.kind === 'editHole' || x.kind === 'editFillet' || x.kind === 'simplify' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -2115,7 +2115,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'replaceFace' || x.kind === 'moveEdge' || x.kind === 'simplify' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'directFace' || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'magnetPocket' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteFace' || x.kind === 'replaceFace' || x.kind === 'moveEdge' || x.kind === 'editHole' || x.kind === 'editFillet' || x.kind === 'simplify' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -4654,6 +4654,357 @@ const Features = (() => {
     sec.append(row);
     sec.append(h('div', { class: 'hint-box', html: T('panel.moveEdge.hint') }));
   }
+  // ---------- Direkt bearbeiten: Loch-Durchmesser & Rundungs-Radius ändern (DB-05, DB-06) ----------
+  function isHoleFaceInfo(fi) {
+    return !!(fi && fi.t === 'CYLINDRE' && fi.r > 0 && fi.concave !== false && (fi.uSpan == null || fi.uSpan >= 3.0));
+  }
+  function isFilletFaceInfo(fi) {
+    return !!(fi && fi.r > 0 && ((fi.t === 'CYLINDRE' && !(fi.uSpan > 5.8) && !(fi.concave === true && fi.uSpan >= 3.05)) || fi.t === 'TORUS' || fi.t === 'SPHERE'));
+  }
+  function directRoundFaceSig(face) {
+    if (!face || !face.id) return null;
+    const fidx = face.idx != null ? face.idx : face.faceIdx;
+    const info = face.info || (fidx != null ? App.results.get(face.id)?.data?.faces?.[fidx] : null);
+    const sig = deleteFaceSig(face);
+    if (!sig || !info) return null;
+    if (info.r != null) sig.r = round(info.r, 6);
+    if (Array.isArray(info.axis)) sig.axis = info.axis.map((v) => round(v, 6));
+    if (info.concave != null) sig.concave = !!info.concave;
+    if (info.uSpan != null) sig.uSpan = round(info.uSpan, 4);
+    return sig;
+  }
+  function editHole(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Loch ändern gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = directRoundFaceSig(face);
+    if (!tgt || tgt.role === 'hole' || !sig) {
+      startEditHole(opts);
+      return null;
+    }
+    if (!isHoleFaceInfo(sig)) {
+      UI.toast(T('toast.editHoleNeedCyl'), { icon: 'info' });
+      return null;
+    }
+    const origD = round((sig.r || 3) * 2, 4);
+    const d = opts.d != null ? opts.d : origD;
+    let step;
+    App.change(T('undo.editHole'), (doc) => {
+      step = Model.newItem('editHole', { target: tgt.id, face: sig, d, origD }, { name: opts.name || T('kind.editHole'), color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      if (opts.d == null) {
+        UI.toast(T('toast.editHoleAdded'), { icon: 'check' });
+        setTimeout(() => { const inp = $('#eh-d'); if (inp) { inp.focus(); inp.select(); } }, 60);
+      }
+    }
+    return step || null;
+  }
+  function startEditHole(opts = {}) {
+    if (App.ctx) { UI.toast('Loch ändern gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für „Loch ändern“ braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    const f = Actions.selectedFace();
+    if (f && isHoleFaceInfo(f.info)) { editHole(f, opts); return true; }
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (tgt && tgt.role !== 'hole' && isHoleFaceInfo(fi)) {
+          stopPick();
+          editHole({ id: hit.id, idx: hit.faceIdx, info: fi }, opts);
+          return;
+        }
+      }
+      UI.toast(T('toast.editHoleNeedCyl'), { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      const ok = !!(fi && isHoleFaceInfo(fi));
+      Viewer.highlightFace('hover', ok ? hit.id : null, ok ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Loch ändern:</b> Klick auf die Innenfläche einer zylindrischen Bohrung. <b>Esc</b> bricht ab.');
+    return true;
+  }
+  function pickEditHoleFace(stepId) {
+    stopPick();
+    const fStep = Model.find(App.doc, stepId);
+    if (!fStep || fStep.item.kind !== 'editHole') return false;
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        const sig = tgt && tgt.role !== 'hole' && isHoleFaceInfo(fi) ? directRoundFaceSig({ id: hit.id, idx: hit.faceIdx, info: fi }) : null;
+        if (sig) {
+          stopPick();
+          App.change(T('undo.editHolePick'), (doc) => {
+            const fn = Model.find(doc, stepId); if (!fn) return false;
+            fn.item.p = fn.item.p || {};
+            fn.item.p.target = tgt.id;
+            fn.item.p.face = sig;
+            fn.item.p.origD = round((sig.r || 3) * 2, 4);
+          });
+          UI.toast('Loch aktualisiert.', { icon: 'check' });
+          return;
+        }
+      }
+      UI.toast(T('toast.editHoleNeedCyl'), { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      const ok = !!(fi && isHoleFaceInfo(fi));
+      Viewer.highlightFace('hover', ok ? hit.id : null, ok ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Anderes Loch wählen:</b> Klick auf die gewünschte Bohrungsfläche. <b>Esc</b> bricht ab.');
+    return true;
+  }
+  function renderEditHole(it, sec, setP) {
+    const p = it.p || {};
+    const origD = p.origD != null ? p.origD : (p.face && p.face.r ? round(p.face.r * 2, 4) : null);
+    if (origD != null) {
+      sec.append(h('div', { class: 'mini-row', style: { marginBottom: '8px' } }, h('span', { class: 'grow' }, T('panel.editHole.origD')), h('b', { class: 'mono', id: 'eh-orig-d' }, `Ø ${Units.fmtLenU(origD, 2)}`)));
+    }
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.numField({ id: 'eh-d', label: T('panel.editHole.d'), value: p.d ?? origD ?? 6, min: 0.1, unit: 'mm', onCommit: (v) => setP('d', v) }));
+    sec.append(fl);
+    const row = h('div', { class: 'btn-row' });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'eh-pick' });
+    pb.innerHTML = icon('cursor') + esc(T('panel.editHole.pickFace'));
+    pb.onclick = () => pickEditHoleFace(it.id);
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'eh-goto' });
+      gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: T('panel.editHole.hint') }));
+  }
+
+  function editFillet(facesOrFace = null, opts = {}) {
+    if (App.ctx) { UI.toast('Rundung ändern gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    let list;
+    if (Array.isArray(facesOrFace)) list = facesOrFace;
+    else if (facesOrFace) list = [facesOrFace];
+    else if (App.faces && App.faces.length) list = App.faces;
+    else {
+      const sf = Actions.selectedFace();
+      list = sf ? [sf] : [];
+    }
+    const entries = [];
+    let tgt = null;
+    for (const f of list) {
+      const t = f && f.id ? resolveTopTarget(f.id) : null;
+      const sig = directRoundFaceSig(f);
+      if (!t || t.role === 'hole' || !sig) continue;
+      if (!isFilletFaceInfo(sig)) continue;
+      if (!tgt) tgt = t;
+      else if (tgt.id !== t.id) {
+        UI.toast('Wähle bitte nur Rundungen eines einzelnen Körpers.', { icon: 'info' });
+        return null;
+      }
+      if (!entries.some((e) => sameDeleteFaceSig(e, sig))) entries.push(sig);
+    }
+    if (!tgt || !entries.length) {
+      if (list.length) UI.toast(T('toast.editFilletNeedRound'), { icon: 'info' });
+      else startEditFillet(opts);
+      return null;
+    }
+    const origR = round(entries[0].r || 2, 4);
+    const r = opts.r != null ? opts.r : origR;
+    const chain = opts.chain !== false;
+    let step;
+    App.change(T('undo.editFillet'), (doc) => {
+      step = Model.newItem('editFillet', { target: tgt.id, faces: entries, r, origR, chain }, { name: opts.name || T('kind.editFillet'), color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      if (opts.r == null) {
+        UI.toast(T('toast.editFilletAdded'), { icon: 'check' });
+        setTimeout(() => { const inp = $('#ef-r'); if (inp) { inp.focus(); inp.select(); } }, 60);
+      }
+    }
+    return step || null;
+  }
+  function startEditFillet(opts = {}) {
+    if (App.ctx) { UI.toast('Rundung ändern gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für „Rundung ändern“ braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    if (App.faces && App.faces.length) {
+      const allOk = App.faces.every((f) => isFilletFaceInfo(f.info || App.results.get(f.id)?.data?.faces?.[f.faceIdx]));
+      if (allOk) {
+        const ok = editFillet(App.faces, opts);
+        if (ok) return true;
+      }
+    }
+    const f = Actions.selectedFace();
+    if (f && isFilletFaceInfo(f.info)) { editFillet(f, opts); return true; }
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (tgt && tgt.role !== 'hole' && isFilletFaceInfo(fi)) {
+          stopPick();
+          editFillet({ id: hit.id, idx: hit.faceIdx, info: fi }, opts);
+          return;
+        }
+      }
+      UI.toast(T('toast.editFilletNeedRound'), { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      const ok = !!(fi && isFilletFaceInfo(fi));
+      Viewer.highlightFace('hover', ok ? hit.id : null, ok ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Rundung ändern:</b> Klick auf eine abgerundete Kantenfläche. <b>Esc</b> bricht ab.');
+    return true;
+  }
+  function pickEditFilletFace(stepId, mode = 'replace') {
+    stopPick();
+    const fStep = Model.find(App.doc, stepId);
+    if (!fStep || fStep.item.kind !== 'editFillet') return false;
+    const curTarget = fStep.item.p && fStep.item.p.target;
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        const sig = tgt && tgt.role !== 'hole' && isFilletFaceInfo(fi) ? directRoundFaceSig({ id: hit.id, idx: hit.faceIdx, info: fi }) : null;
+        if (sig) {
+          if (mode === 'add' && curTarget && tgt.id !== curTarget) {
+            UI.toast('Bitte wähle eine Rundung desselben Körpers.', { icon: 'info' });
+            return;
+          }
+          stopPick();
+          App.change(mode === 'add' ? 'Rundung hinzugefügt' : T('undo.editFilletPick'), (doc) => {
+            const fn = Model.find(doc, stepId); if (!fn) return false;
+            fn.item.p = fn.item.p || {};
+            if (mode === 'add') {
+              const arr = Array.isArray(fn.item.p.faces) ? fn.item.p.faces.slice() : [];
+              if (!arr.some((x) => sameDeleteFaceSig(x, sig))) arr.push(sig);
+              fn.item.p.faces = arr;
+            } else {
+              fn.item.p.target = tgt.id;
+              fn.item.p.faces = [sig];
+              fn.item.p.origR = round(sig.r || 2, 4);
+            }
+          });
+          UI.toast(mode === 'add' ? 'Rundung hinzugefügt.' : 'Rundung aktualisiert.', { icon: 'check' });
+          return;
+        }
+      }
+      UI.toast(T('toast.editFilletNeedRound'), { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      const ok = !!(fi && isFilletFaceInfo(fi));
+      Viewer.highlightFace('hover', ok ? hit.id : null, ok ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(mode === 'add' ? '<b>Weitere Rundung wählen:</b> Klick auf eine weitere Rundung desselben Körpers. <b>Esc</b> bricht ab.' : '<b>Rundung neu wählen:</b> Klick auf die gewünschte Rundungsfläche. <b>Esc</b> bricht ab.');
+    return true;
+  }
+  function removeEditFilletEntry(stepId, idx) {
+    const fn = Model.find(App.doc, stepId);
+    const arr = fn && fn.item && fn.item.p && Array.isArray(fn.item.p.faces) ? fn.item.p.faces : null;
+    if (!arr || arr.length <= 1 || idx < 0 || idx >= arr.length) return false;
+    App.change('Rundung entfernt', (doc) => {
+      const f2 = Model.find(doc, stepId);
+      if (!f2 || !f2.item.p || !Array.isArray(f2.item.p.faces) || f2.item.p.faces.length <= 1) return false;
+      f2.item.p.faces.splice(idx, 1);
+    });
+    return true;
+  }
+  function renderEditFillet(it, sec, setP) {
+    const p = it.p || {};
+    const list = Array.isArray(p.faces) ? p.faces : [];
+    const origR = p.origR != null ? p.origR : (list[0] && list[0].r ? round(list[0].r, 4) : null);
+    if (origR != null) {
+      sec.append(h('div', { class: 'mini-row', style: { marginBottom: '6px' } }, h('span', { class: 'grow' }, T('panel.editFillet.origR')), h('b', { class: 'mono', id: 'ef-orig-r' }, `R ${Units.fmtLenU(origR, 2)}`)));
+    }
+    if (list.length) {
+      const box = h('div', { id: 'ef-faces-list', style: { display: 'grid', gap: '4px', marginBottom: '8px' } });
+      box.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('panel.editFillet.facesTitle')), h('b', { class: 'mono' }, String(list.length))));
+      list.forEach((fc, idx) => {
+        const lbl = `${idx + 1}. ${faceTypeLabelDE(fc && fc.t)}${fc && fc.r ? ` (R ${Units.fmtLenU(fc.r, 2)})` : ''}`;
+        const row = h('div', { class: 'mini-row', id: 'ef-face-' + idx });
+        row.append(h('span', { class: 'grow' }, lbl));
+        if (list.length > 1) {
+          const rm = h('button', { type: 'button', class: 'btn ghost small', id: 'ef-rm-' + idx, 'aria-label': T('panel.editFillet.removeFace'), 'data-tip': T('panel.editFillet.removeFace') });
+          rm.innerHTML = icon('trash');
+          rm.onclick = () => removeEditFilletEntry(it.id, idx);
+          row.append(rm);
+        }
+        box.append(row);
+      });
+      sec.append(box);
+    }
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.numField({ id: 'ef-r', label: T('panel.editFillet.r'), value: p.r ?? origR ?? 2, min: 0.05, unit: 'mm', onCommit: (v) => setP('r', v) }));
+    const chainWrap = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'ef-chain', checked: p.chain !== false }), T('panel.editFillet.chain'));
+    chainWrap.querySelector('input').onchange = (e) => App.change(T('undo.editFilletChain'), (doc) => {
+      const fn = Model.find(doc, it.id); if (fn && fn.item.p) fn.item.p.chain = e.target.checked;
+    });
+    fl.append(chainWrap);
+    sec.append(fl);
+    const row = h('div', { class: 'btn-row' });
+    const ab = h('button', { type: 'button', class: 'btn small primary', id: 'ef-add' }); ab.innerHTML = icon('plus') + esc(T('panel.editFillet.addFace'));
+    ab.onclick = () => pickEditFilletFace(it.id, 'add');
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'ef-pick' }); pb.innerHTML = icon('cursor') + esc(T('panel.editFillet.pickFace'));
+    pb.onclick = () => pickEditFilletFace(it.id, 'replace');
+    row.append(ab, pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'ef-goto' });
+      gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: T('panel.editFillet.hint') }));
+  }
+
   // ---------- Vereinfachen (DB-09) ----------
   function simplify(targetOrIds = null, opts = {}) {
     if (App.ctx) { UI.toast('Vereinfachen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
@@ -8469,5 +8820,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, portCutout, startPortCutout, pickPortCutoutFace, renderPortCutout, magnetPocket, startMagnetPocket, pickMagnetPocketFace, renderMagnetPocket, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, deleteFace, startDeleteFace, pickDeleteFace, removeDeleteFaceEntry, renderDeleteFace, replaceFace, startReplaceFace, pickReplaceTarget, pickReplaceSourceFace, setReplaceDatum, renderReplaceFace, moveEdge, startMoveEdge, pickMoveEdge, renderMoveEdge, simplify, startSimplify, renderSimplify, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, directFace, startDirectFace, pickDirectFace, pickDirectFaceRotAxis, directFaceFrame, renderDirectFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut, startEngrave, engrave, updateEngrave, stopEngrave, get engraving() { return !!engraveState; } };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, portCutout, startPortCutout, pickPortCutoutFace, renderPortCutout, magnetPocket, startMagnetPocket, pickMagnetPocketFace, renderMagnetPocket, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, deleteFace, startDeleteFace, pickDeleteFace, removeDeleteFaceEntry, renderDeleteFace, replaceFace, startReplaceFace, pickReplaceTarget, pickReplaceSourceFace, setReplaceDatum, renderReplaceFace, moveEdge, startMoveEdge, pickMoveEdge, renderMoveEdge, isHoleFaceInfo, isFilletFaceInfo, editHole, startEditHole, pickEditHoleFace, renderEditHole, editFillet, startEditFillet, pickEditFilletFace, removeEditFilletEntry, renderEditFillet, simplify, startSimplify, renderSimplify, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, directFace, startDirectFace, pickDirectFace, pickDirectFaceRotAxis, directFaceFrame, renderDirectFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut, startEngrave, engrave, updateEngrave, stopEngrave, get engraving() { return !!engraveState; } };
 })();
