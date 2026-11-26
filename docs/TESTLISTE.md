@@ -3078,6 +3078,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Rückgängig (`Strg+Z`) stellt das exakte Ausgangsvolumen wieder her; auch komplexe Zeichen (`Se3`) gravieren fehlerfrei (Klicktest `[A-203]`)
 - [ ] **Von Hand**: Im Browser eine ebene Fläche eines Körpers anklicken, „Gravieren“ wählen, während der Eingabe die 3D-Linienvorschau prüfen und eine mehrzeilige bzw. gedrehte Gravur auf einem 3D-Druckteil begutachten.
 
+## Direkt bearbeiten: Loch und Rundung an Importteilen ändern (Auto [A-200], DB-05, DB-06)
+- [x] Profi-Sichtbarkeit, Befehlssuche (`edit-hole`, `edit-fillet`), Kontextleiste (`#ctx-edit-hole`, `#ctx-edit-fillet`) und Rechtsklick-Menü (`#cm-edit-hole`, `#cm-edit-fillet` nur an Loch- bzw. Rundungsflächen im Profi-Modus) (Klicktest `[A-200]`)
+- [x] Importiertes STEP-Teil mit Loch Ø 6 mm und Kantenrundung R 2 mm: Loch per Klick auf Ø 8 mm ändern (Messen zeigt `Ø 8 mm`, 0 Geometriefehler), Verkleinern auf Ø 4 mm, Formel `d_loch = 8`, Unterdrücken und Rückgängig/Wiederherstellen (Klicktest `[A-200]`)
+- [x] Am selben STEP-Importteil mit Loch Ø 8 mm: Kantenrundung R 2 mm auf R 4 mm (und R 1,5 mm) ändern bei erhaltenem Loch Ø 8 mm, Unterdrücken und Rückgängig/Wiederherstellen (Klicktest `[A-200]`)
+- [x] Sackloch Ø 6 × 10 mm → Ø 8 × 10 mm am STEP-Teil, 4-Kanten-Rundungskette R 2 → R 3,5 mm, Torus-Rundung am Zylinder R 2 → R 3 mm, Modus ohne Verlauf (`noHistory`), `Store.validateProject()`, `Explain.local()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit geprüft (Klicktest `[A-200]`)
+- [ ] **Von Hand**: Im Browser im Profi-Modus ein eigenes STEP-Teil mit Bohrungen und verrundeten Kanten importieren, direkt im 3D-Bild ein Loch im Durchmesser und eine Rundung im Radius ändern und per Messen kontrollieren.
+
 ## Fehler melden
 
 ```

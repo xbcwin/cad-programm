@@ -708,6 +708,8 @@ const IC = {
   deleteFace: '<rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="currentColor" opacity=".16"/><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="12" cy="12" r="4" stroke-dasharray="2.2 1.6"/><path d="M10 10l4 4M14 10l-4 4" />',
   replaceFace: '<path d="M4 15l8 4 8-4-8-4z" opacity=".4" stroke-dasharray="2.2 1.8"/><path d="M4 9l8 4 8-4-8-4z" fill="currentColor" opacity=".25"/><path d="M4 9l8 4 8-4-8-4zM12 13v6" /><path d="M9.5 16.5L12 19l2.5-2.5" />',
   moveEdge: '<path d="M4 17l5-10h11l-5 10z" fill="currentColor" opacity=".15"/><path d="M4 17l5-10h11M4 17h11l5-10" opacity=".5"/><path d="M9 7h11" stroke-width="2.2"/><path d="M12 4.5 9 7l3 2.5" />',
+  editHole: '<circle cx="12" cy="12" r="4" stroke-dasharray="2.2 1.6" opacity=".55"/><circle cx="12" cy="12" r="7.5" fill="currentColor" opacity=".14"/><circle cx="12" cy="12" r="7.5"/><path d="M5.5 12h13M8 9.8 5.5 12 8 14.2M16 9.8 18.5 12 16 14.2" />',
+  editFillet: '<path d="M5 19V9a6 6 0 0 1 6-6h8" stroke-dasharray="2.2 1.8" opacity=".45"/><path d="M5 19v-4a10 10 0 0 1 10-10h4"/><path d="M14.5 14.5 9 9M9 12.5V9h3.5" />',
   helix: '<path d="M6 6.5c0-1.9 2.7-3 6-3s6 1.1 6 3-2.7 3-6 3-6 1.1-6 3 2.7 3 6 3 6 1.1 6 3-2.7 3-6 3-6-1.1-6-3" /><path d="M6 6.5c0 1.4 1.6 2.3 4 2.8 M18 12.5c0 1.4-1.6 2.3-4 2.8" opacity=".45"/>',
   stretch: '<path d="M3 7h11v10H3z" opacity=".45"/><path d="M10 4h8v16h-8z" stroke-dasharray="2.5 2"/><path d="M14 12h7M18 9l3 3-3 3"/>',
   patternFill: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="16" r="1.4" fill="currentColor" stroke="none"/>',
@@ -2985,6 +2987,16 @@ const HELP = {
   "tip": "Gerade Kante verschieben – die beiden Nachbarflächen kippen mit (Profi)",
   "hilfe": "Verschiebt im Profi-Modus eine gerade Kante zwischen zwei ebenen Flächen entlang der Winkelhalbierenden, einer Achse (X/Y/Z), einer Flächen-Normalen oder frei in X/Y/Z. Beide Nachbarflächen kippen um ihre gegenüberliegende Kante automatisch mit – auch an importierten Teilen.",
   "tipp": "Du kannst im Feld „Abstand“ auch Formeln wie „breite/4“ eingeben; mit „Richtung“ legst du fest, ob die Kante schräg oder nur in Z bzw. X/Y wandert."
+ },
+ "editHole": {
+  "tip": "Loch-Durchmesser direkt ändern – auch an importierten STEP-Teilen (Profi)",
+  "hilfe": "Klick im Profi-Modus auf die Innenfläche eines Lochs (Durchgangs- oder Sackloch, auch an importierten STEP-/BREP-Teilen) und tippe den gewünschten neuen Durchmesser (oder eine Formel) ein. Tracery passt die Bohrung direkt auf das neue Maß an.",
+  "tipp": "Wenn der Durchmesser direkt nach dem Klick markiert ist, tippe einfach die neue Zahl (z. B. 8) ein und drücke Enter."
+ },
+ "editFillet": {
+  "tip": "Rundungs-Radius direkt ändern – auch an importierten STEP-Teilen (Profi)",
+  "hilfe": "Klick im Profi-Modus auf eine abgerundete Kantenfläche (auch an importierten STEP-/BREP-Teilen) und gib den neuen Radius ein. Tracery stellt die ursprüngliche scharfe Kante vorübergehend her und rundet sie mit dem neuen Radius neu ab.",
+  "tipp": "Mit eingeschaltetem „Zusammenhängende Kanten einbeziehen“ ändern sich alle gleich großen, anschließenden Rundungen in einem Zug mit."
  }
 };
 

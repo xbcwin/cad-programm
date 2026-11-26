@@ -42141,6 +42141,355 @@ def t_a203_gravieren(p):
         p.ev("try { Features.stopEngrave(); ViewPrefs.setLevel('pro'); } catch (_) {}")
 
 
+def t_a200_loch_rundung_import(p):
+    """[A-200] Direkt bearbeiten: Loch und Rundung an Importteilen ändern (DB-05, DB-06)."""
+    def wait_done(n=45):
+        for _ in range(n):
+            p.wait(500)
+            if p.ev("return !App.busy && App.results.size >= App.doc.items.filter(i=>!i.hidden && !i.suppressed && !App.mergedInto(i.id)).length"):
+                break
+        p.wait(400)
+
+    try:
+        # 1. Einfach- vs. Profi-Sichtbarkeit, Befehlssuche, Kontextleiste & Rechtsklick-Menü
+        p.empty()
+        p.ev("ViewPrefs.setLevel('simple')"); p.wait(200)
+        simple_cmds = p.ev("return [Commands.search('Loch-Durchmesser ändern').length, Commands.search('Rundungs-Radius ändern').length]")
+        p.ev("ViewPrefs.setLevel('pro')"); p.wait(200)
+        pro_cmds = p.ev("return [Commands.search('Loch-Durchmesser ändern').length, Commands.search('Rundungs-Radius ändern').length]")
+
+        # Quader 20x20x20 mit Loch Ø6 (durch) und oberer Kantenrundung R2
+        p.ev("""App.change('Quader mit Loch und Rundung', (doc) => {
+          const box = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Gehaeuse' });
+          box.finishes = [{ id: 'f_top', type: 'fillet', r: 2, edges: [{ a: [-10, -10, 20], b: [10, -10, 20], m: [0, -10, 20], l: 20 }] }];
+          const hole = Model.newItem('cylinder', { d: 6, h: 30 }, { name: 'Loch', t: { x: 0, y: 0, z: -5, rx: 0, ry: 0, rz: 0 } });
+          hole.op = { type: 'cut', target: box.id };
+          doc.items.push(box, hole);
+        })""")
+        wait_done()
+        # Export als STEP -> Importteil erzeugen
+        p.pg.evaluate("""async () => {
+          const {Kernel, Model, App} = window.__M;
+          const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+          window.__a200Step = new File([new Uint8Array(r.data)], 'ImportTeil200.step');
+        }""")
+        p.wait(500)
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.pg.evaluate("() => window.__M.Start.importCAD(window.__a200Step)")
+        wait_done()
+
+        # Prüfen: Loch-Knöpfe nur auf Lochfläche, Rundungs-Knöpfe nur auf Rundungsfläche, und nur im Profi-Modus
+        p.ev("""(() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const hi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === true && Math.abs(f.r - 3) < 0.05);
+          App.select([it.id], { face: { id: it.id, faceIdx: hi } });
+        })()"""); p.wait(200)
+        p.ev("ViewPrefs.setLevel('simple')"); p.wait(200)
+        simple_hole_btn = p.ev("return !!document.querySelector('#ctx-edit-hole')?.offsetParent")
+        p.ev("ViewPrefs.setLevel('pro')"); p.wait(200)
+        pro_hole_btns = p.ev("return [!!document.querySelector('#ctx-edit-hole')?.offsetParent, !!document.querySelector('#ctx-edit-fillet')?.offsetParent]")
+
+        # Rundungsfläche wählen (R2 am oberen vorderen Rand) + Rechtsklick-Menü prüfen
+        fillet_pt = p.ev("""return (() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === false && Math.abs(f.r - 2) < 0.05);
+          App.select([it.id], { face: { id: it.id, faceIdx: fi } });
+          return r.data.faces[fi].c;
+        })()"""); p.wait(200)
+        pro_fillet_btns = p.ev("return [!!document.querySelector('#ctx-edit-fillet')?.offsetParent, !!document.querySelector('#ctx-edit-hole')?.offsetParent]")
+        p.ev("Viewer.setView('iso', false)"); p.wait(400)
+        fx, fy = world_screen(p, fillet_pt[0], fillet_pt[1], fillet_pt[2])
+        p.pg.mouse.click(fx, fy, button='right'); p.wait(250)
+        cm_fillet = p.ev("return [!!document.querySelector('#cm-edit-fillet') && !document.querySelector('#cm-edit-fillet').hidden, !!document.querySelector('#cm-edit-hole') && !document.querySelector('#cm-edit-hole').hidden]")
+        p.pg.keyboard.press('Escape'); p.wait(150)
+
+        # Außen-Zylinder (nicht konkav, voller Umfang) -> weder Loch noch Rundung
+        p.ev("""(() => {
+          window.__a200Fake = Features.isHoleFaceInfo({ t: 'CYLINDRE', r: 10, concave: false, uSpan: 6.283 });
+          window.__a200FakeF = Features.isFilletFaceInfo({ t: 'CYLINDRE', r: 10, concave: false, uSpan: 6.283 });
+        })()""")
+        fake_chk = p.ev("return [window.__a200Fake, window.__a200FakeF]")
+        ok1 = bool(
+            simple_cmds == [0, 0]
+            and pro_cmds[0] >= 1 and pro_cmds[1] >= 1
+            and not simple_hole_btn
+            and pro_hole_btns == [True, False]
+            and pro_fillet_btns == [True, False]
+            and cm_fillet == [True, False]
+            and fake_chk == [False, False]
+        )
+
+        # 2. Importiertes STEP-Teil: Loch Ø6 -> Ø8 ändern, Messen zeigt 8, Verkleinern Ø4, Formel, Unterdrücken & Undo/Redo
+        p.ev("""(() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const hi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === true && Math.abs(f.r - 3) < 0.05);
+          App.select([it.id], { face: { id: it.id, faceIdx: hi } });
+        })()"""); p.wait(250)
+        p.pg.locator('#ctx-edit-hole').click(); p.wait(250)
+        p.pg.fill('#eh-d', '8'); p.pg.press('#eh-d', 'Enter')
+        wait_done()
+        hole8 = p.ev("""return (async () => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const holes = (r?.data?.faces || []).filter(f => f.t === 'CYLINDRE' && f.concave === true);
+          const gc = await GeomCheck.run({ silent: true });
+          const ms = await Mass.measure();
+          return {
+            fmt: it.p.fmt,
+            errs: App.errors.length,
+            kinds: App.doc.items.map(x => x.kind),
+            r: holes[0]?.r || 0,
+            allR4: holes.length >= 1 && holes.every(f => Math.abs(f.r - 4.0) < 0.01),
+            gcIssues: (gc.issues || []).length,
+            vol: ms?.parts?.[0]?.volume || 0,
+          };
+        })()""")
+
+        # Messen-Werkzeug auf das geänderte Loch Ø8 anwenden -> Messen zeigt 8
+        p.ev("App.clearSelection(); Viewer.setView('iso', false)"); p.wait(500)
+        p.pg.locator('#t-measure').click(); p.wait(300)
+        hole_screen = None
+        for ang in (135, 120, 150, 90, 180, 45, 225, 315):
+            rad = math.radians(ang)
+            sx, sy = world_screen(p, 4.0 * math.cos(rad), 4.0 * math.sin(rad), 17.5)
+            hit_hole = p.ev("""const [sx, sy] = arg;
+              const hit = Viewer.pick(sx, sy, { solidsOnly: true, noEdges: true });
+              const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+              return !!(fi && fi.t === 'CYLINDRE' && fi.concave === true);""", [sx, sy])
+            if hit_hole:
+                hole_screen = (sx, sy)
+                break
+        if hole_screen:
+            p.pg.mouse.click(hole_screen[0], hole_screen[1]); p.wait(500)
+        meas_res = p.ev("return Measure.result || ''")
+        p.pg.keyboard.press('Escape'); p.wait(200)
+
+        # Verkleinern auf Ø4 und Formel d_loch = 8 testen
+        p.ev("App.select([App.doc.items.find(x => x.kind === 'editHole').id])"); p.wait(250)
+        p.pg.fill('#eh-d', '4'); p.pg.press('#eh-d', 'Enter')
+        wait_done()
+        hole4_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === true)?.r || 0")
+        p.ev("App.change('Maß anlegen', d => { d.params.push({ id: 'p_dloch', name: 'd_loch', expr: '8' }); })"); p.wait(200)
+        p.pg.fill('#eh-d', 'd_loch'); p.pg.press('#eh-d', 'Enter')
+        wait_done()
+        hole_var_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === true)?.r || 0")
+
+        # Unterdrücken & Wieder-Einschalten + Undo/Redo
+        p.ev("Timeline.toggleSuppress(App.doc.items.find(x => x.kind === 'editHole').id)")
+        wait_done()
+        hole_sup_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === true)?.r || 0")
+        p.ev("Timeline.toggleSuppress(App.doc.items.find(x => x.kind === 'editHole').id)")
+        wait_done()
+        hole_unsup_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === true)?.r || 0")
+        p.ev("App.undo()"); wait_done()
+        hole_undo_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === true)?.r || 0")
+        p.ev("App.redo()"); wait_done()
+        hole_redo_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === true)?.r || 0")
+
+        ok2 = bool(
+            hole8['fmt'] == 'step' and hole8['errs'] == 0 and hole8['kinds'] == ['import', 'editHole']
+            and hole8['allR4'] and abs(hole8['r'] - 4.0) < 0.01 and hole8['gcIssues'] == 0
+            and hole_screen is not None and 'Ø 8 mm' in meas_res and '(R 4)' in meas_res
+            and abs(hole4_r - 2.0) < 0.01
+            and abs(hole_var_r - 4.0) < 0.01
+            and abs(hole_sup_r - 3.0) < 0.01
+            and abs(hole_unsup_r - 4.0) < 0.01
+            and abs(hole_undo_r - 3.0) < 0.01
+            and abs(hole_redo_r - 4.0) < 0.01
+        )
+
+        # 3. Am selben STEP-Importteil (mit Loch Ø8): Rundung R2 -> R4 und R1.5, Unterdrücken & Undo/Redo
+        p.ev("""(() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === false && Math.abs(f.r - 2) < 0.05);
+          App.select([it.id], { face: { id: it.id, faceIdx: fi } });
+        })()"""); p.wait(250)
+        p.pg.locator('#ctx-edit-fillet').click(); p.wait(250)
+        p.pg.fill('#ef-r', '4'); p.pg.press('#ef-r', 'Enter')
+        wait_done()
+        fil4 = p.ev("""return (async () => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const fillets = (r?.data?.faces || []).filter(f => f.t === 'CYLINDRE' && f.concave === false);
+          const holes = (r?.data?.faces || []).filter(f => f.t === 'CYLINDRE' && f.concave === true);
+          const gc = await GeomCheck.run({ silent: true });
+          const ms = await Mass.measure();
+          return {
+            errs: App.errors.length,
+            kinds: App.doc.items.map(x => x.kind),
+            r: fillets[0]?.r || 0,
+            holeR: holes[0]?.r || 0,
+            gcIssues: (gc.issues || []).length,
+            vol: ms?.parts?.[0]?.volume || 0,
+          };
+        })()""")
+        p.pg.fill('#ef-r', '1.5'); p.pg.press('#ef-r', 'Enter')
+        wait_done()
+        fil15_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === false)?.r || 0")
+        p.ev("Timeline.toggleSuppress(App.doc.items.find(x => x.kind === 'editFillet').id)")
+        wait_done()
+        fil_sup_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === false)?.r || 0")
+        p.ev("Timeline.toggleSuppress(App.doc.items.find(x => x.kind === 'editFillet').id)")
+        wait_done()
+        fil_unsup_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === false)?.r || 0")
+        p.ev("App.undo()"); wait_done()
+        fil_undo_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === false)?.r || 0")
+        p.ev("App.redo()"); wait_done()
+        fil_redo_r = p.ev("const r = App.results.get(App.doc.items[0].id); return (r?.data?.faces || []).find(f => f.t === 'CYLINDRE' && f.concave === false)?.r || 0")
+        exp_vol_r4 = 8000.0 - math.pi * 16.0 * 20.0 - (16.0 - math.pi * 4.0) * 20.0
+        ok3 = bool(
+            fil4['errs'] == 0 and fil4['kinds'] == ['import', 'editHole', 'editFillet']
+            and abs(fil4['r'] - 4.0) < 0.01 and abs(fil4['holeR'] - 4.0) < 0.01
+            and fil4['gcIssues'] == 0 and abs(fil4['vol'] - exp_vol_r4) < 2.0
+            and abs(fil15_r - 1.5) < 0.01
+            and abs(fil_sup_r - 2.0) < 0.01
+            and abs(fil_unsup_r - 1.5) < 0.01
+            and abs(fil_undo_r - 2.0) < 0.01
+            and abs(fil_redo_r - 1.5) < 0.01
+        )
+
+        # 4. Sackloch Ø6x10 -> Ø8x10 auf STEP + 4-Kanten-Rundungskette R2 -> R3.5 + Torus-Rundung R2 -> R3
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.ev("""App.change('Sackloch', (doc) => {
+          const box = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' });
+          const cyl = Model.newItem('cylinder', { d: 6, h: 15 }, { name: 'Sackloch', more: { t: { x: 0, y: 0, z: 10, rx: 0, ry: 0, rz: 0 } } });
+          cyl.op = { type: 'cut', target: box.id };
+          doc.items.push(box, cyl);
+        })""")
+        wait_done()
+        p.pg.evaluate("""async () => {
+          const {Kernel, Model, App} = window.__M;
+          const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+          window.__a200BlindStep = new File([new Uint8Array(r.data)], 'Sackloch200.step');
+        }""")
+        p.wait(500)
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.pg.evaluate("() => window.__M.Start.importCAD(window.__a200BlindStep)")
+        wait_done()
+        p.ev("""(() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const hi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === true);
+          Features.editHole({ id: it.id, idx: hi, info: r.data.faces[hi] }, { d: 8 });
+        })()""")
+        wait_done()
+        blind_st = p.ev("""return (async () => {
+          const r = App.results.get(App.doc.items[0].id);
+          const holes = (r?.data?.faces || []).filter(f => f.t === 'CYLINDRE' && f.concave === true);
+          const ms = await Mass.measure();
+          const gc = await GeomCheck.run({ silent: true });
+          return { errs: App.errors.length, r: holes[0]?.r || 0, vol: ms?.parts?.[0]?.volume || 0, gcIssues: (gc.issues || []).length };
+        })()""")
+
+        # 4 obere Kantenrundungen R2 -> Kette auf R3.5 ändern
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.ev("""App.change('Quader 4 Rundungen', (doc) => {
+          const box = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' });
+          box.finishes = [{
+            id: 'f_r4', type: 'fillet', r: 2,
+            edges: [
+              { a: [-10, -10, 20], b: [10, -10, 20], m: [0, -10, 20], l: 20 },
+              { a: [-10, 10, 20], b: [10, 10, 20], m: [0, 10, 20], l: 20 },
+              { a: [-10, -10, 20], b: [-10, 10, 20], m: [-10, 0, 20], l: 20 },
+              { a: [10, -10, 20], b: [10, 10, 20], m: [10, 0, 20], l: 20 },
+            ],
+          }];
+          doc.items.push(box);
+        })""")
+        wait_done()
+        p.ev("""(() => {
+          const box = App.doc.items[0], r = App.results.get(box.id);
+          const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === false);
+          Features.editFillet({ id: box.id, idx: fi, info: r.data.faces[fi] }, { r: 3.5, chain: true });
+        })()""")
+        wait_done()
+        chain_st = p.ev("""return (async () => {
+          const r = App.results.get(App.doc.items[0].id);
+          const fils = (r?.data?.faces || []).filter(f => f.t === 'CYLINDRE' && f.concave === false);
+          const gc = await GeomCheck.run({ silent: true });
+          return { errs: App.errors.length, cnt: fils.length, allR35: fils.length === 4 && fils.every(f => Math.abs(f.r - 3.5) < 0.01), gcIssues: (gc.issues || []).length };
+        })()""")
+
+        # Zylinder Ø20 mit Torus-Kantenrundung R2 -> R3 ändern
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.ev("Actions.addPrimitive('cylinder')")
+        wait_done()
+        p.ev("""App.change('Zylinder-Rundung', (doc) => {
+          const cyl = doc.items[0], r = App.results.get(cyl.id);
+          const edge = r.data.edges.find(e => e.t === 'CIRCLE' && e.c && e.c[2] > 19);
+          cyl.finishes = [{ id: 'f_tor', type: 'fillet', r: 2, edges: [edge] }];
+        })""")
+        wait_done()
+        p.ev("""(() => {
+          const cyl = App.doc.items[0], r = App.results.get(cyl.id);
+          const ti = r.data.faces.findIndex(f => f.t === 'TORUS');
+          Features.editFillet({ id: cyl.id, idx: ti, info: r.data.faces[ti] }, { r: 3 });
+        })()""")
+        wait_done()
+        torus_st = p.ev("""return (async () => {
+          const r = App.results.get(App.doc.items[0].id);
+          const tors = (r?.data?.faces || []).filter(f => f.t === 'TORUS');
+          const gc = await GeomCheck.run({ silent: true });
+          return { errs: App.errors.length, cnt: tors.length, allR3: tors.length >= 1 && tors.every(f => Math.abs(f.r - 3.0) < 0.01), gcIssues: (gc.issues || []).length };
+        })()""")
+        ok4 = bool(
+            blind_st['errs'] == 0 and abs(blind_st['r'] - 4.0) < 0.01 and abs(blind_st['vol'] - (8000.0 - math.pi * 16.0 * 10.0)) < 1.0 and blind_st['gcIssues'] == 0
+            and chain_st['errs'] == 0 and chain_st['allR35'] and chain_st['gcIssues'] == 0
+            and torus_st['errs'] == 0 and torus_st['allR3'] and torus_st['gcIssues'] == 0
+        )
+
+        # 5. Modus ohne Verlauf (noHistory), Validierung, Explain, Hilfetexte, Schritt-Erklärungen & DE/EN
+        p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+        p.pg.evaluate("() => window.__M.Start.importCAD(window.__a200Step)")
+        wait_done()
+        p.ev("""(() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const hi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === true);
+          Features.editHole({ id: it.id, idx: hi, info: r.data.faces[hi] }, { d: 8 });
+          const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === false);
+          Features.editFillet({ id: it.id, idx: fi, info: r.data.faces[fi] }, { r: 4 });
+        })()""")
+        wait_done()
+        meta = p.ev("""return (async () => {
+          const eh = App.doc.items.find(x => x.kind === 'editHole');
+          const ef = App.doc.items.find(x => x.kind === 'editFillet');
+          const exEh = eh ? Explain.local(eh.id) : null;
+          const exEf = ef ? Explain.local(ef.id) : null;
+          const val = Store.validateProject(JSON.parse(await Start.projectPayload()));
+          const [wh, se, de, en] = await Promise.all([
+            fetch('data/werkzeug-hilfen.json').then(x => x.json()),
+            fetch('data/schritt-erklaerungen.json').then(x => x.json()),
+            fetch('data/texte-de.json').then(x => x.json()),
+            fetch('data/texte-en.json').then(x => x.json()),
+          ]);
+          const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+          return {
+            valOk: val.ok && val.errors.length === 0,
+            exOk: !!(exEh && exEh.lines.length && exEf && exEf.lines.length),
+            helpOk: !!(wh.editHole?.tip && wh.editHole?.hilfe && wh.editHole?.tipp && wh.editFillet?.tip && wh.editFillet?.hilfe && wh.editFillet?.tipp),
+            seOk: !!(se.editHole?.was && se.editHole?.wozu && se.editHole?.achtung && se.editFillet?.was && se.editFillet?.wozu && se.editFillet?.achtung),
+            i18nOk: deK.length === enK.length && deK.every((k, i) => k === enK[i]),
+          };
+        })()""")
+        p.pg.evaluate("async () => await window.__M.Timeline.setNoHistory(true)")
+        wait_done()
+        p.ev("""(() => {
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const hi = r.data.faces.findIndex(f => f.t === 'CYLINDRE' && f.concave === true);
+          Features.editHole({ id: it.id, idx: hi, info: r.data.faces[hi] }, { d: 10 });
+        })()""")
+        wait_done()
+        nh_st = p.ev("""
+          const it = App.doc.items[0], r = App.results.get(it.id);
+          const holes = (r?.data?.faces || []).filter(f => f.t === 'CYLINDRE' && f.concave === true);
+          return { noHistory: !!App.doc.noHistory, count: App.doc.items.length, errs: App.errors.length, r: holes[0]?.r || 0 };
+        """)
+        ok5 = bool(
+            meta['valOk'] and meta['exOk'] and meta['helpOk'] and meta['seOk'] and meta['i18nOk']
+            and nh_st['noHistory'] and nh_st['count'] == 1 and nh_st['errs'] == 0 and abs(nh_st['r'] - 5.0) < 0.01
+        )
+        return [ok1, ok2, ok3, ok4, ok5]
+    finally:
+        p.ev("try { if (Sketch.active) Sketch.cancel(true); ViewPrefs.setLevel('pro'); } catch (_) {}")
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -42459,6 +42808,7 @@ TESTS = [
     ('[A-202] Einlinien-Schrift: „AB“ mit Einlinig (Gravur) nur offene Kurven / keine geschlossenen Umrisse / Rückgängig', t_a202_einlinien_schrift),
     ('[A-204] Direkt bearbeiten: Fläche ersetzen und Kante verschieben (DB-04, DB-07)', t_a204_flaeche_ersetzen_kante_verschieben),
     ('[A-203] Einlinien-Schrift gravieren: „AB“ 0,5 mm tief, 0,4 mm breit auf Quader / Einfach & Profi / Bearbeiten / Rückgängig', t_a203_gravieren),
+    ('[A-200] Direkt bearbeiten: Loch und Rundung an Importteilen ändern (DB-05, DB-06)', t_a200_loch_rundung_import),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

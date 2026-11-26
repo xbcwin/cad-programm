@@ -2193,5 +2193,15 @@
     "tip": "Gerade Kante verschieben – die beiden Nachbarflächen kippen mit (Profi)",
     "hilfe": "Verschiebt im Profi-Modus eine gerade Kante zwischen zwei ebenen Flächen entlang der Winkelhalbierenden, einer Achse (X/Y/Z), einer Flächen-Normalen oder frei in X/Y/Z. Beide Nachbarflächen kippen um ihre gegenüberliegende Kante automatisch mit – auch an importierten Teilen.",
     "tipp": "Du kannst im Feld „Abstand“ auch Formeln wie „breite/4“ eingeben; mit „Richtung“ legst du fest, ob die Kante schräg oder nur in Z bzw. X/Y wandert."
+  },
+  "editHole": {
+    "tip": "Loch-Durchmesser direkt ändern – auch an importierten STEP-Teilen (Profi)",
+    "hilfe": "Klick im Profi-Modus auf die Innenfläche eines Lochs (Durchgangs- oder Sackloch, auch an importierten STEP-/BREP-Teilen) und tippe den gewünschten neuen Durchmesser (oder eine Formel) ein. Tracery passt die Bohrung direkt auf das neue Maß an.",
+    "tipp": "Wenn der Durchmesser direkt nach dem Klick markiert ist, tippe einfach die neue Zahl (z. B. 8) ein und drücke Enter."
+  },
+  "editFillet": {
+    "tip": "Rundungs-Radius direkt ändern – auch an importierten STEP-Teilen (Profi)",
+    "hilfe": "Klick im Profi-Modus auf eine abgerundete Kantenfläche (auch an importierten STEP-/BREP-Teilen) und gib den neuen Radius ein. Tracery stellt die ursprüngliche scharfe Kante vorübergehend her und rundet sie mit dem neuen Radius neu ab.",
+    "tipp": "Mit eingeschaltetem „Zusammenhängende Kanten einbeziehen“ ändern sich alle gleich großen, anschließenden Rundungen in einem Zug mit."
   }
 }

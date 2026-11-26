@@ -3415,6 +3415,14 @@ const Panels = (() => {
       sec.firstChild.textContent = T('kind.moveEdge');
       sec.setAttribute('data-help', 'moveEdge');
       Features.renderMoveEdge(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'editHole') {
+      sec.firstChild.textContent = T('kind.editHole');
+      sec.setAttribute('data-help', 'editHole');
+      Features.renderEditHole(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'editFillet') {
+      sec.firstChild.textContent = T('kind.editFillet');
+      sec.setAttribute('data-help', 'editFillet');
+      Features.renderEditFillet(it, sec, setP); w.append(sec);
     } else if (it.kind === 'boss') {
       sec.firstChild.textContent = T('kind.boss');
       Features.renderBoss(it, sec, setP); w.append(sec);
@@ -4027,7 +4035,7 @@ const Panels = (() => {
     if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) { Features.syncPatternMarkers(); return; }
     const items = App.selectedItems(); if (!items.length) { Features.syncPatternMarkers(); return; }
     const bar = h('div', { class: 'ctxbar', role: 'toolbar', 'aria-label': T('ctx.toolbarAria') });
-    const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers', 'moveStep', 'scaleBody', 'deform', 'deleteBody', 'deleteFace', 'replaceFace', 'moveEdge', 'thicken', 'directFace', 'wrap', 'vent', 'fins', 'patternFill', 'web'];
+    const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers', 'moveStep', 'scaleBody', 'deform', 'deleteBody', 'deleteFace', 'replaceFace', 'moveEdge', 'editHole', 'editFillet', 'thicken', 'directFace', 'wrap', 'vent', 'fins', 'patternFill', 'web'];
     const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls + (PRO.includes(ic) ? ' pro' : ''), 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
     const sep = () => bar.append(h('span', { class: 'vsep' }));
     // Schritt hinter dem Marker oder unterdrückt: nichts zum Bearbeiten, nur zurückholen
@@ -4082,6 +4090,30 @@ const Panels = (() => {
       const it = items[0].item;
       bar.append(h('span', { class: 'lbl' }, T('ctx.moveEdgeStepLabel')));
       b('cursor', T('panel.moveEdge.pickEdge'), () => Features.pickMoveEdge(it.id), 'accent', T('ctx.moveEdgeTip')).dataset.help = 'moveEdge';
+      if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
+      b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
+      b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      Features.syncPatternMarkers();
+      return;
+    }
+    if (items.length === 1 && items[0].item.kind === 'editHole') {
+      const it = items[0].item;
+      bar.append(h('span', { class: 'lbl' }, T('ctx.editHoleStepLabel')));
+      b('cursor', T('panel.editHole.pickFace'), () => Features.pickEditHoleFace(it.id), 'accent', T('ctx.editHoleTip')).dataset.help = 'editHole';
+      if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
+      b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
+      b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      Features.syncPatternMarkers();
+      return;
+    }
+    if (items.length === 1 && items[0].item.kind === 'editFillet') {
+      const it = items[0].item;
+      bar.append(h('span', { class: 'lbl' }, T('ctx.editFilletStepLabel')));
+      b('plus', T('panel.editFillet.addFace'), () => Features.pickEditFilletFace(it.id, 'add'), 'accent', T('ctx.editFilletTip')).dataset.help = 'editFillet';
       if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
       b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
       b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
@@ -4323,6 +4355,10 @@ const Panels = (() => {
         if (list.length) App.select([...ids], { edges: list });
       }, 'accent', T('ctx.facesEdgesTip'));
       if (items.length === 1 && items[0].item.role !== 'hole' && App.doc.items.includes(items[0].item)) {
+        if (App.faces.every((f) => { const fi = f.info || App.results.get(f.id)?.data?.faces?.[f.faceIdx]; return Features.isFilletFaceInfo(fi); })) {
+          const efb = b('editFillet', T('ctx.editFillet'), () => Features.editFillet(App.faces), 'pro', T('ctx.editFilletTip'));
+          efb.id = 'ctx-edit-fillet'; efb.dataset.help = 'editFillet';
+        }
         const dfb = b('deleteFace', T('ctx.deleteFaces'), () => Features.deleteFace(App.faces), 'pro', T('ctx.deleteFaceTip'));
         dfb.id = 'ctx-delete-face'; dfb.dataset.help = 'deleteFace';
       }
@@ -4441,6 +4477,14 @@ const Panels = (() => {
         flfb.id = 'ctx-face-fillet'; flfb.dataset.help = 'faceFillet';
       }
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) {
+        if (Features.isHoleFaceInfo(face.info)) {
+          const ehb = b('editHole', T('ctx.editHole'), () => Features.editHole(face), 'pro', T('ctx.editHoleTip'));
+          ehb.id = 'ctx-edit-hole'; ehb.dataset.help = 'editHole';
+        }
+        if (Features.isFilletFaceInfo(face.info)) {
+          const efb = b('editFillet', T('ctx.editFillet'), () => Features.editFillet(face), 'pro', T('ctx.editFilletTip'));
+          efb.id = 'ctx-edit-fillet'; efb.dataset.help = 'editFillet';
+        }
         b('thicken', T('ctx.thicken'), () => Features.thicken(face), '', T('ctx.thickenTip')).dataset.help = 'thickenFace';
         const dfo = b('directFace', T('ctx.directFaceOffset'), () => Features.directFace(face, { mode: 'offset' }), 'pro', T('ctx.directFaceOffsetTip'));
         dfo.id = 'ctx-direct-offset'; dfo.dataset.help = 'directFace';
