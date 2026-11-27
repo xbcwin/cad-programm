@@ -2316,7 +2316,7 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Startseite**: Unten stehen Links „Impressum“ und „Datenschutz“ (`app/impressum.html`, `app/datenschutz.html`).
 - [x] **Seiten**: Das Impressum nennt Nils Kriege, die Datenschutzerklärung nennt Hosting, Browser-Speicher und DSGVO-Rechte.
 - [x] **„Über Tracery“**: enthält den Link „Impressum & Datenschutz“.
-- [ ] **Von Hand**: Adresse und E-Mail im Impressum eingetragen, bevor die Seite online geht.
+- [x] **Adresse und E-Mail** im Impressum eingetragen (27.11.2026).
 
 ## Lizenz „Alle Rechte vorbehalten“ und fremde Bausteine (Auto [A-109], PL-02)
 
